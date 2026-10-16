@@ -1,0 +1,133 @@
+Relia: modelo general de negocio
+Hackathon Interledger. Versión 1.0, 16 de octubre de 2026. Relia es el nombre de trabajo; la marca definitiva está pendiente de estudio de marca.
+Resumen
+Relia convierte cualquier comercio de barrio en un punto de efectivo digital. El usuario entrega efectivo y el dinero llega a su billetera, o paga desde su billetera y recibe efectivo en el comercio. Relia cobra $1.000 por operación y lo reparte en partes iguales con el corresponsal: $500 para Relia y $500 para el corresponsal.
+La ventaja de Relia no es un riel de pagos propio. Es la capa que orquesta el cupo, las comisiones y la conciliación del corresponsal sobre cualquier riel. En el demo del hackathon esa capa corre sobre Open Payments de Interledger (red de prueba). En el negocio real corre sobre Bre-B, con cuenta propia en Coopcentral. Cambiar de riel es cambiar un adaptador, no el producto.
+Problema y oportunidad
+Colombia tiene unos 706.000 Corresponsales No Bancarios, de los cuales el 46% está inactivo (Asobancaria, 2025). El 89,3% de los contratos se opera a través de redes posicionadas como Districol, Megared, Efecty y Punto Red (Banca de las Oportunidades, 2023). Esas redes dependen de un banco o de tecnología heredada, y ninguna ha anunciado una integración nativa con Bre-B para depositar y retirar efectivo. Mientras tanto, Wompi (Grupo Bancolombia) ya opera más de 10.800 corresponsales de forma directa, lo que confirma que la categoría es estratégica y que los bancos buscan controlar esa capa.
+Para el usuario sin acceso cómodo a un banco, el efectivo sigue siendo el cuello de botella: no puede convertirlo en dinero digital ni sacar dinero digital sin ir a una sucursal o a un cajero.
+Actores
+Actor
+Rol
+Qué obtiene
+Usuario
+Tiene una billetera vinculada a su celular. Entrega o recibe efectivo en el comercio.
+Convierte efectivo en digital y digital en efectivo cerca de su casa.
+Corresponsal
+Comercio con cuenta virtual en Relia y una caja única. No necesita billetera para operar.
+$500 de comisión por cada operación, acumulada y visible en su historial.
+Relia
+Administra cupos, validaciones, cobros y conciliación. Tiene una billetera propia en el riel.
+$500 por operación.
+Billetera del usuario
+Proveedor de la billetera donde el usuario aprueba pagos.
+Sin relación comercial con Relia en el demo.
+
+Modelo de ingresos
+Cada operación de depósito o retiro cuesta $1.000 al usuario. De ese valor, $500 son ingreso de Relia y $500 se acumulan como comisión del corresponsal. No hay otros cobros en esta versión.
+Operaciones por corresponsal al mes
+Comisión mensual del corresponsal
+Ingreso mensual de Relia
+200
+$100.000
+$100.000
+1.000
+$500.000
+$500.000
+3.000
+$1.500.000
+$1.500.000
+5.000
+$2.500.000
+$2.500.000
+
+Esta versión simplificada se usa para el hackathon. El modelo comercial completo ($2.000 por operación, proveedor tecnológico y gestores de corresponsales) se mantiene en los documentos del negocio principal.
+Flujos de operación
+Vinculación del usuario
+Relia o el corresponsal envía un mensaje de WhatsApp con un enlace del formato wa.me/NÚMERO?text=Hola, inscribe tu wallet. En el demo el envío es simulado.
+El usuario abre el enlace de vinculación, escribe su celular y su payment pointer.
+Recibe un SMS simulado con un código OTP y lo ingresa.
+Relia registra el celular como llave de ese payment pointer. Un celular se vincula a un solo payment pointer, y vincular de nuevo reemplaza el anterior.
+En el demo no se comprueba que el usuario sea dueño de la billetera. Ese control queda fuera de esta versión.
+Carga de cupo del corresponsal
+El corresponsal inicia sesión y entra directo a su caja. No hay apertura ni cierre de turno. Para cargar cupo el sistema ofrece dos opciones:
+Bre-B: Relia muestra un código QR. El pago es simulado y un botón del simulador marca el pago como recibido.
+Wallet: el corresponsal escribe su payment pointer. Relia crea una solicitud de pago por Open Payments y el corresponsal la aprueba en su billetera. Al completarse, el cupo sube.
+Depósito (el usuario entrega efectivo y recibe dinero en su billetera)
+El corresponsal escribe el celular del usuario.
+Relia valida que el celular tenga una llave vinculada. Si no la tiene, muestra un aviso y un botón para enviar la invitación por WhatsApp.
+La pantalla muestra el cobro de $1.000. Un checkbox permite que el usuario reciba el valor redondo, de modo que entregue el valor más la comisión.
+Relia paga desde su billetera a la del usuario por Open Payments. Recibir no requiere aprobación del usuario.
+El corresponsal recibe la confirmación y se registra la operación.
+Retiro (el usuario paga desde su billetera y recibe efectivo)
+El corresponsal escribe el celular del usuario y Relia valida la llave.
+La pantalla muestra el cobro de $1.000, con el mismo checkbox de valor redondo.
+Relia crea una solicitud de pago por Open Payments y el usuario la aprueba en su billetera. La aprobación vence a los 5 minutos y el corresponsal puede cancelarla.
+Cuando el pago pasa a completado, la pantalla le indica al corresponsal cuánto efectivo entregar. No se entrega efectivo antes de ese estado.
+Historial
+El corresponsal ve cada operación con fecha, tipo, valor, cupo antes, cupo después, comisión acumulada antes y comisión acumulada después. Las cargas de cupo también aparecen.
+Reglas de cálculo y cupo
+El valor mínimo de una operación es mayor a $1.000. Con el checkbox de valor redondo activo, el usuario cubre la comisión aparte y recibe el monto exacto; sin él, la comisión se descuenta del monto.
+Operación
+Sin checkbox
+Con checkbox
+Depósito de $50.000
+Usuario entrega $50.000 en efectivo y recibe $49.000 en su billetera.
+Usuario entrega $51.000 y recibe $50.000 en su billetera.
+Retiro de $50.000
+Usuario paga $50.000 por billetera y recibe $49.000 en efectivo.
+Usuario paga $51.000 y recibe $50.000 en efectivo.
+
+El cupo del corresponsal se mueve así, con N igual al monto neto que recibe el usuario:
+Operación
+Cupo
+Comisión acumulada
+Carga de cupo (Bre-B o wallet)
+Sube el monto cargado
+Sin cambio
+Depósito
+Baja N más $1.000, que es el efectivo que recibió el corresponsal
+Sube $500
+Retiro
+Sube N, que es el efectivo que entregó el corresponsal
+Sube $500
+
+Un depósito se bloquea si el cupo no alcanza. Con esta contabilidad el corresponsal queda neutro en su posición de efectivo y cupo, y su ganancia es solo la comisión.
+Alcance del demo frente al negocio real
+Elemento
+Demo del hackathon
+Negocio real
+Pagos de depósito, retiro y carga por wallet
+Reales sobre Open Payments, red de prueba
+Sobre Bre-B vía Coopcentral
+Carga de cupo por Bre-B
+Simulada
+Real
+SMS, OTP y WhatsApp
+Simulados
+Proveedor de mensajería
+Verificación de dueño de la billetera
+No se hace
+Se comprobará al vincular
+Moneda
+Solo COP
+Solo COP
+Cuentas del corresponsal
+Una caja única, cuenta virtual
+Varios corresponsales, una caja cada uno
+
+Defensibilidad y control del riel
+Un adaptador de riel con dos implementaciones, Open Payments y Bre-B, mantiene el negocio independiente de un solo riel o de un solo banco. Esto es lo opuesto a la verticalización de Wompi con Bancolombia. La barrera de salida del corresponsal está en el cupo, el historial y la conciliación que Relia lleva, no en el riel.
+Riesgos y pendientes
+Demanda: no está probado que el usuario pague $1.000 por operación cuando ya existe una comisión voluntaria informal en algunos corresponsales. Se valida con un piloto antes de proyectar volumen.
+Moneda del demo: se debe confirmar que la billetera de prueba de Interledger ofrezca COP. Si no lo hace, hay que levantar el entorno local de Rafiki o mostrar COP con una tasa fija declarada.
+Regulatorio: operar efectivo y transferencias exige definir si Relia actúa como corresponsal bancario o como servicio de conveniencia, con cuenta propia en Coopcentral. El tratamiento del celular y del payment pointer es dato personal bajo la Ley 1581 de 2012.
+Fraude por vinculación: sin verificar al dueño de la billetera, alguien puede asociar su celular a la billetera de otra persona. En un retiro el pago exige la aprobación del dueño real, pero en un depósito el dinero llegaría a esa billetera. Debe cerrarse antes de producción.
+Liquidez de Relia: la billetera de Relia debe tener fondos suficientes para pagar los depósitos. En el demo se prefondea con saldo de prueba.
+Marca: el nombre Relia no es viable como marca definitiva según el estudio previo y debe cambiarse antes de lanzar.
+Próximos pasos
+Crear tres billeteras de prueba (Relia, corresponsal, usuario) y confirmar la moneda.
+Construir el módulo de riel con el adaptador de Open Payments y el simulador de Bre-B.
+Construir las pantallas de vinculación, caja, depósito, retiro e historial.
+Ensayar el flujo completo y grabar una versión de respaldo del demo.
+
