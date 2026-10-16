@@ -2,9 +2,7 @@
 
 ## Tools Used
 
-* ChatGPT (GPT-4o)
-
-* Claude
+* Claude Code
 
 ## Where and How We Used AI
 
