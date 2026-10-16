@@ -1,0 +1,15 @@
+# Lint de los contratos de Relia: npx @redocly/cli@1.25.11 lint --config contracts/redocly.yaml
+extends:
+  - recommended
+
+apis:
+  relia-api:
+    root: relia-api.openapi.yaml
+  rail-proxy:
+    root: rail-proxy.openapi.yaml
+
+rules:
+  # Repo de hackathon sin licencia definida.
+  info-license: off
+  # Los servidores declarados son los de desarrollo local.
+  no-server-example.com: off
