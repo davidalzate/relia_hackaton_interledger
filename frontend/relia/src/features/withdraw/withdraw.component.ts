@@ -141,10 +141,7 @@ export class WithdrawComponent {
     if (w?.status !== 'approved') return;
     const total = formatCurrency(w.request.cashOut, this.locale, '$', 'COP', '1.0-0');
     this.confirmation.confirm({
-      header: 'Confirmar entrega',
       message: `¿Confirmas que entregaste en efectivo un total de ${total} al usuario?`,
-      acceptLabel: 'Sí, lo entregué',
-      rejectLabel: 'Cancelar',
       accept: () => {
         this.agent.clearWithdrawal();
         void this.router.navigateByUrl('/caja');
