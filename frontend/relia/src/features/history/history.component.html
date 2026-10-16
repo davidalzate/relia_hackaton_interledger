@@ -1,6 +1,125 @@
 <main class="container-wide">
   <a class="link-back" routerLink="/caja">← Caja</a>
-  <section class="card">
+
+  <header>
     <h1>Historial</h1>
-  </section>
+    <p class="summary">
+      Cupo {{ balances().cupo | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} · Comisión
+      {{ balances().commission | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} · Efectivo
+      {{ balances().cash | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+    </p>
+    <p class="hint">Toca una operación para ver su comprobante.</p>
+  </header>
+
+  <div class="filters" role="group" aria-label="Filtrar por tipo">
+    @for (f of filters; track f.value) {
+      <button
+        type="button"
+        class="pill"
+        [class.active]="filter() === f.value"
+        [attr.aria-pressed]="filter() === f.value"
+        (click)="filter.set(f.value)"
+      >
+        {{ f.label }}
+      </button>
+    }
+  </div>
+
+  @if (operations().length) {
+    <!-- Escritorio (≥ 900 px) -->
+    <div class="card table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Fecha</th>
+            <th scope="col">Tipo</th>
+            <th scope="col" class="num">Valor</th>
+            @for (col of balanceColumns; track col.key) {
+              <th scope="col" class="num">{{ col.label }} antes</th>
+              <th scope="col" class="num">{{ col.label }} después</th>
+            }
+            <th scope="col">Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (op of operations(); track op.id) {
+            <tr (click)="open(op.id)">
+              <td>{{ op.createdAt | date: 'd MMM, h:mm a' }}</td>
+              <td>
+                <a [routerLink]="['/caja/comprobante', op.id]" (click)="$event.stopPropagation()">
+                  {{ typeLabel[op.type] }}
+                </a>
+                <span class="op-id">{{ op.id }}</span>
+              </td>
+              <td class="num strong">
+                {{ op.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+              </td>
+              @for (col of balanceColumns; track col.key) {
+                @if (op.before && op.after) {
+                  <td class="num">
+                    {{ op.before[col.key] | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+                  </td>
+                  <td class="num">
+                    {{ op.after[col.key] | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+                  </td>
+                } @else {
+                  <td class="num pending">Pendiente</td>
+                  <td class="num pending">Pendiente</td>
+                }
+              }
+              <td>
+                <span [class]="statusBadge[op.status]">{{ statusLabel[op.status] }}</span>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Móvil -->
+    <ul class="cards">
+      @for (op of operations(); track op.id) {
+        <li>
+          <a class="card op-card" [routerLink]="['/caja/comprobante', op.id]">
+            <div class="op-head">
+              <div>
+                <p class="op-type">{{ typeLabel[op.type] }}</p>
+                <p class="op-meta">{{ op.createdAt | date: 'd MMM, h:mm a' }} · {{ op.id }}</p>
+              </div>
+              <div class="op-end">
+                <p class="strong">{{ op.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+                <span [class]="statusBadge[op.status]">{{ statusLabel[op.status] }}</span>
+              </div>
+            </div>
+            <dl class="grid">
+              @for (col of balanceColumns; track col.key) {
+                <div>
+                  <dt>{{ col.label }} antes</dt>
+                  <dd>
+                    @if (op.before) {
+                      {{ op.before[col.key] | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+                    } @else {
+                      Pendiente
+                    }
+                  </dd>
+                </div>
+                <div>
+                  <dt>{{ col.label }} después</dt>
+                  <dd>
+                    @if (op.after) {
+                      {{ op.after[col.key] | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+                    } @else {
+                      Pendiente
+                    }
+                  </dd>
+                </div>
+              }
+            </dl>
+          </a>
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="card empty">No hay operaciones de este tipo. Cuando hagas una, aparecerá aquí.</p>
+  }
 </main>
