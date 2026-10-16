@@ -81,6 +81,20 @@ export class ReliaGrantService {
     return statusOf(this.findOne('pending'), this.findOne('approved'));
   }
 
+  /**
+   * Token para crear y leer outgoing payments desde la billetera de Relia, o null si el permiso no está
+   * activo (sin aprobar, o con una petición nueva pendiente, como dice el contrato).
+   */
+  accessToken(): string | null {
+    if (this.status() !== 'active') return null;
+    return this.approvedAccessToken();
+  }
+
+  /** Token del permiso aprobado aunque haya una petición nueva pendiente; sirve para leer pagos ya creados. */
+  approvedAccessToken(): string | null {
+    return this.findOne('approved')?.access_token ?? null;
+  }
+
   view(): ReliaGrantView {
     const pending = this.findOne('pending');
     const approved = this.findOne('approved');

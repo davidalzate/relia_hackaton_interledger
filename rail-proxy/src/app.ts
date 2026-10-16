@@ -4,6 +4,7 @@ import rateLimit from '@fastify/rate-limit';
 import type { Logger } from 'pino';
 import { amountSchema, type Amount } from './amount.js';
 import { PROBLEM_CONTENT_TYPE, ProblemError } from './problem.js';
+import type { CreatePaymentRequest, PaymentService } from './payments.js';
 import type { ReliaGrantService } from './relia-grant.js';
 import { PAYMENT_POINTER_PATTERN, type ResolvedWallet, type WalletResolver } from './wallets.js';
 
@@ -14,7 +15,36 @@ export interface AppDeps {
   reliaWallet: ResolvedWallet;
   reliaGrants: Pick<ReliaGrantService, 'status' | 'view' | 'request'>;
   wallets: Pick<WalletResolver, 'resolve'>;
+  payments: Pick<PaymentService, 'create' | 'get'>;
 }
+
+const createPaymentSchema = {
+  headers: {
+    type: 'object',
+    required: ['idempotency-key'],
+    properties: { 'idempotency-key': { type: 'string', format: 'uuid' } },
+  },
+  body: {
+    type: 'object',
+    required: ['direction', 'counterparty', 'receiveAmount'],
+    additionalProperties: false,
+    properties: {
+      direction: { type: 'string', enum: ['outgoing', 'incoming'] },
+      counterparty: { type: 'string', pattern: PAYMENT_POINTER_PATTERN.source },
+      receiveAmount: amountSchema,
+      expiresAt: { type: 'string', format: 'date-time' },
+      description: { type: 'string', maxLength: 140 },
+    },
+  },
+} as const;
+
+const paymentIdSchema = {
+  params: {
+    type: 'object',
+    required: ['paymentId'],
+    properties: { paymentId: { type: 'string', format: 'uuid' } },
+  },
+} as const;
 
 declare module 'fastify' {
   interface FastifyContextConfig {
@@ -95,6 +125,20 @@ export async function buildApp(deps: AppDeps) {
       const { pointer, url, assetCode, assetScale } = await deps.wallets.resolve(request.query.pointer);
       return { pointer, url, assetCode, assetScale };
     },
+  );
+
+  app.post<{ Headers: { 'idempotency-key': string }; Body: CreatePaymentRequest }>(
+    '/payments',
+    { schema: createPaymentSchema },
+    async (request, reply) => {
+      const { payment, created } = await deps.payments.create(request.headers['idempotency-key'], request.body);
+      if (!created) return reply.status(200).send(payment);
+      return reply.status(201).header('Location', `/payments/${payment.id}`).send(payment);
+    },
+  );
+
+  app.get<{ Params: { paymentId: string } }>('/payments/:paymentId', { schema: paymentIdSchema }, async (request) =>
+    deps.payments.get(request.params.paymentId),
   );
 
   app.get('/relia-grant', async () => deps.reliaGrants.view());

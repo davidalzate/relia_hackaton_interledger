@@ -33,6 +33,40 @@ const MIGRATIONS: string[] = [
     updated_at              TEXT NOT NULL
   );
   CREATE INDEX ix_relia_grants_state ON relia_grants (state);`,
+
+  // 2. Pagos de riel.
+  `CREATE TABLE payments (
+    id                      TEXT PRIMARY KEY,
+    idempotency_key         TEXT NOT NULL UNIQUE,
+    direction               TEXT NOT NULL CHECK (direction IN ('outgoing', 'incoming')),
+    status                  TEXT NOT NULL
+                            CHECK (status IN ('pending_approval', 'processing', 'completed', 'failed',
+                                              'rejected', 'expired', 'cancelled')),
+    sender                  TEXT NOT NULL,
+    receiver                TEXT NOT NULL,
+    asset_code              TEXT NOT NULL,
+    asset_scale             INTEGER NOT NULL,
+    receive_value           TEXT NOT NULL,
+    debit_value             TEXT,
+    received_value          TEXT,
+    description             TEXT,
+    expires_at              TEXT,
+    failure_code            TEXT,
+    failure_detail          TEXT,
+    -- Recursos en el riel y el servidor de autorización que emite los tokens para leerlos.
+    incoming_payment_url    TEXT,
+    incoming_auth_server    TEXT,
+    quote_url               TEXT,
+    outgoing_payment_url    TEXT,
+    -- Sincronizador.
+    processing_since        INTEGER,
+    next_poll_at            INTEGER,
+    created_at              TEXT NOT NULL,
+    updated_at              TEXT NOT NULL,
+    completed_at            TEXT,
+    version                 INTEGER NOT NULL DEFAULT 1
+  );
+  CREATE INDEX ix_payments_poll ON payments (status, next_poll_at);`,
 ];
 
 /** Abre (o crea) el archivo SQLite del proxy y lo lleva a la última versión del esquema. */
