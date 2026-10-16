@@ -1,0 +1,13 @@
+main {
+  padding-block: 2rem;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+[role='alert'] {
+  color: var(--relia-failed-text);
+}
