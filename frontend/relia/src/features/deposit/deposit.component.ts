@@ -23,6 +23,7 @@ import {
   DepositErrorKind,
   DepositReceipt,
 } from '../../core/services/agent.service';
+import { ReceiptService } from '../../core/services/receipt.service';
 import { AGENT_COMMISSION, RELIA_FEE } from '../../shared/types/agent';
 import { InviteDialogComponent } from '../../shared/components/invite-dialog/invite-dialog.component';
 import { formatPhone, phoneDigits } from '../../shared/utils/phone';
@@ -56,6 +57,7 @@ type Step =
 })
 export class DepositComponent {
   private readonly agent = inject(AgentService);
+  protected readonly receipts = inject(ReceiptService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly confirmation = inject(ConfirmationService);
   private readonly locale = inject(LOCALE_ID);
@@ -138,7 +140,13 @@ export class DepositComponent {
   private send(cashIn: number, walletOut: number): void {
     this.step.set({ kind: 'sending', walletOut });
     this.agent
-      .deposit({ phone: this.phoneDigits(), cashIn, walletOut, commission: AGENT_COMMISSION })
+      .deposit({
+        phone: this.phoneDigits(),
+        roundForUser: this.form.getRawValue().roundForUser,
+        cashIn,
+        walletOut,
+        commission: AGENT_COMMISSION,
+      })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (receipt) => this.step.set({ kind: 'done', receipt }),

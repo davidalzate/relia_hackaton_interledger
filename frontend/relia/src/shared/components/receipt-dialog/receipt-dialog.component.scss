@@ -1,0 +1,77 @@
+.receipt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+
+    .wordmark {
+      font-size: 24px;
+    }
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--relia-muted-text);
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+.caption {
+  font-size: 0.875rem;
+  color: var(--relia-muted-text);
+}
+
+dl {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding-top: 16px;
+  border-top: 2px dotted var(--relia-line);
+  font-size: 0.875rem;
+
+  div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  dt {
+    color: var(--relia-muted-text);
+  }
+
+  dd {
+    margin: 0;
+    font-weight: 600;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.foot {
+  margin-top: 16px !important;
+  font-size: 0.75rem;
+  color: var(--relia-muted-text);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+
+  button {
+    flex: 1 1 110px;
+    gap: 6px;
+  }
+}

@@ -29,7 +29,7 @@ describe('HistoryComponent', () => {
     render();
 
     const rows = [...el.querySelectorAll('tbody tr')];
-    expect(rows.map((r) => r.querySelector('a')?.textContent?.trim())).toEqual([
+    expect(rows.map((r) => r.querySelector('.link-cell')?.textContent?.trim())).toEqual([
       'Carga de cupo',
       'Asignación de efectivo',
     ]);

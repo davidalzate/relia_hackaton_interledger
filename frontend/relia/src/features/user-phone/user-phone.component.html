@@ -29,8 +29,15 @@
         <button type="button" class="btn-secondary" (click)="reject()">Rechazar</button>
       </div>
     </section>
-  } @else if (!invitations().length) {
+  } @else if (!invitations().length && !messages().length) {
     <p class="card">No hay solicitudes pendientes.</p>
+  }
+
+  @for (sms of messages(); track sms.sentAt) {
+    <aside class="sms" aria-label="SMS recibido">
+      <strong>SMS</strong>
+      <p>{{ sms.text }}</p>
+    </aside>
   }
 
   @for (invite of invitations(); track invite.sentAt) {

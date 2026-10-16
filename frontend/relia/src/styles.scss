@@ -244,3 +244,31 @@ body {
     line-height: 1.35;
   }
 }
+
+/* B9: el modal del comprobante muestra solo la tarjeta y los botones */
+.receipt-dialog.p-dialog {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+
+  .p-dialog-content {
+    padding: 0;
+    background: transparent;
+  }
+}
+
+/* Imprimir deja solo el comprobante */
+@media print {
+  app-root {
+    display: none;
+  }
+
+  .modal-mask {
+    position: static !important;
+    background: none !important;
+  }
+
+  .receipt-dialog .actions {
+    display: none;
+  }
+}
