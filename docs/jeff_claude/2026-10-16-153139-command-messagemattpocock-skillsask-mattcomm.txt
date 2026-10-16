@@ -1,0 +1,151 @@
+
+❯ /mattpocock-skills:ask-matt necesitamos archivo que explique como usar la
+documentación postman de basada en los contratos open api
+@relia/relia_hackaton_interledger/contracts/rail-proxy.collection.json  etc...
+@relia/relia_hackaton_interledger/contracts/relia-api.collection.json
+  ⎿  Read relia/relia_hackaton_interledger/contracts/rail-proxy.collection.json
+     (1 lines)
+
+  Searched for 1 pattern, ran 5 shell commands (ctrl+o to expand)
+
+⏺ Verifiqué que el comando de regeneración produce la misma colección; ahora
+  escribo el README en contracts/.
+
+⏺ Write(contracts/README.md)
+  ⎿  Wrote 111 lines to contracts/README.md
+       1 # Contratos y colecciones de Postman
+       3 En esta carpeta están los dos contratos OpenAPI de Relia y las c
+       4
+         ma a quién | URL local | Autenticación |
+       7 | [relia-api.openapi.yaml](relia-api.openapi.yaml) | [relia-api.
+         collection.json](relia-api.collection.json) | Frontend → backend
+         |
+         xy.collection.json](rail-proxy.collection.json) | Backend .NET →
+         ey: <clave compartida>` |
+      10 **El
+     … +168 lines (ctrl+o to expand)
+
+  Searched for 2 patterns (ctrl+o to expand)
+
+⏺ Update(contracts/README.md)
+  ⎿  Added 1 line, removed 1 line
+      93  1. `GET /health` y `GET /relia-grant`.
+      94  2. `GET /wallet-addresses?pointer=...` → confirma la billetera.
+      95  3. `POST /payments` con `direction: incoming` → abre `approval.
+          url` y aprueba en la wallet de prueba.
+      96 -4. `GET /payments/{paymentId}` hasta `completed`, o `POST /paym
+         -ents/{paymentId}/cancel` mientras siga en `pending_approval`.  
+      96 +4. `GET /payments/{paymentId}` hasta un estado final (`complete
+         +d`, `failed`, `rejected`, `expired`, `cancelled`), o `POST /pay
+         +ments/{paymentId}/cancel` mientras siga en `pending_approval`. 
+      97  
+      98  ## Regenerar las colecciones
+      99  
+
+⏺ Escrito para: el equipo de Relia que va a probar la API y el proxy en Postman.
+
+  Creé contracts/README.md. Esto no necesitaba pasar por ningún flujo de skills
+  (grill, spec, tickets), así que escribí el archivo directamente.
+
+  Qué explica:
+  - Relación entre archivos: el YAML de OpenAPI es la fuente de verdad y las
+    colecciones se generan a partir de él. Incluye una tabla con URL local y
+    tipo de autenticación de cada servicio (Bearer en la API, X-Api-Key en el
+    proxy).
+  - Primeros pasos: importar las colecciones y crear un environment con
+    bearerToken y apiKey. Las colecciones solo traen baseUrl, así que sin esas
+    dos variables todo responde 401.
+  - Login automático: un script post-response para el login que guarda
+    bearerToken y agentId solo.
+  - Datos de ejemplo: cuáles hay que reemplazar antes de enviar (<uuid>, payment
+    pointers inventados como $=*rh5j, montos en unidades mínimas) y el truco
+    {{$guid}} para Idempotency-Key.
+  - Convenciones del contrato: idempotencia, consultas periódicas (polling) en
+    lugar de webhooks, formato del dinero y errores en problem+json.
+  - Flujos de prueba: una secuencia sugerida para la API y otra para el proxy.
+  - Cómo regenerar las colecciones con los comandos exactos.
+
+  Comprobaciones:
+  - Ejecuté openapi-to-postmanv2@6.4.0 sobre rail-proxy.openapi.yaml y genera
+    las mismas carpetas, la misma autenticación y el mismo baseUrl que la
+    colección que tienen guardada. No lo corrí sobre relia-api.openapi.yaml.
+  - Revisé contra los YAML los estados de pago, el formato del payment pointer y
+    idempotency_conflict.
+
+  Dos cosas a tener en cuenta:
+  - En la colección del proxy, todos los ejemplos de error muestran code:
+    same_wallet. Es un fallo del generador, no del contrato, y lo dejé anotado
+    en el README.
+  - El script de login se pierde cada vez que se reimporta una colección
+    regenerada. Si eso molesta, se puede meter en el pipeline de generación.
+
+❯ Necesito la descripción de que endpoints usar para todos los flujos
+
+  Listed 1 directory, ran 1 shell command (ctrl+o to expand)
+
+⏺ Ya tengo las pantallas; ahora leo el contrato completo para mapear cada paso a
+  su endpoint.
+
+  Searched for 2 patterns, read 1 file, ran 2 shell commands (ctrl+o to expand)
+
+⏺ Ya leí el contrato completo, las pantallas y el guion de demo. Ahora escribo
+  el documento de flujos.
+
+⏺ Write(contracts/FLUJOS.md)
+  ⎿  Wrote 316 lines to contracts/FLUJOS.md
+       1 # Flujos y endpoints
+       3 Qué endpoints llamar, y en qué orden, para cada flujo de Relia.
+         Cada paso dice la pantalla ([detalle_pantallas.md](../docs/detal
+         kend) y, cuando aplica, lo que el backend hace en el **Rail Prox
+       4
+       5 Cómo montar Postman: [README.md](README.md). Fuente de verdad: l
+       6
+       7 ## Índice
+       9 - [Reglas comunes](#reglas-comunes)
+         el-riel-operador-una-vez)
+     … +469 lines (ctrl+o to expand)
+
+⏺ Update(contracts/README.md)
+  ⎿  Added 2 lines
+      81  
+      82  ## 7. Flujo de prueba sugerido
+      83  
+      84 +Qué endpoints usar en cada flujo (depositar, retirar, cargar cu
+         +po, vincular, admin, demo): [FLUJOS.md](FLUJOS.md). Abajo, la v
+         +ersión corta.                                                  
+      85 +                                                               
+      86  **Relia API (corresponsal):**
+      87  1. `POST /auth/login` → guarda token y `agentId`.
+      88  2. `GET /agents/{agentId}` → saldos.
+
+⏺ Escrito para: frontend, backend y proxy, que construyen contra estos contratos
+  y los prueban en Postman.
+
+  Creé contracts/FLUJOS.md y lo enlacé desde el README. Todo sale de los dos
+  YAML, con las pantallas de detalle_pantallas.md y el guion de prototype.md
+  como guía.
+
+  Cubre 12 flujos: preparación del riel, login, caja, efectivo en caja, cargar
+  cupo (Bre-B y Wallet), depositar, retirar, invitación por WhatsApp, vincular
+  billetera, historial y comprobante, admin y pago de comisión, y Modo demo.
+  Cada paso trae:
+  - la pantalla,
+  - la llamada a la Relia API con su cuerpo,
+  - lo que el backend le pide al proxy, si le pide algo,
+  - los errores con su texto en pantalla.
+
+  Al final hay tres extras: el guion de demo paso a paso con sus llamadas, la
+  tabla de cómo un estado del proxy se traduce a estado de la operación, y una
+  lista de qué flujos tocan el proxy.
+
+  Lo que conviene saber antes de presentar:
+  - Diferencias con el prototipo. Aprobar y rechazar no tienen endpoint: se hace
+    en la wallet de prueba abriendo approvalUrl. El interruptor "Usuario
+    rechaza" y la casilla "Simular que la llave no existe" no existen en el
+    contrato. Tras reiniciar la demo, el 3000000001 queda vinculado a jeffdev,
+    no a usuario-demo. Todo esto está en la última sección del documento.
+  - El paso 6 del guion no funciona todavía. Hace falta una billetera COP libre
+    para vincular el 3000000002. Está pendiente en el ticket 11.
+  - Hay que aprobar el permiso de pago de Relia en el proxy antes de presentar.
+    Sin él, los depósitos y el pago de comisión responden 503. Lo dejé como
+    paso 0.
