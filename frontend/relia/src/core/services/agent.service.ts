@@ -1,4 +1,5 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import {
   Observable,
   Subscription,
@@ -6,13 +7,16 @@ import {
   delay,
   map,
   of,
+  tap,
   throwError,
   timeout,
   timer,
 } from 'rxjs';
 
 import { environment } from '../../environments/environment';
+import { Agent, AgentSchema } from '../../shared/schemas/agent.schema';
 import { AgentBalances, Operation, OperationDetails } from '../../shared/types/agent';
+import { AuthService } from './auth.service';
 
 /** Por debajo de este valor (COP) la Caja muestra avisos de cupo/efectivo bajo */
 export const LOW_BALANCE_THRESHOLD = 50_000;
@@ -143,10 +147,13 @@ const WITHDRAWAL_ERROR_STATUS: Record<WithdrawalErrorKind, Operation['status']> 
   cash: 'failed',
 };
 
-// shortcut: estado demo en memoria que arranca vacío; cambiar por la API (validada con Zod y
-// timeout) cuando exista backend: GET /api/agent/summary, GET /api/keys/:phone, POST /api/deposits
+// shortcut: saldos iniciales del API; operaciones, historial y llaves siguen en memoria y
+// mueven los saldos localmente hasta integrar su endpoint (docs/wayfinder/integracion-api)
 @Injectable({ providedIn: 'root' })
 export class AgentService {
+  private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthService);
+  private readonly _agent = signal<Agent | null>(null);
   private readonly _balances = signal<AgentBalances>({ cupo: 0, commission: 0, cash: 0 });
   /** Más recientes primero */
   private readonly _operations = signal<Operation[]>([]);
@@ -156,11 +163,34 @@ export class AgentService {
   private readonly _cupoLoad = signal<CupoLoad | null>(null);
   private cupoExpiry?: Subscription;
 
+  /** Perfil y saldos crudos del API (`cashReserved`, `quotaReserved`, `walletAddress`…) */
+  readonly agent = this._agent.asReadonly();
   readonly balances = this._balances.asReadonly();
   readonly operations = this._operations.asReadonly();
   readonly recentOperations = computed(() => this._operations().slice(0, 3));
   readonly withdrawal = this._withdrawal.asReadonly();
   readonly cupoLoad = this._cupoLoad.asReadonly();
+
+  constructor() {
+    // Al iniciar o restaurar la sesión del corresponsal
+    effect(() => {
+      const id = this.auth.agentId();
+      if (id) untracked(() => this.refresh(id).subscribe({ error: () => undefined }));
+    });
+  }
+
+  /** `GET /agents/{agentId}`; llamarlo tras cada operación terminal */
+  refresh(agentId = this.auth.agentId()): Observable<Agent> {
+    return this.http.get(`${environment.apiUrl}/agents/${agentId}`).pipe(
+      timeout(environment.httpTimeoutMs),
+      map((res) => AgentSchema.parse(res)),
+      tap((agent) => {
+        const { quota, accruedCommission, cashOnHand } = agent.balances;
+        this._agent.set(agent);
+        this._balances.set({ cupo: quota, commission: accruedCommission, cash: cashOnHand });
+      }),
+    );
+  }
 
   /** Verifica que el celular tenga billetera. `simulateMissing` fuerza "no existe" (demo) */
   validateKey(_phone: string, simulateMissing: boolean): Observable<boolean> {

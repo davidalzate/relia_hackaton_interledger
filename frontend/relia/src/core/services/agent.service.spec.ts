@@ -1,6 +1,10 @@
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AgentService, DepositError } from './agent.service';
+import { loginAs } from './auth.testing';
 
 describe('AgentService.deposit', () => {
   beforeEach(() => vi.useFakeTimers());
@@ -168,5 +172,39 @@ describe('AgentService saldos por operación (B8)', () => {
     const failed = agent.operations()[0];
     expect(failed.before).toEqual(failed.after);
     vi.useRealTimers();
+  });
+});
+
+describe('AgentService saldos (GET /agents/{agentId})', () => {
+  it('al iniciar sesión carga perfil y saldos del API', async () => {
+    TestBed.configureTestingModule({
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    });
+    const agent = TestBed.inject(AgentService);
+    await loginAs('agent');
+    TestBed.tick();
+
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/agents/agent-rosa')
+      .flush({
+        id: 'agent-rosa',
+        name: 'Tienda Doña Rosa',
+        managerName: 'Rosa Gómez',
+        city: 'Bogotá',
+        address: 'Calle 10 # 20-30',
+        phone: '3105550101',
+        walletAddress: '$ilp.interledger-test.dev/tienda-rosa',
+        balances: {
+          quota: 40_000,
+          quotaReserved: 0,
+          cashOnHand: 300_000,
+          cashReserved: 20_000,
+          accruedCommission: 1_500,
+          settledCommissionTotal: 0,
+        },
+      });
+
+    expect(agent.balances()).toEqual({ cupo: 40_000, commission: 1_500, cash: 300_000 });
+    expect(agent.agent()?.balances.cashReserved).toBe(20_000);
   });
 });
