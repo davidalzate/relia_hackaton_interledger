@@ -1,6 +1,154 @@
-<main class="container-ops">
-  <a class="link-back" routerLink="/caja">← Caja</a>
-  <section class="card">
-    <h1>Depositar</h1>
-  </section>
-</main>
+@if (completed(); as op) {
+  <!-- shortcut: pantalla de éxito mínima hasta tener la especificación de B2.3 -->
+  <main class="screen-success">
+    <div class="container-ops success">
+      <p class="success-label">Depósito completado</p>
+      <p class="amount">{{ op.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+      <p>Operación {{ op.id }}</p>
+      <div class="success-actions">
+        <button type="button" class="btn-secondary" (click)="newOperation()">
+          Nueva operación
+        </button>
+        <a class="btn-secondary" routerLink="/caja">Volver a Caja</a>
+      </div>
+    </div>
+  </main>
+} @else {
+  <main class="container-ops">
+    <a class="link-back" routerLink="/caja">← Caja</a>
+
+    <header>
+      <h1>Depositar</h1>
+      <p class="subtitle">El usuario entrega efectivo y recibe dinero en su billetera.</p>
+    </header>
+
+    <form class="card" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <div class="field">
+        <label for="phone">Celular del usuario</label>
+        <input
+          pInputText
+          maxlength="12"
+          (input)="formatPhone()"
+          id="phone"
+          type="tel"
+          inputmode="numeric"
+          autocomplete="off"
+          placeholder="300 000 0001"
+          formControlName="phone"
+          aria-describedby="key-status"
+        />
+      </div>
+
+      <div id="key-status" aria-live="polite">
+        @switch (keyState()) {
+          @case ('checking') {
+            <p class="key key-checking">Validando llave…</p>
+          }
+          @case ('found') {
+            <p class="key key-ok">Llave validada: el celular tiene billetera Relia.</p>
+          }
+          @case ('missing') {
+            <p class="key key-error">Este celular no tiene billetera Relia.</p>
+          }
+          @case ('error') {
+            <p class="key key-error">No pudimos validar la llave. Intenta de nuevo.</p>
+          }
+        }
+      </div>
+
+      <div class="field">
+        <label for="amount">Monto</label>
+        <p-inputnumber
+          inputId="amount"
+          formControlName="amount"
+          prefix="$ "
+          locale="es-CO"
+          [maxFractionDigits]="0"
+          [min]="0"
+          inputStyleClass="amount-input"
+          [ariaDescribedBy]="amountTooLow() ? 'amount-error' : undefined"
+        />
+      </div>
+
+      <div class="check">
+        <p-checkbox inputId="round" formControlName="roundForUser" [binary]="true" />
+        <div>
+          <label for="round">Que el usuario reciba el valor redondo</label>
+          <p class="hint">
+            La comisión de {{ fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} se cobra aparte.
+          </p>
+        </div>
+      </div>
+
+      @if (amountTooLow()) {
+        <p id="amount-error" class="error" role="alert">El monto debe ser mayor a $1.000.</p>
+      }
+
+      @if (breakdown(); as b) {
+        <section class="tell" aria-labelledby="tell-title">
+          <h2 id="tell-title">Dile al usuario</h2>
+          <div class="highlight">
+            <span>Entrega en efectivo</span>
+            <strong class="amount">{{
+              b.cashIn | currency: 'COP' : 'symbol-narrow' : '1.0-0'
+            }}</strong>
+          </div>
+          <dl>
+            <div>
+              <dt>Recibe en su billetera</dt>
+              <dd>{{ b.walletOut | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+            </div>
+            <div>
+              <dt>Comisión Relia</dt>
+              <dd>{{ fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="mine" aria-labelledby="mine-title">
+          <h2 id="mine-title">Para ti</h2>
+          <dl>
+            <div>
+              <dt>Recibes en efectivo</dt>
+              <dd>{{ b.cashIn | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+            </div>
+            <div>
+              <dt>Tu comisión</dt>
+              <dd class="plus">+{{ commission | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+            </div>
+            <div>
+              <dt>Cupo después</dt>
+              <dd>{{ b.cupoAfter | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+            </div>
+            <div>
+              <dt>Efectivo en caja después</dt>
+              <dd>{{ b.cashAfter | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        @if (b.cupoShortfall > 0) {
+          <p class="error" role="alert">
+            Cupo insuficiente, faltan
+            {{ b.cupoShortfall | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}.
+            <a routerLink="/caja/cupo">Cargar cupo</a>
+          </p>
+        }
+      }
+
+      @if (keyState() === 'found') {
+        <button class="btn-primary" type="submit" [disabled]="!canConfirm()">
+          Confirmar depósito
+        </button>
+      } @else {
+        <button class="btn-primary" type="submit" [disabled]="!canValidate()">Validar llave</button>
+
+        <div class="check">
+          <p-checkbox inputId="simulate" formControlName="simulateMissing" [binary]="true" />
+          <label for="simulate">Simular que la llave no existe</label>
+          <span class="badge-sim">Simulación</span>
+        </div>
+      }
+    </form>
+  </main>
+}
