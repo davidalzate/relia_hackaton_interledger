@@ -56,11 +56,32 @@ export const routes: Routes = [
   },
   {
     path: 'admin',
-    title: 'Inicio | Relia Admin',
     canActivate: [authGuard],
     data: { role: 'admin' },
-    loadComponent: () =>
-      import('../features/admin-home/admin-home.component').then((m) => m.AdminHomeComponent),
+    children: [
+      {
+        path: '',
+        title: 'Corresponsales | Relia Admin',
+        loadComponent: () =>
+          import('../features/admin-home/admin-home.component').then((m) => m.AdminHomeComponent),
+      },
+      {
+        path: 'corresponsal/:id',
+        title: 'Corresponsal | Relia Admin',
+        loadComponent: () =>
+          import('../features/agent-detail/agent-detail.component').then(
+            (m) => m.AgentDetailComponent,
+          ),
+      },
+      {
+        path: 'pagar/:id',
+        title: 'Pagar comisión | Relia Admin',
+        loadComponent: () =>
+          import('../features/pay-commission/pay-commission.component').then(
+            (m) => m.PayCommissionComponent,
+          ),
+      },
+    ],
   },
   {
     path: 'telefono',
