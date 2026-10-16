@@ -97,6 +97,15 @@ export type CupoLoad =
   | (CupoLoadBase & { status: 'done'; before: AgentBalances; after: AgentBalances })
   | (CupoLoadBase & { status: 'error'; error: CupoLoadErrorKind });
 
+/** B7: sumar efectivo o fijar el total contado en caja */
+export type CashMode = 'add' | 'set';
+
+export interface CashUpdate {
+  operation: Operation;
+  before: number;
+  after: number;
+}
+
 const CUPO_ERROR_STATUS: Record<CupoLoadErrorKind, Operation['status']> = {
   rejected: 'failed',
   expired: 'expired',
@@ -205,6 +214,15 @@ export class AgentService {
   clearWithdrawal(): void {
     this.failWithdrawal('cancelled');
     this._withdrawal.set(null);
+  }
+
+  /** B7: ajusta solo el efectivo; cupo y comisión no cambian */
+  updateCash(mode: CashMode, amount: number): CashUpdate {
+    const before = this._balances().cash;
+    const after = mode === 'add' ? before + amount : amount;
+    this._balances.update((b) => ({ ...b, cash: after }));
+    const operation = this.record(amount, 'completed', mode === 'add' ? 'cash' : 'cash-set');
+    return { operation, before, after };
   }
 
   /** B6.3: genera el QR Bre-B o la solicitud a la Wallet; vence según el método */

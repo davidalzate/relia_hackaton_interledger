@@ -117,3 +117,21 @@ describe('AgentService carga de cupo', () => {
     expect(agent.balances().cupo).toBe(0);
   });
 });
+
+describe('AgentService efectivo en caja', () => {
+  it('sumar agrega al efectivo y fijar lo reemplaza, sin tocar cupo ni comisión', () => {
+    const agent = TestBed.inject(AgentService);
+    agent['_balances'].set({ cupo: 10, commission: 5, cash: 20_000 });
+
+    expect(agent.updateCash('add', 30_000)).toMatchObject({ before: 20_000, after: 50_000 });
+    expect(agent.operations()[0]).toMatchObject({
+      type: 'cash',
+      amount: 30_000,
+      status: 'completed',
+    });
+
+    expect(agent.updateCash('set', 0)).toMatchObject({ before: 50_000, after: 0 });
+    expect(agent.operations()[0].type).toBe('cash-set');
+    expect(agent.balances()).toEqual({ cupo: 10, commission: 5, cash: 0 });
+  });
+});

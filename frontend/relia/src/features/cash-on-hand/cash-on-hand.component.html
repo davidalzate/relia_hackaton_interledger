@@ -1,6 +1,63 @@
 <main class="container-ops">
   <a class="link-back" routerLink="/caja">← Caja</a>
-  <section class="card">
+
+  <header>
     <h1>Efectivo en caja</h1>
+    <p class="subtitle">
+      Define cuánto efectivo tienes para pagar retiros. Los depósitos lo suben y los retiros lo
+      bajan.
+    </p>
+  </header>
+
+  <section class="card balance" aria-labelledby="cash-label">
+    <p id="cash-label">Efectivo disponible</p>
+    <p class="amount">{{ cash() | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
   </section>
+
+  <form class="card" [formGroup]="form" (ngSubmit)="save()" novalidate>
+    <span id="mode-label" class="sr-only">Cómo actualizar el efectivo</span>
+    <p-selectbutton
+      formControlName="mode"
+      [options]="modes"
+      optionLabel="label"
+      optionValue="value"
+      [allowEmpty]="false"
+      ariaLabelledBy="mode-label"
+    />
+
+    <div class="field">
+      <label for="amount">
+        {{ mode() === 'add' ? 'Efectivo que agregas' : 'Total de efectivo en caja' }}
+      </label>
+      <p-inputnumber
+        inputId="amount"
+        formControlName="amount"
+        prefix="$ "
+        locale="es-CO"
+        [maxFractionDigits]="0"
+        [min]="0"
+        inputStyleClass="amount-input"
+      />
+    </div>
+
+    <dl>
+      <div>
+        <dt>Efectivo después</dt>
+        <dd>{{ cashAfter() | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+      </div>
+    </dl>
+
+    <button class="btn-primary" type="submit" [disabled]="!canSave()">Guardar efectivo</button>
+
+    @if (saved(); as s) {
+      <div class="saved" role="status">
+        <p>
+          <strong>Efectivo actualizado</strong> ·
+          {{ s.before | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} →
+          {{ s.after | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} · {{ s.operation.id }}
+        </p>
+        <a routerLink="/caja">Volver a la caja</a>
+      </div>
+    }
+  </form>
 </main>
