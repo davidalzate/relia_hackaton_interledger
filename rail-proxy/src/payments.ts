@@ -239,7 +239,11 @@ export class PaymentService {
     } catch (error) {
       await this.closeIncoming(receiver.authServer, incoming.id);
       if (error instanceof OpenPaymentsClientError && (error.status === 401 || error.status === 403)) {
-        throw new ProblemError(503, 'relia_grant_unavailable', 'Relia no puede pagar', describeRailError(error));
+        const cause =
+          error.status === 401
+            ? 'el riel no aceptó el token del permiso (¿vencido o revocado?)'
+            : 'el permiso no cubre este pago: tope del intervalo agotado o intervalo aún no iniciado';
+        throw new ProblemError(503, 'relia_grant_unavailable', 'Relia no puede pagar', `${cause}. Riel: ${describeRailError(error)}`);
       }
       throw railUnavailable(error);
     }
