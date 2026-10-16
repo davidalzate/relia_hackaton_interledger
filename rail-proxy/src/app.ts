@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import { PROBLEM_CONTENT_TYPE, ProblemError } from './problem.js';
-import type { ResolvedWallet } from './wallets.js';
+import { PAYMENT_POINTER_PATTERN, type ResolvedWallet, type WalletResolver } from './wallets.js';
 
 export type ReliaGrantStatus = 'active' | 'awaiting_approval' | 'exhausted' | 'missing';
 
@@ -12,6 +12,7 @@ export interface AppDeps {
   healthRateLimitPerMinute: number;
   reliaWallet: ResolvedWallet;
   reliaGrantStatus: () => ReliaGrantStatus;
+  wallets: Pick<WalletResolver, 'resolve'>;
 }
 
 declare module 'fastify' {
@@ -75,6 +76,23 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         reliaWallet: { pointer, url, assetCode, assetScale },
         reliaGrant,
       };
+    },
+  );
+
+  app.get<{ Querystring: { pointer: string } }>(
+    '/wallet-addresses',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          required: ['pointer'],
+          properties: { pointer: { type: 'string', pattern: PAYMENT_POINTER_PATTERN.source } },
+        },
+      },
+    },
+    async (request) => {
+      const { pointer, url, assetCode, assetScale } = await deps.wallets.resolve(request.query.pointer);
+      return { pointer, url, assetCode, assetScale };
     },
   );
 

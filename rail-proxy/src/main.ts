@@ -2,7 +2,7 @@ import { createAuthenticatedClient } from '@interledger/open-payments';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { openStore } from './store.js';
-import { assertKeyPublished, resolveWallet, toWalletUrl } from './wallets.js';
+import { assertKeyPublished, toWalletUrl, WalletResolver } from './wallets.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -14,7 +14,8 @@ async function main(): Promise<void> {
     logLevel: 'warn',
   });
 
-  const reliaWallet = await resolveWallet(client, config.reliaWalletAddress).catch((error: Error) => {
+  const wallets = new WalletResolver(client);
+  const reliaWallet = await wallets.resolve(config.reliaWalletAddress).catch((error: Error) => {
     throw new Error(`No se pudo resolver la billetera de Relia ${config.reliaWalletAddress}: ${error.message}`);
   });
   await assertKeyPublished(client, reliaWallet, config.reliaKeyId, config.reliaPrivateKey);
@@ -27,6 +28,7 @@ async function main(): Promise<void> {
     healthRateLimitPerMinute: config.healthRateLimitPerMinute,
     reliaWallet,
     reliaGrantStatus: () => 'missing',
+    wallets,
   });
 
   const shutdown = async (signal: string) => {

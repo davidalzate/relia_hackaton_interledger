@@ -1,4 +1,5 @@
 import { createPublicKey, type KeyObject } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
 import { OpenPaymentsClientError, type AuthenticatedClient, type WalletAddress } from '@interledger/open-payments';
 import { ProblemError } from './problem.js';
 
@@ -37,34 +38,74 @@ export function toWalletUrl(pointerOrUrl: string): string {
   return url.toString().replace(/\/$/, '');
 }
 
-export async function resolveWallet(client: AuthenticatedClient, pointerOrUrl: string): Promise<ResolvedWallet> {
-  let wallet: WalletAddress;
-  try {
-    wallet = await client.walletAddress.get({ url: toWalletUrl(pointerOrUrl) });
-  } catch (error) {
-    throw classifyWalletError(error);
+const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Resuelve payment pointers en el riel y guarda en caché las respuestas exitosas unos minutos.
+ * Lanza `ProblemError` con `wallet_not_found` (404) o `rail_unavailable` (503).
+ */
+export class WalletResolver {
+  private readonly cache = new Map<string, { wallet: ResolvedWallet; expiresAt: number }>();
+
+  constructor(
+    private readonly client: AuthenticatedClient,
+    private readonly cacheTtlMs = DEFAULT_CACHE_TTL_MS,
+  ) {}
+
+  async resolve(pointerOrUrl: string): Promise<ResolvedWallet> {
+    const url = toWalletUrl(pointerOrUrl);
+    const cached = this.cache.get(url);
+    if (cached && cached.expiresAt > Date.now()) return cached.wallet;
+
+    let wallet: WalletAddress;
+    try {
+      wallet = await this.client.walletAddress.get({ url });
+    } catch (error) {
+      throw await classifyWalletError(url, error);
+    }
+    const resolved: ResolvedWallet = {
+      pointer: urlToPointer(wallet.id),
+      url: wallet.id,
+      assetCode: wallet.assetCode,
+      assetScale: wallet.assetScale,
+      authServer: wallet.authServer,
+      resourceServer: wallet.resourceServer,
+    };
+    this.cache.set(url, { wallet: resolved, expiresAt: Date.now() + this.cacheTtlMs });
+    return resolved;
   }
-  return {
-    pointer: urlToPointer(wallet.id),
-    url: wallet.id,
-    assetCode: wallet.assetCode,
-    assetScale: wallet.assetScale,
-    authServer: wallet.authServer,
-    resourceServer: wallet.resourceServer,
-  };
 }
 
-function classifyWalletError(error: unknown): ProblemError {
-  const detail =
-    error instanceof OpenPaymentsClientError
-      ? `${error.description}${error.status ? ` (HTTP ${error.status})` : ''}`
-      : error instanceof Error
-        ? error.message
-        : String(error);
-  if (error instanceof OpenPaymentsClientError && error.status === 404) {
-    return new ProblemError(404, 'wallet_not_found', 'Billetera inexistente', detail);
+// El SDK no expone la causa de un fallo de red: "fetch failed" sale igual para un dominio
+// inexistente que para un riel caído. Se distingue con una consulta DNS.
+async function classifyWalletError(url: string, error: unknown): Promise<ProblemError> {
+  const notFound = (detail: string) => new ProblemError(404, 'wallet_not_found', 'Billetera inexistente', detail);
+  const unavailable = (detail: string) => new ProblemError(503, 'rail_unavailable', 'El riel no respondió', detail);
+
+  if (!(error instanceof OpenPaymentsClientError)) {
+    return unavailable(error instanceof Error ? error.message : String(error));
   }
-  return new ProblemError(503, 'rail_unavailable', 'El riel no respondió', detail);
+  // La descripción puede traer el cuerpo entero de una página HTML.
+  const description = error.description.length > 200 ? `${error.description.slice(0, 200)}…` : error.description;
+  const detail = `${description}${error.status ? ` (HTTP ${error.status})` : ''}`;
+  if (error.status !== undefined) {
+    return error.status >= 500 || error.status === 429 ? unavailable(detail) : notFound(detail);
+  }
+  if (error.description === 'fetch failed' || /timeout|abort/i.test(error.description)) {
+    return (await hostExists(new URL(url).hostname)) ? unavailable(detail) : notFound(`${detail}: el dominio no existe`);
+  }
+  // Respondió algo que no es una wallet address (HTML, JSON con otra forma).
+  return notFound(detail);
+}
+
+async function hostExists(hostname: string): Promise<boolean> {
+  try {
+    await lookup(hostname);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code !== 'ENOTFOUND' && code !== 'ENODATA';
+  }
 }
 
 /** Confirma que la billetera publica la llave pública que corresponde a la llave privada configurada. */
