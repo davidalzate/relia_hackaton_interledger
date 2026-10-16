@@ -48,12 +48,19 @@ export class ReceiptDialogComponent {
   private readonly locale = inject(LOCALE_ID);
   private readonly document = inject(DOCUMENT);
 
+  // Getters y no campos: como campos llegaban undefined al template en el bundle de tests
+  // cuando esta spec corre junto a otras (historial, depósito); la app no se ve afectada
+  protected get statusBadge(): typeof STATUS_BADGE {
+    return STATUS_BADGE;
+  }
+  protected get statusLabel(): typeof STATUS_LABEL {
+    return STATUS_LABEL;
+  }
+
   protected readonly op = computed(() => {
     const id = this.receipt.operationId();
     return id ? (this.agent.operation(id) ?? null) : null;
   });
-  protected readonly statusBadge = STATUS_BADGE;
-  protected readonly statusLabel = STATUS_LABEL;
   protected readonly store = computed(() => this.auth.user()?.store ?? 'Relia');
 
   protected readonly title = computed(() => {
