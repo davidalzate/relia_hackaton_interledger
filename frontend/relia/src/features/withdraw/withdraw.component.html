@@ -1,6 +1,242 @@
-<main class="container-ops">
-  <a class="link-back" routerLink="/caja">← Caja</a>
-  <section class="card">
-    <h1>Retirar</h1>
-  </section>
-</main>
+@let w = withdrawal();
+@if (w && w.status === 'waiting') {
+  <!-- B3.2 -->
+  <main class="container-ops center">
+    <section class="card waiting" role="status" aria-live="polite">
+      <p-progressspinner strokeWidth="4" ariaLabel="Esperando aprobación" />
+      <h1>Esperando que el usuario apruebe en su billetera</h1>
+      <p class="amount">{{ w.request.walletIn | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+      <p class="countdown" aria-label="Tiempo restante">{{ countdown() }}</p>
+      <p class="warning"><strong>No entregues efectivo todavía</strong></p>
+      <p class="phone-link">
+        <a routerLink="/telefono">Abrir teléfono del usuario</a>
+        <span class="badge-sim">Simulación</span>
+      </p>
+      <button type="button" class="link-danger" (click)="cancelRequest()">
+        Cancelar solicitud
+      </button>
+    </section>
+  </main>
+} @else if (w && w.status === 'approved') {
+  <!-- B3.3 -->
+  <main class="container-ops">
+    <section class="card result-ok" aria-labelledby="approved-title">
+      <h1 id="approved-title">Pago aprobado</h1>
+      <div>
+        <p>Entrega en efectivo</p>
+        <p class="amount big">
+          {{ w.request.cashOut | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+        </p>
+      </div>
+      <dl>
+        <div>
+          <dt>Pagó desde su billetera</dt>
+          <dd>{{ w.request.walletIn | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+        </div>
+        <div>
+          <dt>Comisión Relia</dt>
+          <dd>{{ fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+        </div>
+        <div>
+          <dt>Cupo antes</dt>
+          <dd>{{ w.before.cupo | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+        </div>
+        <div>
+          <dt>Cupo después</dt>
+          <dd>{{ w.after.cupo | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+        </div>
+        <div>
+          <dt>Efectivo en caja</dt>
+          <dd>
+            {{ w.before.cash | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} →
+            {{ w.after.cash | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+          </dd>
+        </div>
+        <div>
+          <dt>Operación</dt>
+          <dd>{{ w.operation.id }}</dd>
+        </div>
+      </dl>
+      <div class="result-actions">
+        <button type="button" class="btn-light" (click)="done()">Listo</button>
+        <a class="btn-outline-light" [routerLink]="['/caja/comprobante', w.operation.id]">
+          Ver comprobante
+        </a>
+      </div>
+    </section>
+  </main>
+} @else if (w && w.status === 'error') {
+  <!-- B3.4 -->
+  <main class="container-ops">
+    <section class="card result-error" role="alert" aria-labelledby="error-title">
+      @switch (w.error) {
+        @case ('rejected') {
+          <h1 id="error-title">El usuario rechazó el pago</h1>
+          <p>No se movió dinero. No entregues efectivo.</p>
+        }
+        @case ('expired') {
+          <h1 id="error-title">La solicitud venció</h1>
+          <p>Se acabó el tiempo. No se movió dinero.</p>
+        }
+        @case ('cancelled') {
+          <h1 id="error-title">Solicitud cancelada</h1>
+          <p>Cancelaste la solicitud. No se movió dinero.</p>
+        }
+        @case ('cash') {
+          <h1 id="error-title">Efectivo insuficiente</h1>
+          <p>No tienes efectivo suficiente para este retiro. Asigna más efectivo.</p>
+        }
+        @default {
+          <h1 id="error-title">El pago falló</h1>
+          <p>La billetera no completó el pago. No se movió dinero.</p>
+        }
+      }
+      <p class="hint">
+        Operación {{ w.operation.id }} ·
+        {{ w.request.cashOut | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+      </p>
+      <div class="result-actions">
+        <button type="button" class="btn-primary" (click)="retry()">Intentar de nuevo</button>
+        <a class="link-back" routerLink="/caja">Volver a la caja</a>
+      </div>
+    </section>
+  </main>
+} @else {
+  <main class="container-ops">
+    <a class="link-back" routerLink="/caja">← Caja</a>
+
+    <header>
+      <h1>Retirar</h1>
+      <p class="subtitle">El usuario paga desde su billetera y recibe efectivo.</p>
+    </header>
+
+    <form class="card" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <div class="field">
+        <label for="phone">Celular del usuario</label>
+        <input
+          pInputText
+          maxlength="12"
+          (input)="formatPhone()"
+          id="phone"
+          type="tel"
+          inputmode="numeric"
+          autocomplete="off"
+          placeholder="300 000 0001"
+          formControlName="phone"
+          aria-describedby="key-status"
+        />
+      </div>
+
+      <div id="key-status" aria-live="polite">
+        @switch (keyState()) {
+          @case ('checking') {
+            <p class="key key-checking">Validando llave…</p>
+          }
+          @case ('found') {
+            <p class="key key-ok">Llave validada: el celular tiene billetera Relia.</p>
+          }
+          @case ('missing') {
+            <p class="key key-error">Este celular no tiene billetera Relia.</p>
+          }
+          @case ('error') {
+            <p class="key key-error">No pudimos validar la llave. Intenta de nuevo.</p>
+          }
+        }
+      </div>
+
+      <div class="field">
+        <label for="amount">Monto</label>
+        <p-inputnumber
+          inputId="amount"
+          formControlName="amount"
+          prefix="$ "
+          locale="es-CO"
+          [maxFractionDigits]="0"
+          [min]="0"
+          inputStyleClass="amount-input"
+          [ariaDescribedBy]="amountTooLow() ? 'amount-error' : undefined"
+        />
+      </div>
+
+      <div class="check">
+        <p-checkbox inputId="round" formControlName="roundForUser" [binary]="true" />
+        <div>
+          <label for="round">Que el usuario reciba el valor redondo</label>
+          <p class="hint">
+            La comisión de {{ fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} se cobra aparte.
+          </p>
+        </div>
+      </div>
+
+      @if (amountTooLow()) {
+        <p id="amount-error" class="error" role="alert">El monto debe ser mayor a $1.000.</p>
+      }
+
+      @if (breakdown(); as b) {
+        <section class="tell" aria-labelledby="tell-title">
+          <h2 id="tell-title">Dile al usuario</h2>
+          <div class="highlight">
+            <span>Recibe en efectivo</span>
+            <strong class="amount">{{
+              b.cashOut | currency: 'COP' : 'symbol-narrow' : '1.0-0'
+            }}</strong>
+          </div>
+          <dl>
+            <div>
+              <dt>Paga desde su billetera</dt>
+              <dd>{{ b.walletIn | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+            </div>
+            <div>
+              <dt>Comisión Relia</dt>
+              <dd>{{ fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="mine" aria-labelledby="mine-title">
+          <h2 id="mine-title">Para ti</h2>
+          <dl>
+            <div>
+              <dt>Entregas en efectivo</dt>
+              <dd>{{ b.cashOut | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+            </div>
+            <div>
+              <dt>Tu comisión</dt>
+              <dd class="plus">+{{ commission | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+            </div>
+            <div>
+              <dt>Cupo después</dt>
+              <dd>{{ b.cupoAfter | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+            </div>
+            <div>
+              <dt>Efectivo en caja después</dt>
+              <dd>{{ b.cashAfter | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        @if (b.cashShortfall > 0) {
+          <p class="error" role="alert">
+            Efectivo insuficiente, faltan
+            {{ b.cashShortfall | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}.
+            <a routerLink="/caja/efectivo">Asignar efectivo</a>
+          </p>
+        }
+      }
+
+      @if (keyState() === 'found') {
+        <button class="btn-primary" type="submit" [disabled]="!canSend()">
+          Enviar solicitud de pago
+        </button>
+      } @else {
+        <button class="btn-primary" type="submit" [disabled]="!canValidate()">Validar llave</button>
+
+        <div class="check">
+          <p-checkbox inputId="simulate" formControlName="simulateMissing" [binary]="true" />
+          <label for="simulate">Simular que la llave no existe</label>
+          <span class="badge-sim">Simulación</span>
+        </div>
+      }
+    </form>
+  </main>
+}

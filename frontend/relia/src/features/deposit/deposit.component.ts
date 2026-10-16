@@ -23,7 +23,9 @@ import {
   DepositErrorKind,
   DepositReceipt,
 } from '../../core/services/agent.service';
-import { AGENT_COMMISSION, RELIA_FEE, depositBreakdown } from './deposit-breakdown';
+import { AGENT_COMMISSION, RELIA_FEE } from '../../shared/types/agent';
+import { formatPhone, phoneDigits } from '../../shared/utils/phone';
+import { depositBreakdown } from './deposit-breakdown';
 
 type KeyState = 'idle' | 'checking' | 'found' | 'missing' | 'error';
 
@@ -76,7 +78,7 @@ export class DepositComponent {
 
   protected readonly amount = computed(() => this.value().amount ?? 0);
   // El campo guarda el formato "300 000 0001"; se trabaja con los dígitos
-  private readonly phoneDigits = computed(() => (this.value().phone ?? '').replace(/\D/g, ''));
+  private readonly phoneDigits = computed(() => phoneDigits(this.value().phone ?? ''));
   protected readonly phoneComplete = computed(() => this.phoneDigits().length === 10);
   protected readonly amountTooLow = computed(() => this.amount() > 0 && this.amount() <= RELIA_FEE);
   protected readonly breakdown = computed(() =>
@@ -95,12 +97,8 @@ export class DepositComponent {
       .subscribe(() => this.keyState.set('idle'));
   }
 
-  /** Deja solo dígitos (máx. 10) con el formato 300 000 0001 */
   protected formatPhone(): void {
-    const digits = this.form.controls.phone.value.replace(/\D/g, '').slice(0, 10);
-    const formatted = [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6)]
-      .filter(Boolean)
-      .join(' ');
+    const formatted = formatPhone(this.form.controls.phone.value);
     if (formatted !== this.form.controls.phone.value) this.form.controls.phone.setValue(formatted);
   }
 

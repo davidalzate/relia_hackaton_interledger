@@ -1,5 +1,15 @@
 import { Injectable, computed, signal } from '@angular/core';
-import { Observable, catchError, delay, map, of, throwError, timeout, timer } from 'rxjs';
+import {
+  Observable,
+  Subscription,
+  catchError,
+  delay,
+  map,
+  of,
+  throwError,
+  timeout,
+  timer,
+} from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import { AgentBalances, Operation } from '../../shared/types/agent';
@@ -8,6 +18,8 @@ import { AgentBalances, Operation } from '../../shared/types/agent';
 export const LOW_BALANCE_THRESHOLD = 50_000;
 /** Lo que tarda el simulador en acreditar la billetera (B2.4) */
 export const DEPOSIT_SEND_MS = 2_000;
+/** Tiempo que tiene el usuario para aprobar un retiro en su billetera (B3.2) */
+export const WITHDRAWAL_TTL_MS = 5 * 60_000;
 
 export interface DepositRequest {
   phone: string;
@@ -35,6 +47,38 @@ export class DepositError extends Error {
   }
 }
 
+/** Datos del formulario B3.1 con el desglose ya calculado */
+export interface WithdrawalRequest {
+  phone: string;
+  amount: number;
+  roundForUser: boolean;
+  /** Efectivo que entrega el corresponsal */
+  cashOut: number;
+  /** Lo que paga el usuario desde su billetera */
+  walletIn: number;
+  commission: number;
+}
+
+export type WithdrawalErrorKind = 'rejected' | 'expired' | 'cancelled' | 'failed' | 'cash';
+
+/** Solicitud de pago en curso: la comparten la vista B3 y el teléfono del usuario (C2) */
+interface WithdrawalBase {
+  request: WithdrawalRequest;
+  operation: Operation;
+}
+export type Withdrawal =
+  | (WithdrawalBase & { status: 'waiting'; expiresAt: number })
+  | (WithdrawalBase & { status: 'approved'; before: AgentBalances; after: AgentBalances })
+  | (WithdrawalBase & { status: 'error'; error: WithdrawalErrorKind });
+
+const WITHDRAWAL_ERROR_STATUS: Record<WithdrawalErrorKind, Operation['status']> = {
+  rejected: 'failed',
+  expired: 'expired',
+  cancelled: 'cancelled',
+  failed: 'failed',
+  cash: 'failed',
+};
+
 // shortcut: estado demo en memoria que arranca vacío; cambiar por la API (validada con Zod y
 // timeout) cuando exista backend: GET /api/agent/summary, GET /api/keys/:phone, POST /api/deposits
 @Injectable({ providedIn: 'root' })
@@ -43,10 +87,13 @@ export class AgentService {
   /** Más recientes primero */
   private readonly _operations = signal<Operation[]>([]);
   private sequence = 0;
+  private readonly _withdrawal = signal<Withdrawal | null>(null);
+  private expiry?: Subscription;
 
   readonly balances = this._balances.asReadonly();
   readonly operations = this._operations.asReadonly();
   readonly recentOperations = computed(() => this._operations().slice(0, 3));
+  readonly withdrawal = this._withdrawal.asReadonly();
 
   /** Verifica que el celular tenga billetera. `simulateMissing` fuerza "no existe" (demo) */
   validateKey(_phone: string, simulateMissing: boolean): Observable<boolean> {
@@ -71,6 +118,60 @@ export class AgentService {
     );
   }
 
+  /** B3.2: crea la solicitud de pago; vence sola a los 5 min si el usuario no responde */
+  requestWithdrawal(request: WithdrawalRequest): void {
+    this.expiry?.unsubscribe();
+    this._withdrawal.set({
+      status: 'waiting',
+      request,
+      operation: this.record(request.cashOut, 'pending', 'withdrawal'),
+      expiresAt: Date.now() + WITHDRAWAL_TTL_MS,
+    });
+    this.expiry = timer(WITHDRAWAL_TTL_MS).subscribe(() => this.failWithdrawal('expired'));
+  }
+
+  /** El usuario aprueba en su billetera (C2): mueve saldos si hay efectivo para entregar */
+  approveWithdrawal(): void {
+    const current = this._withdrawal();
+    if (current?.status !== 'waiting') return;
+    const { cashOut, commission } = current.request;
+    const before = this._balances();
+    if (before.cash < cashOut) return this.failWithdrawal('cash');
+    const after: AgentBalances = {
+      cupo: before.cupo + cashOut,
+      cash: before.cash - cashOut,
+      commission: before.commission + commission,
+    };
+    this.expiry?.unsubscribe();
+    this._balances.set(after);
+    this._withdrawal.set({
+      status: 'approved',
+      request: current.request,
+      operation: this.setStatus(current.operation, 'completed'),
+      before,
+      after,
+    });
+  }
+
+  /** Rechazo del usuario, vencimiento, cancelación del corresponsal o falla de la billetera */
+  failWithdrawal(error: WithdrawalErrorKind): void {
+    const current = this._withdrawal();
+    if (current?.status !== 'waiting') return;
+    this.expiry?.unsubscribe();
+    this._withdrawal.set({
+      status: 'error',
+      request: current.request,
+      operation: this.setStatus(current.operation, WITHDRAWAL_ERROR_STATUS[error]),
+      error,
+    });
+  }
+
+  /** Cierra el flujo de retiro (Listo, reintento o cierre de sesión); cancela si seguía esperando */
+  clearWithdrawal(): void {
+    this.failWithdrawal('cancelled');
+    this._withdrawal.set(null);
+  }
+
   private applyDeposit({ cashIn, walletOut, commission }: DepositRequest): DepositReceipt {
     const before = this._balances();
     // El cupo pudo cambiar desde que se armó el formulario
@@ -84,15 +185,25 @@ export class AgentService {
     return { operation: this.record(cashIn, 'completed'), walletOut, before, after };
   }
 
-  private record(amount: number, status: Operation['status']): Operation {
+  private record(
+    amount: number,
+    status: Operation['status'],
+    type: Operation['type'] = 'deposit',
+  ): Operation {
     const operation: Operation = {
       id: `RL-${String(++this.sequence).padStart(4, '0')}`,
-      type: 'deposit',
+      type,
       amount,
       status,
       createdAt: new Date().toISOString(),
     };
     this._operations.update((ops) => [operation, ...ops]);
     return operation;
+  }
+
+  private setStatus(operation: Operation, status: Operation['status']): Operation {
+    const updated = { ...operation, status };
+    this._operations.update((ops) => ops.map((op) => (op.id === operation.id ? updated : op)));
+    return updated;
   }
 }

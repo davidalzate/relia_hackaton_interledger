@@ -1,6 +1,1 @@
-main {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding-block: 1.5rem;
-}
+@use '../../shared/styles/operation-flow';
