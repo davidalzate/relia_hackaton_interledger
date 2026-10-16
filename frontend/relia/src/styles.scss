@@ -162,3 +162,22 @@ body {
     text-decoration: underline;
   }
 }
+
+/* Wordmark "relia." cobalto con punto coral; el tamaño base es el del login */
+.wordmark {
+  margin: 0;
+  font-family: 'Goldplay Alt', system-ui, sans-serif;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--relia-cobalt);
+
+  span {
+    color: var(--relia-coral);
+  }
+}
+
+/* Ítems destructivos de menús PrimeNG (MenuItem.styleClass) */
+.p-menu .menu-danger .p-menu-item-label {
+  color: var(--relia-failed-text);
+}
