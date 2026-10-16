@@ -1,6 +1,32 @@
-main {
+@use '../../shared/styles/operation-flow';
+
+.balance {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding-block: 1.5rem;
+  gap: 6px;
+  background: var(--relia-cobalt);
+  color: #fff;
+
+  p:first-child {
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+}
+
+.saved {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--relia-completed);
+  color: var(--relia-completed-text);
+  font-size: 0.875rem;
+
+  a {
+    font-weight: 600;
+    color: inherit;
+  }
 }
