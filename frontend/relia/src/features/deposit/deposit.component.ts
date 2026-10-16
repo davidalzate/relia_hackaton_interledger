@@ -1,15 +1,17 @@
-import { CurrencyPipe } from '@angular/common';
+import { CurrencyPipe, formatCurrency } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
   computed,
   inject,
+  LOCALE_ID,
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { ConfirmationService } from 'primeng/api';
 import { Checkbox } from 'primeng/checkbox';
 import { InputNumber } from 'primeng/inputnumber';
 import { InputText } from 'primeng/inputtext';
@@ -31,6 +33,8 @@ type KeyState = 'idle' | 'checking' | 'found' | 'missing' | 'error';
 export class DepositComponent {
   private readonly agent = inject(AgentService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly confirmation = inject(ConfirmationService);
+  private readonly locale = inject(LOCALE_ID);
 
   protected readonly fee = RELIA_FEE;
   protected readonly commission = AGENT_COMMISSION;
@@ -93,16 +97,25 @@ export class DepositComponent {
       });
   }
 
+  // B2.3: el depósito solo se registra tras confirmar en B4 que se recibió el efectivo
   protected confirm(): void {
     const breakdown = this.breakdown();
     if (!breakdown || !this.canConfirm()) return;
-    this.completed.set(
-      this.agent.deposit({
-        phone: this.phoneDigits(),
-        cashIn: breakdown.cashIn,
-        commission: AGENT_COMMISSION,
-      }),
-    );
+    const total = formatCurrency(breakdown.cashIn, this.locale, '$', 'COP', '1.0-0');
+    this.confirmation.confirm({
+      header: 'Confirmar depósito',
+      message: `¿Confirmas que recibiste en efectivo un total de ${total} por parte del usuario?`,
+      acceptLabel: 'Sí, lo recibí',
+      rejectLabel: 'Cancelar',
+      accept: () =>
+        this.completed.set(
+          this.agent.deposit({
+            phone: this.phoneDigits(),
+            cashIn: breakdown.cashIn,
+            commission: AGENT_COMMISSION,
+          }),
+        ),
+    });
   }
 
   protected submit(): void {

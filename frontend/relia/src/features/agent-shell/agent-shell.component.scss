@@ -66,3 +66,15 @@
     color: var(--relia-muted-text);
   }
 }
+
+.confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  width: 100%;
+
+  button {
+    flex: 1 1 140px;
+  }
+}
