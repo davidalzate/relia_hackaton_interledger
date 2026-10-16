@@ -6,12 +6,13 @@ import { Menu } from 'primeng/menu';
 
 import { AgentService } from '../../core/services/agent.service';
 import { AuthService } from '../../core/services/auth.service';
+import { DemoPanelComponent } from '../../shared/components/demo-panel/demo-panel.component';
 
 // B0: encabezado fijo y menú del corresponsal; envuelve todas sus vistas.
 // También aloja B4 (diálogo de confirmación) para las vistas hijas vía ConfirmationService
 @Component({
   selector: 'app-agent-shell',
-  imports: [RouterLink, RouterOutlet, Menu, ConfirmDialog],
+  imports: [RouterLink, RouterOutlet, Menu, ConfirmDialog, DemoPanelComponent],
   providers: [ConfirmationService],
   templateUrl: './agent-shell.component.html',
   styleUrl: './agent-shell.component.scss',
@@ -36,6 +37,7 @@ export class AgentShellComponent {
   // Cerrar sesión descarta cualquier flujo en curso (p. ej. un retiro esperando aprobación)
   private logout(): void {
     this.agent.clearWithdrawal();
+    this.agent.clearCupoLoad();
     this.auth.clear();
     void this.router.navigateByUrl('/login');
   }

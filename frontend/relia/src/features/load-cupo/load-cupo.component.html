@@ -1,6 +1,141 @@
+@let l = load();
 <main class="container-ops">
   <a class="link-back" routerLink="/caja">← Caja</a>
-  <section class="card">
+
+  <header>
     <h1>Cargar cupo</h1>
-  </section>
+    <p class="subtitle">
+      Cupo actual {{ balances().cupo | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+    </p>
+  </header>
+
+  @if (l && l.status === 'waiting') {
+    <!-- B6.3 -->
+    <section class="card waiting" aria-labelledby="waiting-title">
+      <span class="badge-sim">Simulación {{ methodLabel[l.request.method] }}</span>
+      @if (l.request.method === 'breb') {
+        <h2 id="waiting-title" class="sr-only">Paga el QR Bre-B</h2>
+        <div class="qr" role="img" aria-label="Código QR de ejemplo">
+          <i class="pi pi-qrcode" aria-hidden="true"></i>
+        </div>
+      } @else {
+        <h2 id="waiting-title">Aprueba la solicitud en tu billetera</h2>
+        <p class="hint">Llave {{ phoneText(l.request.key ?? '') }}</p>
+      }
+      <p class="amount">{{ l.request.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+      <p class="countdown" role="status">
+        <span class="dot" aria-hidden="true"></span> Esperando pago · {{ countdown() }}
+      </p>
+      <p class="hint">Confirma el pago desde el panel Modo demo.</p>
+      <button type="button" class="btn-secondary" (click)="cancel()">Cancelar</button>
+    </section>
+  } @else if (l && l.status === 'done') {
+    <!-- B6.4 -->
+    <section class="card result-ok" aria-labelledby="done-title">
+      <h2 id="done-title">Cupo cargado</h2>
+      <p class="amount">+{{ l.request.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+      <dl>
+        <div>
+          <dt>Cupo antes</dt>
+          <dd>{{ l.before.cupo | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+        </div>
+        <div>
+          <dt>Cupo después</dt>
+          <dd>{{ l.after.cupo | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+        </div>
+        <div>
+          <dt>Operación</dt>
+          <dd>{{ l.operation.id }}</dd>
+        </div>
+      </dl>
+      <div class="result-actions">
+        <a class="btn-light" routerLink="/caja" (click)="finish()">Volver a la caja</a>
+      </div>
+    </section>
+  } @else if (l && l.status === 'error') {
+    <!-- B6.5 -->
+    <section class="card result-error" role="alert" aria-labelledby="error-title">
+      @switch (l.error) {
+        @case ('rejected') {
+          <h2 id="error-title">Pago rechazado</h2>
+          <p>La carga no se completó. Tu cupo no cambió.</p>
+        }
+        @case ('expired') {
+          <h2 id="error-title">La solicitud venció</h2>
+          <p>Se acabó el tiempo. Tu cupo no cambió.</p>
+        }
+        @default {
+          <h2 id="error-title">Solicitud cancelada</h2>
+          <p>Cancelaste la solicitud. Tu cupo no cambió.</p>
+        }
+      }
+      <p class="hint">
+        Operación {{ l.operation.id }} ·
+        {{ l.request.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+      </p>
+      <div class="result-actions">
+        <button type="button" class="btn-primary" (click)="retry()">Intentar de nuevo</button>
+        <a class="link-back" routerLink="/caja">Volver a la caja</a>
+      </div>
+    </section>
+  } @else if (method(); as m) {
+    <!-- B6.2 -->
+    <form class="card" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <p class="step">
+        Paso 2 · {{ methodLabel[m] }}
+        <button type="button" class="link-inline" (click)="method.set(null)">Cambiar método</button>
+      </p>
+
+      <div class="field">
+        <label for="amount">Monto a cargar</label>
+        <p-inputnumber
+          inputId="amount"
+          formControlName="amount"
+          prefix="$ "
+          locale="es-CO"
+          [maxFractionDigits]="0"
+          [min]="0"
+          inputStyleClass="amount-input"
+        />
+      </div>
+
+      @if (m === 'wallet') {
+        <div class="field">
+          <label for="key">Tu llave (celular)</label>
+          <input
+            pInputText
+            id="key"
+            type="tel"
+            inputmode="numeric"
+            maxlength="12"
+            formControlName="key"
+            aria-describedby="key-hint"
+            (input)="formatKey()"
+          />
+          <p id="key-hint" class="hint">
+            Enviaremos la solicitud a la billetera vinculada a esta llave.
+          </p>
+        </div>
+      }
+
+      <button class="btn-primary" type="submit" [disabled]="!canSubmit()">
+        {{ m === 'breb' ? 'Generar QR' : 'Enviar solicitud' }}
+      </button>
+    </form>
+  } @else {
+    <!-- B6.1 -->
+    <fieldset class="methods">
+      <legend class="step">Paso 1 · Elige el método</legend>
+      <button type="button" class="card method" (click)="choose('breb')">
+        <strong>Bre-B</strong>
+        <span>Genera un QR y paga desde cualquier banco. Hasta 10 minutos.</span>
+        <span class="badge-sim">Simulación</span>
+      </button>
+      <button type="button" class="card method" (click)="choose('wallet')">
+        <strong>Wallet</strong>
+        <span>Envía una solicitud a la billetera de tu llave y apruébala allí.</span>
+        <span class="badge-sim">Simulación</span>
+      </button>
+    </fieldset>
+  }
 </main>

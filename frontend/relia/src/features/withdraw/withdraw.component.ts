@@ -22,6 +22,7 @@ import { AgentService, WITHDRAWAL_TTL_MS } from '../../core/services/agent.servi
 import { AGENT_COMMISSION, RELIA_FEE } from '../../shared/types/agent';
 import { InviteDialogComponent } from '../../shared/components/invite-dialog/invite-dialog.component';
 import { formatPhone, phoneDigits } from '../../shared/utils/phone';
+import { formatCountdown } from '../../shared/utils/time';
 import { withdrawBreakdown } from './withdraw-breakdown';
 
 type KeyState = 'idle' | 'checking' | 'found' | 'missing' | 'error';
@@ -90,11 +91,10 @@ export class WithdrawComponent {
   /** Cuenta regresiva m:ss de la solicitud en espera */
   protected readonly countdown = computed(() => {
     const w = this.withdrawal();
-    const left = w?.status === 'waiting' ? w.expiresAt - this.now() : 0;
-    // `now` se refresca cada segundo: se acota para no mostrar 5:01 al arrancar
-    const seconds = Math.min(WITHDRAWAL_TTL_MS, Math.max(0, left)) / 1_000;
-    const whole = Math.ceil(seconds);
-    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+    return formatCountdown(
+      w?.status === 'waiting' ? w.expiresAt - this.now() : 0,
+      WITHDRAWAL_TTL_MS,
+    );
   });
 
   constructor() {

@@ -1,6 +1,101 @@
-main {
+@use '../../shared/styles/operation-flow';
+
+.step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--relia-muted-text);
+
+  .link-inline {
+    color: var(--relia-cobalt);
+  }
+}
+
+.methods {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding-block: 1.5rem;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+
+  legend {
+    margin-bottom: 12px;
+  }
+}
+
+.method {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  border: 1px solid var(--relia-line);
+  color: var(--relia-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s;
+
+  &:hover {
+    border-color: var(--relia-cobalt);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--relia-cobalt);
+    outline-offset: 2px;
+  }
+
+  strong {
+    font-size: 1.125rem;
+  }
+}
+
+.qr {
+  display: grid;
+  place-items: center;
+  width: 200px;
+  height: 200px;
+  border-radius: var(--relia-radius-card);
+  background: var(--relia-info);
+  color: var(--relia-info-text);
+
+  i {
+    font-size: 140px;
+  }
+}
+
+.countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+    transform: scale(0.7);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot {
+    animation: none;
+  }
+}
+
+a.btn-light {
+  text-decoration: none;
 }
