@@ -7,12 +7,20 @@ import { Menu } from 'primeng/menu';
 import { AgentService } from '../../core/services/agent.service';
 import { AuthService } from '../../core/services/auth.service';
 import { DemoPanelComponent } from '../../shared/components/demo-panel/demo-panel.component';
+import { ReceiptDialogComponent } from '../../shared/components/receipt-dialog/receipt-dialog.component';
 
 // B0: encabezado fijo y menú del corresponsal; envuelve todas sus vistas.
 // También aloja B4 (diálogo de confirmación) para las vistas hijas vía ConfirmationService
 @Component({
   selector: 'app-agent-shell',
-  imports: [RouterLink, RouterOutlet, Menu, ConfirmDialog, DemoPanelComponent],
+  imports: [
+    RouterLink,
+    RouterOutlet,
+    Menu,
+    ConfirmDialog,
+    DemoPanelComponent,
+    ReceiptDialogComponent,
+  ],
   providers: [ConfirmationService],
   templateUrl: './agent-shell.component.html',
   styleUrl: './agent-shell.component.scss',

@@ -1,0 +1,54 @@
+<p-dialog
+  [visible]="!!op()"
+  (visibleChange)="$event || close()"
+  [modal]="true"
+  [showHeader]="false"
+  [dismissableMask]="true"
+  [draggable]="false"
+  [resizable]="false"
+  appendTo="body"
+  styleClass="receipt-dialog"
+  maskStyleClass="modal-mask"
+  [style]="{ width: 'min(400px, calc(100vw - 32px))' }"
+  ariaLabelledBy="receipt-title"
+>
+  @if (op(); as o) {
+    <article class="receipt card">
+      <header>
+        <span class="wordmark">relia<span aria-hidden="true">.</span></span>
+        <span [class]="statusBadge[o.status]">{{ statusLabel[o.status] }}</span>
+      </header>
+
+      <h2 id="receipt-title">{{ title() }}</h2>
+      <p class="amount">{{ mainAmount() }}</p>
+      <p class="caption">{{ caption() }}</p>
+
+      <dl>
+        @for (row of rows(); track row.label) {
+          <div>
+            <dt>{{ row.label }}</dt>
+            <dd>{{ row.value }}</dd>
+          </div>
+        }
+      </dl>
+
+      <p class="foot">
+        {{ store() }} · Corresponsal Relia. Guarda este recibo como soporte de tu operación.
+      </p>
+    </article>
+
+    <div class="actions">
+      @if (canSms()) {
+        <button type="button" class="btn-secondary" [disabled]="smsSent()" (click)="sendSms()">
+          @if (smsSent()) {
+            SMS enviado
+          } @else {
+            SMS · <span class="badge-sim">Simulación</span>
+          }
+        </button>
+      }
+      <button type="button" class="btn-secondary" (click)="print()">Imprimir</button>
+      <button type="button" class="btn-primary" (click)="close()">Cerrar</button>
+    </div>
+  }
+</p-dialog>

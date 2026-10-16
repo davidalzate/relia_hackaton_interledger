@@ -15,7 +15,13 @@ describe('AgentService.deposit', () => {
     const agent = TestBed.inject(AgentService);
     const result = run(
       firstValueFrom(
-        agent.deposit({ phone: '3000000001', cashIn: 51_000, walletOut: 50_000, commission: 500 }),
+        agent.deposit({
+          phone: '3000000001',
+          roundForUser: true,
+          cashIn: 51_000,
+          walletOut: 50_000,
+          commission: 500,
+        }),
       ),
     ).catch((e: unknown) => e);
     const error = await result;

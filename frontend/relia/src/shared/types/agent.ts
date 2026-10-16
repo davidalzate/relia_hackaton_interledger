@@ -7,6 +7,24 @@ export interface AgentBalances {
 export type OperationType = 'deposit' | 'withdrawal' | 'cupo' | 'cash' | 'cash-set' | 'commission';
 export type OperationStatus = 'pending' | 'completed' | 'failed' | 'expired' | 'cancelled';
 
+/** Datos para el comprobante (B9) según el tipo de operación */
+export interface OperationDetails {
+  /** Depósito/retiro: celular del usuario, 10 dígitos */
+  phone?: string;
+  /** Depósito: efectivo recibido. Retiro: efectivo entregado */
+  cash?: number;
+  /** Depósito: enviado a la billetera. Retiro: pagado desde la billetera */
+  wallet?: number;
+  /** true = valor redondo (comisión aparte) */
+  roundForUser?: boolean;
+  /** Carga de cupo */
+  method?: 'breb' | 'wallet';
+  /** Pago de comisión */
+  destination?: string;
+  /** Motivo si falló, venció o se canceló */
+  reason?: string;
+}
+
 export interface Operation {
   id: string;
   type: OperationType;
@@ -17,6 +35,7 @@ export interface Operation {
   /** Saldos alrededor de la operación; ausentes mientras está pendiente */
   before?: AgentBalances;
   after?: AgentBalances;
+  details?: OperationDetails;
 }
 
 export const OPERATION_LABEL: Record<OperationType, string> = {

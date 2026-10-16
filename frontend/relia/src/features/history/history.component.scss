@@ -113,9 +113,15 @@ tbody tr {
   }
 }
 
-td a {
+.link-cell {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
   font-weight: 600;
   color: var(--relia-cobalt);
+  text-align: left;
+  cursor: pointer;
 }
 
 .op-id,
@@ -135,6 +141,10 @@ td a {
 }
 
 .op-card {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 12px;
