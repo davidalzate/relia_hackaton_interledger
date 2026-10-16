@@ -1,3 +1,78 @@
 /* You can add global styles to this file, and also import other style files */
 
 @import "tailwindcss";
+
+/* Tokens del equipo: generan utilidades como bg-page, bg-cobalt, max-w-ops, rounded-card */
+@theme {
+  --color-page: #f5f5f5;
+  --color-cobalt: #2e3192;
+  --color-disabled: #e8e8e8;
+  --color-disabled-text: #707070;
+  --color-line: #d4d4d4;
+  --color-success: #1e7a36;
+  --color-sim: #fdf1c4;
+  --color-sim-text: #5c4700;
+
+  --radius-card: 1rem;
+  --radius-card-lg: 1.5rem;
+
+  --container-ops: 560px;
+  --container-wide: 1240px;
+}
+
+@layer base {
+  body {
+    @apply bg-page text-neutral-900 antialiased;
+  }
+}
+
+@utility card {
+  @apply bg-white rounded-card p-6;
+}
+
+@utility btn-primary {
+  @apply inline-flex h-[52px] items-center justify-center rounded-full bg-cobalt px-6 font-semibold text-white;
+  @apply focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cobalt;
+  &:disabled {
+    @apply cursor-not-allowed bg-disabled text-disabled-text;
+  }
+}
+
+@utility btn-secondary {
+  @apply inline-flex h-[52px] items-center justify-center rounded-full border border-line bg-white px-6 font-semibold text-neutral-900 transition-colors;
+  @apply hover:border-cobalt focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cobalt;
+}
+
+@utility badge {
+  @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold;
+}
+
+/* Colores de texto/fondo elegidos para contraste WCAG AA */
+@utility badge-sim {
+  @apply badge border border-dashed border-sim-text bg-sim text-sim-text;
+}
+@utility badge-pending {
+  @apply badge bg-amber-100 text-amber-900;
+}
+@utility badge-completed {
+  @apply badge bg-green-100 text-green-900;
+}
+@utility badge-failed {
+  @apply badge bg-red-50 text-red-800;
+}
+@utility badge-muted {
+  @apply badge bg-neutral-200 text-neutral-700;
+}
+
+@utility screen-success {
+  @apply min-h-dvh bg-success text-white;
+}
+
+/* Los montos son el elemento más grande de cada vista */
+@utility amount {
+  @apply text-5xl font-bold tabular-nums;
+}
+
+@utility link-back {
+  @apply inline-flex items-center gap-1 text-sm font-semibold text-cobalt hover:underline;
+}
