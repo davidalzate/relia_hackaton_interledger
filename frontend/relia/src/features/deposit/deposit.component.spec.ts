@@ -4,24 +4,27 @@ import { LOCALE_ID, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { ConfirmationService } from 'primeng/api';
-import { of } from 'rxjs';
+import { Observable, Subject, of, throwError } from 'rxjs';
 
-import { AgentService } from '../../core/services/agent.service';
+import { AgentService, DepositError, DepositReceipt } from '../../core/services/agent.service';
+import { Operation } from '../../shared/types/agent';
 import { DepositComponent } from './deposit.component';
 
 registerLocaleData(localeEsCo);
+
+const op: Operation = {
+  id: 'RL-0001',
+  type: 'deposit',
+  amount: 51_000,
+  status: 'completed',
+  createdAt: '',
+};
 
 function setup(cupo: number, keyExists = true) {
   const agent = {
     balances: signal({ cupo, commission: 0, cash: 0 }),
     validateKey: vi.fn(() => of(keyExists)),
-    deposit: vi.fn(() => ({
-      id: 'DEP-0001',
-      type: 'deposit',
-      amount: 51_000,
-      status: 'completed',
-      createdAt: '',
-    })),
+    deposit: vi.fn((): Observable<DepositReceipt> => new Subject<DepositReceipt>()),
   };
   TestBed.configureTestingModule({
     providers: [
@@ -69,8 +72,61 @@ describe('DepositComponent', () => {
     expect(agent.deposit).toHaveBeenCalledWith({
       phone: '3000000001',
       cashIn: 51_000,
+      walletOut: 50_000,
       commission: 500,
     });
+  });
+
+  it('muestra Enviando y luego Completado con el resumen', () => {
+    const { fixture, c, agent, fill } = setup(100_000);
+    const result = new Subject<DepositReceipt>();
+    agent.deposit.mockReturnValue(result);
+    fill('300 000 0001', 50_000, true);
+    c['submit']();
+    c['submit']();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent).toContain('Enviando a la billetera');
+    expect(el.textContent).toContain('No cierres esta pantalla.');
+
+    result.next({
+      operation: { ...op, status: 'completed' },
+      walletOut: 50_000,
+      before: { cupo: 100_000, cash: 0, commission: 0 },
+      after: { cupo: 49_000, cash: 51_000, commission: 500 },
+    });
+    fixture.detectChanges();
+    expect(el.textContent).toContain('Depósito completado');
+    expect(el.textContent).toContain('llegaron a la billetera del usuario');
+    expect(el.querySelector('.sms')?.textContent).toContain('Recibiste');
+    expect(el.querySelector('a.btn-outline-light')?.getAttribute('href')).toBe(
+      '/caja/comprobante/RL-0001',
+    );
+  });
+
+  it('error de cupo muestra B2.6 e Intentar de nuevo conserva los datos', () => {
+    const { fixture, c, agent, fill } = setup(100_000);
+    agent.deposit.mockReturnValue(
+      throwError(() => new DepositError('cupo', { ...op, status: 'failed' })),
+    );
+    fill('300 000 0001', 50_000, true);
+    c['submit']();
+    c['submit']();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent).toContain(
+      'No hay cupo para este depósito. Carga cupo y vuelve a intentar.',
+    );
+    expect(el.textContent).toContain('Operación RL-0001');
+
+    c['retry']();
+    fixture.detectChanges();
+    expect(c['form'].getRawValue()).toMatchObject({
+      phone: '300 000 0001',
+      amount: 50_000,
+      roundForUser: true,
+    });
+    expect(el.textContent).toContain('Confirmar depósito');
   });
 
   it('cambiar el celular borra la validación', () => {

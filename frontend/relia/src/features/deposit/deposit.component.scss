@@ -144,20 +144,74 @@ dl {
   color: var(--relia-success);
 }
 
-.success {
+.center {
+  display: grid;
+  place-items: center;
+  min-height: 60dvh;
+}
+
+.sending {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 12px;
-  padding-block: 4rem;
+  width: 100%;
+  text-align: center;
+
+  h1 {
+    font-size: 1.125rem;
+  }
 }
 
-.success-label {
-  font-weight: 600;
+.result-ok,
+.result-error {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  h1 {
+    font-size: 1.25rem;
+  }
 }
 
-.success-actions {
+.result-ok {
+  background: var(--relia-success);
+  color: #fff;
+
+  dl {
+    padding-top: 16px;
+    border-top: 1px solid rgb(255 255 255 / 25%);
+  }
+}
+
+.result-error {
+  border: 2px solid var(--relia-failed-text);
+
+  h1 {
+    color: var(--relia-failed-text);
+  }
+}
+
+.result-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 12px;
-  margin-top: 16px;
+}
+
+.link-light {
+  font-weight: 600;
+  color: #fff;
+}
+
+.sms {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px;
+  border-radius: var(--relia-radius-card);
+  background: var(--relia-surface);
+  border: 1px dashed var(--relia-sim-text);
+  font-size: 0.875rem;
 }

@@ -117,6 +117,26 @@ body {
   }
 }
 
+/* Variantes sobre fondo de color (p. ej. tarjetas de éxito verdes) */
+.btn-light {
+  @extend %btn;
+  border: 0;
+  background: #fff;
+  color: var(--relia-cobalt);
+}
+
+.btn-outline-light {
+  @extend %btn;
+  border: 1px solid #fff;
+  background: transparent;
+  color: #fff;
+  text-decoration: none;
+
+  &:focus-visible {
+    outline-color: #fff;
+  }
+}
+
 %badge {
   display: inline-flex;
   align-items: center;

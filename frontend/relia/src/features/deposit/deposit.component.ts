@@ -15,17 +15,37 @@ import { ConfirmationService } from 'primeng/api';
 import { Checkbox } from 'primeng/checkbox';
 import { InputNumber } from 'primeng/inputnumber';
 import { InputText } from 'primeng/inputtext';
+import { ProgressSpinner } from 'primeng/progressspinner';
 
-import { AgentService } from '../../core/services/agent.service';
-import { Operation } from '../../shared/types/agent';
+import {
+  AgentService,
+  DepositError,
+  DepositErrorKind,
+  DepositReceipt,
+} from '../../core/services/agent.service';
 import { AGENT_COMMISSION, RELIA_FEE, depositBreakdown } from './deposit-breakdown';
 
 type KeyState = 'idle' | 'checking' | 'found' | 'missing' | 'error';
 
+/** B2.1 formulario → B2.4 enviando → B2.5 completado | B2.6 error */
+type Step =
+  | { kind: 'form' }
+  | { kind: 'sending'; walletOut: number }
+  | { kind: 'done'; receipt: DepositReceipt }
+  | { kind: 'error'; error: DepositErrorKind; operationId: string; amount: number };
+
 // B2: el usuario entrega efectivo y recibe dinero en su billetera
 @Component({
   selector: 'app-deposit',
-  imports: [RouterLink, ReactiveFormsModule, CurrencyPipe, Checkbox, InputNumber, InputText],
+  imports: [
+    RouterLink,
+    ReactiveFormsModule,
+    CurrencyPipe,
+    Checkbox,
+    InputNumber,
+    InputText,
+    ProgressSpinner,
+  ],
   templateUrl: './deposit.component.html',
   styleUrl: './deposit.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -52,7 +72,7 @@ export class DepositComponent {
   });
 
   protected readonly keyState = signal<KeyState>('idle');
-  protected readonly completed = signal<Operation | null>(null);
+  protected readonly step = signal<Step>({ kind: 'form' });
 
   protected readonly amount = computed(() => this.value().amount ?? 0);
   // El campo guarda el formato "300 000 0001"; se trabaja con los dígitos
@@ -107,15 +127,30 @@ export class DepositComponent {
       message: `¿Confirmas que recibiste en efectivo un total de ${total} por parte del usuario?`,
       acceptLabel: 'Sí, lo recibí',
       rejectLabel: 'Cancelar',
-      accept: () =>
-        this.completed.set(
-          this.agent.deposit({
-            phone: this.phoneDigits(),
-            cashIn: breakdown.cashIn,
-            commission: AGENT_COMMISSION,
-          }),
-        ),
+      accept: () => this.send(breakdown.cashIn, breakdown.walletOut),
     });
+  }
+
+  private send(cashIn: number, walletOut: number): void {
+    this.step.set({ kind: 'sending', walletOut });
+    this.agent
+      .deposit({ phone: this.phoneDigits(), cashIn, walletOut, commission: AGENT_COMMISSION })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (receipt) => this.step.set({ kind: 'done', receipt }),
+        error: (err: unknown) =>
+          this.step.set({
+            kind: 'error',
+            error: err instanceof DepositError ? err.kind : 'network',
+            operationId: err instanceof DepositError ? err.operation.id : '',
+            amount: cashIn,
+          }),
+      });
+  }
+
+  /** B2.6: vuelve al formulario con los mismos datos */
+  protected retry(): void {
+    this.step.set({ kind: 'form' });
   }
 
   protected submit(): void {
@@ -126,6 +161,6 @@ export class DepositComponent {
   protected newOperation(): void {
     this.form.reset();
     this.keyState.set('idle');
-    this.completed.set(null);
+    this.step.set({ kind: 'form' });
   }
 }

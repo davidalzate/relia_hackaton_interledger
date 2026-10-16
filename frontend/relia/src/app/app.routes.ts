@@ -39,6 +39,12 @@ export const routes: Routes = [
           import('../features/load-cupo/load-cupo.component').then((m) => m.LoadCupoComponent),
       },
       {
+        path: 'comprobante/:id',
+        title: 'Comprobante | Relia',
+        loadComponent: () =>
+          import('../features/receipt/receipt.component').then((m) => m.ReceiptComponent),
+      },
+      {
         path: 'historial',
         title: 'Historial | Relia',
         loadComponent: () =>
