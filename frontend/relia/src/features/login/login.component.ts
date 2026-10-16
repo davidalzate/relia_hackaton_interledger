@@ -1,14 +1,17 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { InputText } from 'primeng/inputtext';
 
-import { AuthService } from '../../core/services/auth.service';
+import { AuthService, InvalidCredentialsError } from '../../core/services/auth.service';
+import { Role } from '../../shared/schemas/auth.schema';
+
+const HOME_BY_ROLE: Record<Role, string> = { agent: '/caja', admin: '/admin' };
 
 @Component({
   selector: 'app-login',
-  imports: [ReactiveFormsModule, InputText],
+  imports: [ReactiveFormsModule, RouterLink, InputText],
   templateUrl: './login.component.html',
   styleUrl: './login.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -18,25 +21,30 @@ export class LoginComponent {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
+  // Precargado con el corresponsal demo
   protected readonly form = inject(NonNullableFormBuilder).group({
-    username: ['', Validators.required],
-    password: ['', Validators.required],
+    email: ['rosa@demo.relia', [Validators.required, Validators.email]],
+    password: ['demo1234', Validators.required],
   });
   protected readonly loading = signal(false);
-  protected readonly error = signal(false);
+  protected readonly error = signal<string | null>(null);
 
   protected submit(): void {
-    if (this.form.invalid) return;
+    if (this.form.invalid || this.loading()) return;
     this.loading.set(true);
-    this.error.set(false);
+    this.error.set(null);
     this.auth
       .login(this.form.getRawValue())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => void this.router.navigate(['/']),
-        error: () => {
+        next: (role) => void this.router.navigateByUrl(HOME_BY_ROLE[role]),
+        error: (err: unknown) => {
           this.loading.set(false);
-          this.error.set(true);
+          this.error.set(
+            err instanceof InvalidCredentialsError
+              ? 'Correo o contraseña incorrectos.'
+              : 'No pudimos iniciar sesión. Intenta de nuevo.',
+          );
         },
       });
   }
