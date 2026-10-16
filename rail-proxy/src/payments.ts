@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   OpenPaymentsClientError,
   type AuthenticatedClient,
@@ -80,6 +80,8 @@ interface PaymentRow {
   updated_at: string;
   completed_at: string | null;
   version: number;
+  /** Huella del cuerpo normalizado que creó el pago, para detectar reusos de la clave con otro cuerpo. */
+  request_hash: string | null;
 }
 
 type PaymentUpdate = Partial<Omit<PaymentRow, 'id' | 'idempotency_key' | 'created_at' | 'updated_at' | 'version'>>;
@@ -133,14 +135,26 @@ export class PaymentService {
     idempotencyKey: string,
     request: CreatePaymentRequest,
   ): Promise<{ payment: PaymentView; created: boolean }> {
+    const requestHash = fingerprint(request);
     const existing = this.findByKey(idempotencyKey);
-    if (existing) return { payment: toView(existing), created: false };
+    if (existing) {
+      // Pagos guardados antes de la huella (request_hash NULL) no se pueden comparar: se devuelven tal cual.
+      if (existing.request_hash !== null && existing.request_hash !== requestHash) {
+        throw new ProblemError(
+          409,
+          'idempotency_conflict',
+          'Conflicto de idempotencia',
+          `La Idempotency-Key ${idempotencyKey} ya se usó con otro cuerpo (pago ${existing.id}).`,
+        );
+      }
+      return { payment: toView(existing), created: false };
+    }
 
     if (request.direction === 'incoming') {
       throw new ProblemError(422, 'validation_error', 'Solicitud inválida', 'Los cobros (incoming) aún no están disponibles.');
     }
     const counterparty = await this.validateCounterparty(request);
-    const row = await this.createOutgoing(idempotencyKey, request, counterparty);
+    const row = { ...(await this.createOutgoing(idempotencyKey, request, counterparty)), request_hash: requestHash };
 
     try {
       this.insert(row);
@@ -275,6 +289,7 @@ export class PaymentService {
       updated_at: iso(now),
       completed_at: null,
       version: 1,
+      request_hash: null,
     };
   }
 
@@ -382,6 +397,25 @@ export class PaymentService {
       )
       .run({ ...changes, updated_at: iso(now), id: row.id });
   }
+}
+
+/**
+ * Huella del cuerpo normalizado: mismos campos en el mismo orden, montos sin ceros a la izquierda y fechas en
+ * UTC. Así dos cuerpos equivalentes escritos distinto no se toman como conflicto.
+ */
+function fingerprint(request: CreatePaymentRequest): string {
+  const normalized = {
+    direction: request.direction,
+    counterparty: request.counterparty,
+    receiveAmount: {
+      value: BigInt(request.receiveAmount.value).toString(),
+      assetCode: request.receiveAmount.assetCode,
+      assetScale: request.receiveAmount.assetScale,
+    },
+    expiresAt: request.expiresAt ? new Date(request.expiresAt).toISOString() : null,
+    description: request.description ?? null,
+  };
+  return createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
 }
 
 function paymentMetadata(idempotencyKey: string, description: string | undefined): Record<string, string> {

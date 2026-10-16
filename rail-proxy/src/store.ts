@@ -67,6 +67,9 @@ const MIGRATIONS: string[] = [
     version                 INTEGER NOT NULL DEFAULT 1
   );
   CREATE INDEX ix_payments_poll ON payments (status, next_poll_at);`,
+
+  // 3. Huella del cuerpo de creación (idempotencia). NULL en pagos creados antes de esta migración.
+  `ALTER TABLE payments ADD COLUMN request_hash TEXT;`,
 ];
 
 /** Abre (o crea) el archivo SQLite del proxy y lo lleva a la última versión del esquema. */
