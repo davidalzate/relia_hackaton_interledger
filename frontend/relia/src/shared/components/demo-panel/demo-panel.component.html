@@ -1,0 +1,28 @@
+<div class="demo">
+  @if (open()) {
+    <section id="demo-panel" class="panel" aria-labelledby="demo-title">
+      <h2 id="demo-title">Modo demo</h2>
+      @if (cupoLoad(); as l) {
+        <p>
+          Carga de cupo {{ l.request.method === 'breb' ? 'Bre-B' : 'Wallet' }} por
+          <strong>{{ l.request.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</strong>
+        </p>
+        <div class="actions">
+          <button type="button" class="btn-primary" (click)="confirm()">Confirmar pago</button>
+          <button type="button" class="btn-secondary" (click)="reject()">Rechazar pago</button>
+        </div>
+      } @else {
+        <p class="empty">No hay pagos pendientes.</p>
+      }
+    </section>
+  }
+  <button
+    type="button"
+    class="toggle badge-sim"
+    aria-controls="demo-panel"
+    [attr.aria-expanded]="open()"
+    (click)="open.set(!open())"
+  >
+    Modo demo
+  </button>
+</div>

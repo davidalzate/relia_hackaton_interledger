@@ -21,6 +21,13 @@ export const DEPOSIT_SEND_MS = 2_000;
 /** Tiempo que tiene el usuario para aprobar un retiro en su billetera (B3.2) */
 export const WITHDRAWAL_TTL_MS = 5 * 60_000;
 
+export type CupoMethod = 'breb' | 'wallet';
+/** Tiempo para pagar una carga de cupo (B6.3) */
+export const CUPO_LOAD_TTL_MS: Record<CupoMethod, number> = {
+  breb: 10 * 60_000,
+  wallet: 5 * 60_000,
+};
+
 export interface DepositRequest {
   phone: string;
   cashIn: number;
@@ -71,6 +78,31 @@ export type Withdrawal =
   | (WithdrawalBase & { status: 'approved'; before: AgentBalances; after: AgentBalances })
   | (WithdrawalBase & { status: 'error'; error: WithdrawalErrorKind });
 
+export interface CupoLoadRequest {
+  method: CupoMethod;
+  amount: number;
+  /** Solo Wallet: llave (celular, 10 dígitos) a la que se envía la solicitud */
+  key?: string;
+}
+
+export type CupoLoadErrorKind = 'rejected' | 'expired' | 'cancelled';
+
+interface CupoLoadBase {
+  request: CupoLoadRequest;
+  operation: Operation;
+}
+/** Carga de cupo en curso (B6.3-B6.5); el panel Modo demo la confirma o rechaza */
+export type CupoLoad =
+  | (CupoLoadBase & { status: 'waiting'; expiresAt: number })
+  | (CupoLoadBase & { status: 'done'; before: AgentBalances; after: AgentBalances })
+  | (CupoLoadBase & { status: 'error'; error: CupoLoadErrorKind });
+
+const CUPO_ERROR_STATUS: Record<CupoLoadErrorKind, Operation['status']> = {
+  rejected: 'failed',
+  expired: 'expired',
+  cancelled: 'cancelled',
+};
+
 const WITHDRAWAL_ERROR_STATUS: Record<WithdrawalErrorKind, Operation['status']> = {
   rejected: 'failed',
   expired: 'expired',
@@ -89,11 +121,14 @@ export class AgentService {
   private sequence = 0;
   private readonly _withdrawal = signal<Withdrawal | null>(null);
   private expiry?: Subscription;
+  private readonly _cupoLoad = signal<CupoLoad | null>(null);
+  private cupoExpiry?: Subscription;
 
   readonly balances = this._balances.asReadonly();
   readonly operations = this._operations.asReadonly();
   readonly recentOperations = computed(() => this._operations().slice(0, 3));
   readonly withdrawal = this._withdrawal.asReadonly();
+  readonly cupoLoad = this._cupoLoad.asReadonly();
 
   /** Verifica que el celular tenga billetera. `simulateMissing` fuerza "no existe" (demo) */
   validateKey(_phone: string, simulateMissing: boolean): Observable<boolean> {
@@ -170,6 +205,54 @@ export class AgentService {
   clearWithdrawal(): void {
     this.failWithdrawal('cancelled');
     this._withdrawal.set(null);
+  }
+
+  /** B6.3: genera el QR Bre-B o la solicitud a la Wallet; vence según el método */
+  requestCupoLoad(request: CupoLoadRequest): void {
+    this.cupoExpiry?.unsubscribe();
+    const ttl = CUPO_LOAD_TTL_MS[request.method];
+    this._cupoLoad.set({
+      status: 'waiting',
+      request,
+      operation: this.record(request.amount, 'pending', 'cupo'),
+      expiresAt: Date.now() + ttl,
+    });
+    this.cupoExpiry = timer(ttl).subscribe(() => this.failCupoLoad('expired'));
+  }
+
+  /** Modo demo: el pago llegó; suma el monto al cupo */
+  confirmCupoLoad(): void {
+    const current = this._cupoLoad();
+    if (current?.status !== 'waiting') return;
+    this.cupoExpiry?.unsubscribe();
+    const before = this._balances();
+    const after = { ...before, cupo: before.cupo + current.request.amount };
+    this._balances.set(after);
+    this._cupoLoad.set({
+      status: 'done',
+      request: current.request,
+      operation: this.setStatus(current.operation, 'completed'),
+      before,
+      after,
+    });
+  }
+
+  failCupoLoad(error: CupoLoadErrorKind): void {
+    const current = this._cupoLoad();
+    if (current?.status !== 'waiting') return;
+    this.cupoExpiry?.unsubscribe();
+    this._cupoLoad.set({
+      status: 'error',
+      request: current.request,
+      operation: this.setStatus(current.operation, CUPO_ERROR_STATUS[error]),
+      error,
+    });
+  }
+
+  /** Cierra el flujo de carga; cancela si seguía esperando el pago */
+  clearCupoLoad(): void {
+    this.failCupoLoad('cancelled');
+    this._cupoLoad.set(null);
   }
 
   private applyDeposit({ cashIn, walletOut, commission }: DepositRequest): DepositReceipt {
