@@ -224,7 +224,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Health'
         '429':
-          description: Demasiadas consultas.
+          description: Demasiadas consultas (`too_many_requests`).
           content:
             application/problem+json:
               schema:
@@ -533,6 +533,8 @@ components:
         - same_wallet
         - relia_grant_unavailable
         - rail_unavailable
+        - too_many_requests
+        - internal_error
 
     Problem:
       type: object
