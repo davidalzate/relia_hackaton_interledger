@@ -24,6 +24,20 @@ export interface Problem {
 
 export const PROBLEM_CONTENT_TYPE = 'application/problem+json';
 
+/** Texto de un error del SDK o de red apto para `detail` y logs: nunca incluye tokens. */
+export function describeRailError(error: unknown): string {
+  if (error && typeof error === 'object' && 'description' in error && typeof error.description === 'string') {
+    const status = 'status' in error && error.status ? ` (HTTP ${String(error.status)})` : '';
+    const code = 'code' in error && error.code ? ` [${String(error.code)}]` : '';
+    return `${error.description.slice(0, 200)}${status}${code}`;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
+export function railUnavailable(error: unknown): ProblemError {
+  return new ProblemError(503, 'rail_unavailable', 'El riel no respondió', describeRailError(error));
+}
+
 export class ProblemError extends Error {
   constructor(
     readonly status: number,
