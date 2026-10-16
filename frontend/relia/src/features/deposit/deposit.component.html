@@ -51,9 +51,13 @@
       </dl>
       <div class="result-actions">
         <button type="button" class="btn-light" (click)="newOperation()">Nueva operación</button>
-        <a class="btn-outline-light" [routerLink]="['/caja/comprobante', s.receipt.operation.id]">
+        <button
+          type="button"
+          class="btn-outline-light"
+          (click)="receipts.open(s.receipt.operation.id)"
+        >
           Ver comprobante
-        </a>
+        </button>
         <a class="link-light" routerLink="/caja">Volver a la caja</a>
       </div>
     </section>

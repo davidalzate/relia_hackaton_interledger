@@ -71,6 +71,7 @@ describe('DepositComponent', () => {
     );
     expect(agent.deposit).toHaveBeenCalledWith({
       phone: '3000000001',
+      roundForUser: true,
       cashIn: 51_000,
       walletOut: 50_000,
       commission: 500,
@@ -99,8 +100,8 @@ describe('DepositComponent', () => {
     expect(el.textContent).toContain('Depósito completado');
     expect(el.textContent).toContain('llegaron a la billetera del usuario');
     expect(el.querySelector('.sms')?.textContent).toContain('Recibiste');
-    expect(el.querySelector('a.btn-outline-light')?.getAttribute('href')).toBe(
-      '/caja/comprobante/RL-0001',
+    expect(el.querySelector('button.btn-outline-light')?.textContent?.trim()).toBe(
+      'Ver comprobante',
     );
   });
 

@@ -12,7 +12,7 @@ import {
 } from 'rxjs';
 
 import { environment } from '../../environments/environment';
-import { AgentBalances, Operation } from '../../shared/types/agent';
+import { AgentBalances, Operation, OperationDetails } from '../../shared/types/agent';
 
 /** Por debajo de este valor (COP) la Caja muestra avisos de cupo/efectivo bajo */
 export const LOW_BALANCE_THRESHOLD = 50_000;
@@ -30,6 +30,7 @@ export const CUPO_LOAD_TTL_MS: Record<CupoMethod, number> = {
 
 export interface DepositRequest {
   phone: string;
+  roundForUser: boolean;
   cashIn: number;
   walletOut: number;
   commission: number;
@@ -117,6 +118,23 @@ const CUPO_ERROR_STATUS: Record<CupoLoadErrorKind, Operation['status']> = {
   cancelled: 'cancelled',
 };
 
+const WITHDRAWAL_ERROR_REASON: Record<WithdrawalErrorKind, string> = {
+  rejected: 'El usuario rechazó el pago',
+  expired: 'La solicitud venció',
+  cancelled: 'Solicitud cancelada',
+  failed: 'La billetera no completó el pago',
+  cash: 'Efectivo insuficiente',
+};
+const CUPO_ERROR_REASON: Record<CupoLoadErrorKind, string> = {
+  rejected: 'Pago rechazado',
+  expired: 'La solicitud venció',
+  cancelled: 'Solicitud cancelada',
+};
+const DEPOSIT_ERROR_REASON: Record<DepositErrorKind, string> = {
+  network: 'El simulador no respondió',
+  cupo: 'Cupo insuficiente',
+};
+
 const WITHDRAWAL_ERROR_STATUS: Record<WithdrawalErrorKind, Operation['status']> = {
   rejected: 'failed',
   expired: 'expired',
@@ -161,7 +179,7 @@ export class AgentService {
         throwError(() =>
           err instanceof DepositError
             ? err
-            : new DepositError('network', this.record(request.cashIn, 'failed')),
+            : new DepositError('network', this.recordDeposit(request, 'failed', 'network')),
         ),
       ),
     );
@@ -173,7 +191,12 @@ export class AgentService {
     this._withdrawal.set({
       status: 'waiting',
       request,
-      operation: this.record(request.cashOut, 'pending', 'withdrawal'),
+      operation: this.record(request.cashOut, 'pending', 'withdrawal', undefined, {
+        phone: request.phone,
+        cash: request.cashOut,
+        wallet: request.walletIn,
+        roundForUser: request.roundForUser,
+      }),
       expiresAt: Date.now() + WITHDRAWAL_TTL_MS,
     });
     this.expiry = timer(WITHDRAWAL_TTL_MS).subscribe(() => this.failWithdrawal('expired'));
@@ -210,7 +233,12 @@ export class AgentService {
     this._withdrawal.set({
       status: 'error',
       request: current.request,
-      operation: this.setStatus(current.operation, WITHDRAWAL_ERROR_STATUS[error]),
+      operation: this.setStatus(
+        current.operation,
+        WITHDRAWAL_ERROR_STATUS[error],
+        undefined,
+        WITHDRAWAL_ERROR_REASON[error],
+      ),
       error,
     });
   }
@@ -240,7 +268,9 @@ export class AgentService {
     this._cupoLoad.set({
       status: 'waiting',
       request,
-      operation: this.record(request.amount, 'pending', 'cupo'),
+      operation: this.record(request.amount, 'pending', 'cupo', undefined, {
+        method: request.method,
+      }),
       expiresAt: Date.now() + ttl,
     });
     this.cupoExpiry = timer(ttl).subscribe(() => this.failCupoLoad('expired'));
@@ -270,7 +300,12 @@ export class AgentService {
     this._cupoLoad.set({
       status: 'error',
       request: current.request,
-      operation: this.setStatus(current.operation, CUPO_ERROR_STATUS[error]),
+      operation: this.setStatus(
+        current.operation,
+        CUPO_ERROR_STATUS[error],
+        undefined,
+        CUPO_ERROR_REASON[error],
+      ),
       error,
     });
   }
@@ -281,10 +316,13 @@ export class AgentService {
     this._cupoLoad.set(null);
   }
 
-  private applyDeposit({ cashIn, walletOut, commission }: DepositRequest): DepositReceipt {
+  private applyDeposit(request: DepositRequest): DepositReceipt {
+    const { cashIn, walletOut, commission } = request;
     const before = this._balances();
     // El cupo pudo cambiar desde que se armó el formulario
-    if (before.cupo < cashIn) throw new DepositError('cupo', this.record(cashIn, 'failed'));
+    if (before.cupo < cashIn) {
+      throw new DepositError('cupo', this.recordDeposit(request, 'failed', 'cupo'));
+    }
     const after: AgentBalances = {
       cupo: before.cupo - cashIn,
       cash: before.cash + cashIn,
@@ -292,11 +330,26 @@ export class AgentService {
     };
     this._balances.set(after);
     return {
-      operation: this.record(cashIn, 'completed', 'deposit', { before, after }),
+      operation: this.recordDeposit(request, 'completed', undefined, { before, after }),
       walletOut,
       before,
       after,
     };
+  }
+
+  private recordDeposit(
+    request: DepositRequest,
+    status: Operation['status'],
+    error?: DepositErrorKind,
+    balances?: BalanceChange,
+  ): Operation {
+    return this.record(request.cashIn, status, 'deposit', balances, {
+      phone: request.phone,
+      cash: request.cashIn,
+      wallet: request.walletOut,
+      roundForUser: request.roundForUser,
+      ...(error && { reason: DEPOSIT_ERROR_REASON[error] }),
+    });
   }
 
   private record(
@@ -304,6 +357,7 @@ export class AgentService {
     status: Operation['status'],
     type: Operation['type'] = 'deposit',
     balances?: BalanceChange,
+    details?: OperationDetails,
   ): Operation {
     const operation: Operation = {
       id: `RL-${String(++this.sequence).padStart(4, '0')}`,
@@ -312,6 +366,7 @@ export class AgentService {
       status,
       createdAt: new Date().toISOString(),
       ...this.snapshot(status, balances),
+      ...(details && { details }),
     };
     this._operations.update((ops) => [operation, ...ops]);
     return operation;
@@ -321,8 +376,14 @@ export class AgentService {
     operation: Operation,
     status: Operation['status'],
     balances?: BalanceChange,
+    reason?: string,
   ): Operation {
-    const updated = { ...operation, status, ...this.snapshot(status, balances) };
+    const updated: Operation = {
+      ...operation,
+      status,
+      ...this.snapshot(status, balances),
+      ...(reason && { details: { ...operation.details, reason } }),
+    };
     this._operations.update((ops) => ops.map((op) => (op.id === operation.id ? updated : op)));
     return updated;
   }

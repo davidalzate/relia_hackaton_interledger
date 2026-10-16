@@ -1,8 +1,9 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 
 import { AgentService } from '../../core/services/agent.service';
+import { ReceiptService } from '../../core/services/receipt.service';
 import {
   OPERATION_LABEL,
   OperationType,
@@ -30,7 +31,7 @@ const FILTER_TYPES: Record<Exclude<Filter, 'all'>, OperationType[]> = {
 })
 export class HistoryComponent {
   private readonly agent = inject(AgentService);
-  private readonly router = inject(Router);
+  protected readonly receipts = inject(ReceiptService);
 
   protected readonly balances = this.agent.balances;
   protected readonly filters: { value: Filter; label: string }[] = [
@@ -57,9 +58,4 @@ export class HistoryComponent {
     { key: 'commission', label: 'Comisión' },
     { key: 'cash', label: 'Efectivo' },
   ] as const;
-
-  /** Tocar la fila abre el comprobante (B9); el enlace de la celda Tipo cubre el teclado */
-  protected open(id: string): void {
-    void this.router.navigate(['/caja/comprobante', id]);
-  }
 }

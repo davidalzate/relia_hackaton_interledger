@@ -43,12 +43,17 @@
         </thead>
         <tbody>
           @for (op of operations(); track op.id) {
-            <tr (click)="open(op.id)">
+            <tr (click)="receipts.open(op.id)">
               <td>{{ op.createdAt | date: 'd MMM, h:mm a' }}</td>
               <td>
-                <a [routerLink]="['/caja/comprobante', op.id]" (click)="$event.stopPropagation()">
+                <!-- La fila entera abre el comprobante; el botón cubre el teclado -->
+                <button
+                  type="button"
+                  class="link-cell"
+                  (click)="$event.stopPropagation(); receipts.open(op.id)"
+                >
                   {{ typeLabel[op.type] }}
-                </a>
+                </button>
                 <span class="op-id">{{ op.id }}</span>
               </td>
               <td class="num strong">
@@ -80,7 +85,7 @@
     <ul class="cards">
       @for (op of operations(); track op.id) {
         <li>
-          <a class="card op-card" [routerLink]="['/caja/comprobante', op.id]">
+          <button type="button" class="card op-card" (click)="receipts.open(op.id)">
             <div class="op-head">
               <div>
                 <p class="op-type">{{ typeLabel[op.type] }}</p>
@@ -115,7 +120,7 @@
                 </div>
               }
             </dl>
-          </a>
+          </button>
         </li>
       }
     </ul>

@@ -18,6 +18,7 @@ import { InputText } from 'primeng/inputtext';
 import { ProgressSpinner } from 'primeng/progressspinner';
 import { interval, map } from 'rxjs';
 
+import { ReceiptService } from '../../core/services/receipt.service';
 import { AgentService, WITHDRAWAL_TTL_MS } from '../../core/services/agent.service';
 import { AGENT_COMMISSION, RELIA_FEE } from '../../shared/types/agent';
 import { InviteDialogComponent } from '../../shared/components/invite-dialog/invite-dialog.component';
@@ -47,6 +48,7 @@ type KeyState = 'idle' | 'checking' | 'found' | 'missing' | 'error';
 })
 export class WithdrawComponent {
   private readonly agent = inject(AgentService);
+  protected readonly receipts = inject(ReceiptService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly confirmation = inject(ConfirmationService);

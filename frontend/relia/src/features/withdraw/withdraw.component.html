@@ -59,9 +59,9 @@
       </dl>
       <div class="result-actions">
         <button type="button" class="btn-light" (click)="done()">Listo</button>
-        <a class="btn-outline-light" [routerLink]="['/caja/comprobante', w.operation.id]">
+        <button type="button" class="btn-outline-light" (click)="receipts.open(w.operation.id)">
           Ver comprobante
-        </a>
+        </button>
       </div>
     </section>
   </main>
