@@ -1,10 +1,15 @@
-import { signal } from '@angular/core';
+import { registerLocaleData } from '@angular/common';
+import localeEsCo from '@angular/common/locales/es-CO';
+import { LOCALE_ID, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { ConfirmationService } from 'primeng/api';
 import { of } from 'rxjs';
 
 import { AgentService } from '../../core/services/agent.service';
 import { DepositComponent } from './deposit.component';
+
+registerLocaleData(localeEsCo);
 
 function setup(cupo: number, keyExists = true) {
   const agent = {
@@ -19,8 +24,17 @@ function setup(cupo: number, keyExists = true) {
     })),
   };
   TestBed.configureTestingModule({
-    providers: [provideRouter([]), { provide: AgentService, useValue: agent }],
+    providers: [
+      provideRouter([]),
+      ConfirmationService,
+      { provide: LOCALE_ID, useValue: 'es-CO' },
+      { provide: AgentService, useValue: agent },
+    ],
   });
+  // Acepta B4 de inmediato y guarda el mensaje mostrado
+  const confirm = vi
+    .spyOn(TestBed.inject(ConfirmationService), 'confirm')
+    .mockImplementation((c) => (c.accept?.(), TestBed.inject(ConfirmationService)));
   const fixture = TestBed.createComponent(DepositComponent);
   fixture.detectChanges();
   const c = fixture.componentInstance as unknown as Record<string, any>;
@@ -32,12 +46,12 @@ function setup(cupo: number, keyExists = true) {
     c['form'].patchValue({ phone, amount, roundForUser });
     fixture.detectChanges();
   };
-  return { fixture, c, agent, button, fill };
+  return { fixture, c, agent, button, fill, confirm };
 }
 
 describe('DepositComponent', () => {
   it('valida la llave y confirma el depósito con el desglose', () => {
-    const { fixture, c, agent, button, fill } = setup(100_000);
+    const { fixture, c, agent, button, fill, confirm } = setup(100_000);
     fill('300 000 0001', 50_000, true);
     expect(button().textContent).toContain('Validar llave');
     expect(button().disabled).toBe(false);
@@ -48,6 +62,10 @@ describe('DepositComponent', () => {
     expect(button().textContent).toContain('Confirmar depósito');
 
     c['submit']();
+    // es-CO separa el símbolo con espacio no separable
+    expect(confirm.mock.calls[0][0].message).toMatch(
+      /^¿Confirmas que recibiste en efectivo un total de \$\s51\.000 por parte del usuario\?$/,
+    );
     expect(agent.deposit).toHaveBeenCalledWith({
       phone: '3000000001',
       cashIn: 51_000,
