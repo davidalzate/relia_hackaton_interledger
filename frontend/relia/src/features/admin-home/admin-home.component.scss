@@ -1,3 +1,170 @@
 main {
-  padding-block: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-block: 1.5rem;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  h2 {
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+}
+
+.kpi-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-meta {
+  font-size: 0.8125rem;
+  opacity: 0.85;
+}
+
+.kpi-total {
+  background: var(--relia-cobalt);
+  color: #fff;
+}
+
+// Texto oscuro sobre coral: el blanco no llega a contraste AA
+.kpi-due {
+  background: var(--relia-coral);
+  color: var(--relia-text);
+}
+
+.kpi-paid {
+  background: var(--relia-success);
+  color: #fff;
+}
+
+.table-wrap {
+  padding: 0;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+th,
+td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--relia-line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  font-size: 0.75rem;
+  color: var(--relia-muted-text);
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+td a:not(.btn-pay) {
+  font-weight: 600;
+  color: var(--relia-cobalt);
+}
+
+.owner {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--relia-muted-text);
+}
+
+// Coral sobre blanco no alcanza AA en texto normal: se usa el rojo oscuro del theme
+.due {
+  font-weight: 700;
+  color: var(--relia-failed-text);
+}
+
+.btn-pay {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding-inline: 14px;
+  border-radius: 9999px;
+  background: var(--relia-cobalt);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+
+  &:focus-visible {
+    outline: 2px solid var(--relia-cobalt);
+    outline-offset: 2px;
+  }
+}
+
+.muted {
+  color: var(--relia-muted-text);
+}
+
+.payments {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  h2 {
+    font-size: 1rem;
+  }
+
+  ul {
+    margin: 0;
+    padding: 0 24px;
+    list-style: none;
+  }
+
+  li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-block: 14px;
+
+    & + li {
+      border-top: 1px solid var(--relia-line);
+    }
+  }
+}
+
+.strong {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.meta {
+  font-size: 0.8125rem;
+  color: var(--relia-muted-text);
+}
+
+.empty {
+  color: var(--relia-muted-text);
+  text-align: center;
 }

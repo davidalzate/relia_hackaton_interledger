@@ -1,5 +1,102 @@
 <main class="container-wide">
-  <section class="card">
-    <h1>Inicio admin</h1>
+  <h1>Corresponsales</h1>
+
+  @let t = totals();
+  <section class="kpis" aria-label="Indicadores">
+    <article class="card kpi kpi-total">
+      <h2>Total dinero movido</h2>
+      <p class="kpi-value">{{ t.moved.total | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+      <p class="kpi-meta">{{ t.moved.count }} operaciones</p>
+    </article>
+    <article class="card kpi">
+      <h2>Depósitos</h2>
+      <p class="kpi-value">{{ t.deposits.total | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+      <p class="kpi-meta">{{ t.deposits.count }} depósitos</p>
+    </article>
+    <article class="card kpi">
+      <h2>Retiros</h2>
+      <p class="kpi-value">
+        {{ t.withdrawals.total | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+      </p>
+      <p class="kpi-meta">{{ t.withdrawals.count }} retiros</p>
+    </article>
+    <article class="card kpi kpi-due">
+      <h2>Comisiones por pagar</h2>
+      <p class="kpi-value">{{ t.commissionDue | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+    </article>
+    <article class="card kpi kpi-paid">
+      <h2>Comisiones pagadas hoy</h2>
+      <p class="kpi-value">{{ t.paidToday | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+    </article>
+  </section>
+
+  <section class="card table-wrap" aria-labelledby="agents-title">
+    <h2 id="agents-title" class="sr-only">Corresponsales de la red</h2>
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Corresponsal</th>
+          <th scope="col">Ciudad</th>
+          <th scope="col" class="num">Operaciones</th>
+          <th scope="col" class="num">Depósitos</th>
+          <th scope="col" class="num">Retiros</th>
+          <th scope="col" class="num">Total movido</th>
+          <th scope="col" class="num">Cupo</th>
+          <th scope="col" class="num">Efectivo</th>
+          <th scope="col" class="num">Comisión por pagar</th>
+          <th scope="col">Acción</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (a of agents(); track a.id) {
+          <tr>
+            <td>
+              <a [routerLink]="['/admin/corresponsal', a.id]">{{ a.name }}</a>
+              <span class="owner">{{ a.owner }}</span>
+            </td>
+            <td>{{ a.city }}</td>
+            <td class="num">{{ a.operations }}</td>
+            <td class="num">
+              {{ a.deposits.total | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+            </td>
+            <td class="num">
+              {{ a.withdrawals.total | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+            </td>
+            <td class="num">{{ a.totalMoved | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</td>
+            <td class="num">{{ a.cupo | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</td>
+            <td class="num">{{ a.cash | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</td>
+            <td class="num due">
+              {{ a.commissionDue | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+            </td>
+            <td>
+              @if (a.commissionDue > 0) {
+                <a class="btn-pay" [routerLink]="['/admin/pagar', a.id]">Pagar comisión</a>
+              } @else {
+                <span class="muted">Sin comisión</span>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </section>
+
+  <section class="payments" aria-labelledby="payments-title">
+    <h2 id="payments-title">Pagos de comisión</h2>
+    @if (payments().length) {
+      <ul class="card">
+        @for (p of payments(); track p.id) {
+          <li>
+            <div>
+              <p class="strong">{{ p.agentName }}</p>
+              <p class="meta">{{ p.paidAt | date: 'shortTime' }} · {{ p.id }} · {{ p.pointer }}</p>
+            </div>
+            <p class="strong">{{ p.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="card empty">Aún no has pagado comisiones hoy.</p>
+    }
   </section>
 </main>
