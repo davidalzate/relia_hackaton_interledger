@@ -27,7 +27,12 @@ describe('HTTP base', () => {
   afterEach(() => ctrl.verify());
 
   it('añade Bearer a rutas privadas y no a las públicas', () => {
-    for (const url of ['/api/me', '/api/auth/login', '/api/key-links/x/verify', '/api/demo/reset']) {
+    for (const url of [
+      '/api/me',
+      '/api/auth/login',
+      '/api/key-links/x/verify',
+      '/api/demo/reset',
+    ]) {
       http.get(url).subscribe();
     }
     expect(ctrl.expectOne('/api/me').request.headers.get('Authorization')).toBe('Bearer tok');
@@ -41,7 +46,13 @@ describe('HTTP base', () => {
     ctrl
       .expectOne('/api/agents/a/deposits')
       .flush(
-        { type: 'about:blank', title: 'Cupo', status: 422, code: 'insufficient_quota', shortfall: 5000 },
+        {
+          type: 'about:blank',
+          title: 'Cupo',
+          status: 422,
+          code: 'insufficient_quota',
+          shortfall: 5000,
+        },
         { status: 422, statusText: 'Unprocessable' },
       );
     const error = await res.catch((e: unknown) => e);
@@ -64,9 +75,11 @@ describe('pollUntil', () => {
     const states = ['pending', 'pending', 'completed', 'pending'];
     let i = 0;
     const seen = await lastValueFrom(
-      pollUntil(() => of({ status: states[i++] }), (op) => OPERATION_TERMINAL.has(op.status), 1).pipe(
-        toArray(),
-      ),
+      pollUntil(
+        () => of({ status: states[i++] }),
+        (op) => OPERATION_TERMINAL.has(op.status),
+        1,
+      ).pipe(toArray()),
     );
     expect(seen.map((op) => op.status)).toEqual(['pending', 'pending', 'completed']);
   });
@@ -83,6 +96,8 @@ describe('pollUntil', () => {
     ).resolves.toEqual({ status: 'completed' });
 
     const notFound = () => throwError(() => new ApiError(404, null));
-    await expect(lastValueFrom(pollUntil(notFound, () => true, 1))).rejects.toBeInstanceOf(ApiError);
+    await expect(lastValueFrom(pollUntil(notFound, () => true, 1))).rejects.toBeInstanceOf(
+      ApiError,
+    );
   });
 });
