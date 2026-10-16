@@ -1,3 +1,183 @@
 main {
-  padding-block: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-block: 1.5rem;
+}
+
+p {
+  margin: 0;
+}
+
+.notice {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--relia-pending);
+  color: var(--relia-pending-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+
+  a {
+    color: inherit;
+  }
+}
+
+.label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.balance {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--relia-cobalt);
+  color: #fff;
+
+  .amount {
+    font-size: 38px;
+  }
+
+  hr {
+    width: 100%;
+    margin: 12px 0;
+    border: 0;
+    border-top: 1px solid rgb(255 255 255 / 25%);
+  }
+}
+
+.commission {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--relia-yellow);
+}
+
+.cash {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cash-amount {
+  font-size: 1.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 72px;
+  padding: 12px;
+  border: 1px solid var(--relia-line);
+  border-radius: var(--relia-radius-card);
+  background: var(--relia-surface);
+  color: var(--relia-text);
+  font-weight: 700;
+  text-decoration: none;
+  transition: border-color 0.15s;
+
+  &:hover {
+    border-color: var(--relia-cobalt);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--relia-cobalt);
+    outline-offset: 2px;
+  }
+
+  span {
+    font-size: 1.25rem;
+  }
+}
+
+// Texto oscuro sobre coral: el blanco no llega a contraste AA
+.action-deposit {
+  border-color: var(--relia-coral);
+  background: var(--relia-coral);
+  color: var(--relia-text);
+}
+
+.action-withdraw {
+  border-color: var(--relia-cobalt);
+  background: var(--relia-cobalt);
+  color: #fff;
+}
+
+.recent {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  header a {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--relia-cobalt);
+  }
+
+  ul {
+    margin: 0;
+    padding: 0 24px;
+    list-style: none;
+  }
+
+  li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-block: 14px;
+
+    & + li {
+      border-top: 1px solid var(--relia-line);
+    }
+  }
+}
+
+.op-type {
+  font-weight: 600;
+}
+
+.op-meta {
+  font-size: 0.8125rem;
+  color: var(--relia-muted-text);
+}
+
+.op-end {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.op-amount {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  color: var(--relia-muted-text);
+  text-align: center;
 }

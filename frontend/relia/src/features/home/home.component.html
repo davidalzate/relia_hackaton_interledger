@@ -1,5 +1,70 @@
 <main class="container-ops">
-  <section class="card">
-    <h1>Caja</h1>
+  <h1 class="sr-only">Caja</h1>
+
+  @if (lowCupo()) {
+    <p class="notice" role="status">Cupo bajo, carga cupo para seguir depositando.</p>
+  }
+  @if (lowCash()) {
+    <p class="notice" role="status">
+      Efectivo bajo, asigna más para pagar retiros.
+      <a routerLink="/caja/efectivo">Asignar efectivo</a>
+    </p>
+  }
+
+  <section class="card balance" aria-label="Saldos">
+    <p class="label">Cupo disponible</p>
+    <p class="amount">{{ balances().cupo | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+    <hr />
+    <p class="label">Comisión acumulada</p>
+    <p class="commission">
+      {{ balances().commission | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+    </p>
+  </section>
+
+  <section class="card cash" aria-labelledby="cash-label">
+    <div>
+      <p class="label" id="cash-label">Efectivo en caja</p>
+      <p class="cash-amount">{{ balances().cash | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+    </div>
+    <a class="btn-secondary" routerLink="/caja/efectivo">Asignar efectivo</a>
+  </section>
+
+  <nav class="actions" aria-label="Operaciones">
+    <a class="action action-deposit" routerLink="/caja/depositar">
+      <span aria-hidden="true">↓</span> Depositar
+    </a>
+    <a class="action action-withdraw" routerLink="/caja/retirar">
+      <span aria-hidden="true">↑</span> Retirar
+    </a>
+    <a class="action" routerLink="/caja/cupo">+ Cargar cupo</a>
+    <a class="action" routerLink="/caja/historial">Historial</a>
+  </nav>
+
+  <section class="recent" aria-labelledby="recent-title">
+    <header>
+      <h2 id="recent-title">Últimas operaciones</h2>
+      <a routerLink="/caja/historial">Ver todo</a>
+    </header>
+
+    @if (operations().length) {
+      <ul class="card">
+        @for (op of operations(); track op.id) {
+          <li>
+            <div>
+              <p class="op-type">{{ typeLabel[op.type] }}</p>
+              <p class="op-meta">{{ op.createdAt | date: 'shortTime' }} · {{ op.id }}</p>
+            </div>
+            <div class="op-end">
+              <p class="op-amount">{{ op.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+              @if (op.status !== 'completed') {
+                <span [class]="statusBadge[op.status]">{{ statusLabel[op.status] }}</span>
+              }
+            </div>
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="card empty">Aún no hay operaciones. Empieza asignando efectivo y cargando cupo.</p>
+    }
   </section>
 </main>
