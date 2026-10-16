@@ -1,0 +1,1969 @@
+openapi: 3.1.0
+info:
+  title: Relia API
+  version: 0.1.0
+  summary: API del backend .NET de Relia para el frontend (corresponsal, admin y demo).
+  description: |
+    Contrato entre el frontend de Relia y el backend .NET.
+
+    Convenciones:
+    - Dinero: enteros en pesos colombianos (COP), sin decimales.
+    - Fechas: RFC 3339 en UTC; el frontend las muestra en America/Bogota.
+    - Errores: `application/problem+json` (RFC 9457) con un `code` estable. El frontend traduce el `code` al texto en español.
+    - Toda creación acepta `Idempotency-Key`. Repetir la misma clave con el mismo cuerpo devuelve el recurso ya creado.
+    - Las operaciones son asíncronas: se crean en `pending` y el frontend consulta `GET /operations/{operationId}` cada 1 a 2 s hasta un estado final.
+    - Celulares y payment pointers de usuarios se devuelven enmascarados.
+
+    Roles: `agent` opera solo sobre su propio corresponsal. `admin` lee todo (corresponsales, historiales,
+    operaciones y recibos) y crea liquidaciones, pero no opera por el corresponsal: las rutas que crean
+    depósitos, retiros, cargas o ajustes, cancelan o confirman entregas le responden 403.
+
+    Modo demo: las rutas `/demo/*` no requieren login y solo existen con `DEMO_MODE=true`; sin el flag
+    responden 404. Todo lo que exponen es simulado.
+servers:
+  - url: http://localhost:5080
+    description: Backend local
+tags:
+  - name: auth
+    description: Inicio de sesión y perfil de la sesión.
+  - name: agents
+    description: Perfil, saldos e historial del corresponsal.
+  - name: keys
+    description: Consulta de llaves e invitación por WhatsApp desde la app del corresponsal.
+  - name: keyLinks
+    description: |
+      Vinculación pública, sin login, de un celular a un payment pointer con OTP (página "Vincular billetera").
+      Una vinculación es permanente: no se reemplaza ni se borra.
+  - name: operations
+    description: Depósitos, retiros y cargas de cupo.
+  - name: cash
+    description: Ajustes del efectivo en caja.
+  - name: receipts
+    description: Recibos congelados de depósitos y retiros.
+  - name: admin
+    description: Panel admin de Relia.
+  - name: settlements
+    description: Liquidaciones (en pantalla "Pago de comisión") de la comisión acumulada a la billetera del corresponsal.
+  - name: demo
+    description: |
+      Modo demo (panel de simuladores y teléfono simulado). Sin login; solo con `DEMO_MODE=true`.
+      Los pagos por Open Payments son reales: aprobar y rechazar ocurre en la wallet de prueba, no aquí.
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Iniciar sesión como corresponsal o admin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Sesión iniciada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: Perfil de la sesión actual
+      description: Si el rol es `agent`, incluye el corresponsal con sus saldos.
+      responses:
+        '200':
+          description: Perfil de la sesión.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /agents:
+    get:
+      tags: [admin]
+      operationId: listAgents
+      summary: Corresponsales con métricas y totales de la red
+      description: |
+        Solo admin. Pinta toda la pantalla de inicio admin en una llamada. Los montos movidos cuentan solo
+        depósitos y retiros completados y usan el monto solicitado (M). Sin paginación.
+      responses:
+        '200':
+          description: Corresponsales y totales.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /agents/{agentId}/settlements:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    post:
+      tags: [settlements]
+      operationId: createSettlement
+      summary: Liquidar la comisión acumulada del corresponsal
+      description: |
+        Solo admin. El monto es toda la comisión acumulada al crear la liquidación y queda fijo: la comisión que se
+        acumule mientras el pago va en camino queda para la próxima liquidación.
+        El período va desde el día siguiente a la última liquidación pagada (o desde la primera operación) hasta hoy.
+        Paga a la billetera registrada del corresponsal por el riel.
+        - `409 settlement_in_progress`: ya hay una liquidación pendiente para este corresponsal.
+        - `422 no_commission`: la comisión acumulada es $0.
+        - `503 rail_unavailable`: el riel no aceptó el pago (por ejemplo, Relia no tiene permiso activo para pagar). No se crea nada.
+
+        En demo, si el corresponsal tiene `walletSimulated`, la liquidación pasa a `paid` sin usar el riel.
+
+        Al pasar a `paid`, el corresponsal recibe un SMS simulado.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Liquidación creada en `pending`. Consultar `GET /settlements/{settlementId}` hasta un estado final.
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settlement'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/RailUnavailable'
+
+  /settlements:
+    get:
+      tags: [settlements]
+      operationId: listSettlements
+      summary: Listar liquidaciones
+      description: |
+        La pantalla de inicio admin la usa con `from` = hoy (America/Bogota) para "Pagos de comisión".
+        El rol `agent` solo ve las suyas; el filtro `agentId` se ignora.
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: agentId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/SettlementStatus'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Página de liquidaciones, la más reciente primero.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /settlements/{settlementId}:
+    parameters:
+      - name: settlementId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [settlements]
+      operationId: getSettlement
+      summary: Consultar una liquidación
+      description: El rol `agent` solo puede leer las suyas.
+      responses:
+        '200':
+          description: Liquidación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settlement'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /demo/quota-top-ups/{operationId}/breb-payment:
+    parameters:
+      - $ref: '#/components/parameters/OperationId'
+    post:
+      tags: [demo]
+      operationId: simulateBreBPayment
+      summary: Simular que llegó el pago Bre-B de una carga de cupo
+      description: Completa la carga por Bre-B pendiente; el cupo sube. 409 si no es una carga Bre-B pendiente.
+      security: []
+      responses:
+        '200':
+          description: Carga completada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /demo/operations/{operationId}/expire:
+    parameters:
+      - $ref: '#/components/parameters/OperationId'
+    post:
+      tags: [demo]
+      operationId: expireOperationNow
+      summary: Vencer ya una solicitud pendiente ("La solicitud vence ya")
+      description: Retiros y cargas pendientes. Cancela en el riel y deja la operación `expired` con `request_expired`.
+      security: []
+      responses:
+        '200':
+          description: Operación vencida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/RailUnavailable'
+
+  /demo/faults:
+    get:
+      tags: [demo]
+      operationId: getDemoFaults
+      summary: Ver los fallos forzados
+      security: []
+      responses:
+        '200':
+          description: Interruptores actuales.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoFaults'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [demo]
+      operationId: setDemoFaults
+      summary: Activar o desactivar fallos forzados
+      description: |
+        `failNextPayment`: el próximo depósito, retiro, carga o liquidación queda `failed` con `payment_failed`
+        sin llamar al riel. Se apaga solo después de usarse.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemoFaults'
+      responses:
+        '200':
+          description: Interruptores actualizados.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoFaults'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /demo/messages:
+    get:
+      tags: [demo]
+      operationId: listDemoMessages
+      summary: Bandeja del teléfono simulado
+      description: Bandeja global de SMS y WhatsApp simulados, la más reciente primero. Cada mensaje dice a qué celular llegó.
+      security: []
+      parameters:
+        - name: phone
+          in: query
+          description: Filtra por celular. Sin filtro, todos los celulares.
+          schema:
+            $ref: '#/components/schemas/Phone'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Mensajes y contador de no leídos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoMessagePage'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /demo/messages/read:
+    post:
+      tags: [demo]
+      operationId: markDemoMessagesRead
+      summary: Marcar mensajes como leídos al abrir el teléfono
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone:
+                  $ref: '#/components/schemas/Phone'
+                  description: Sin celular, marca todos.
+      responses:
+        '204':
+          description: Marcados.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /demo/payment-requests:
+    get:
+      tags: [demo]
+      operationId: listDemoPaymentRequests
+      summary: Solicitudes de pago pendientes ("Mi billetera")
+      description: |
+        Retiros y cargas por Wallet pendientes de aprobación para ese celular (usuario o corresponsal).
+        La pantalla muestra "Abrir mi billetera para aprobar", que abre `approvalUrl` en la wallet de prueba.
+      security: []
+      parameters:
+        - name: phone
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/Phone'
+      responses:
+        '200':
+          description: Solicitudes pendientes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DemoPaymentRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /demo/reset:
+    post:
+      tags: [demo]
+      operationId: resetDemo
+      summary: Reiniciar la demo
+      description: |
+        1. Cancela en el riel los cobros pendientes.
+        2. Vacía operaciones, pagos, liquidaciones, llaves, OTP, mensajes y recibos.
+        3. Vuelve a sembrar: 4 corresponsales con historiales de ejemplo (Rosa en ceros), 3000000001 vinculado a
+           `$ilp.interledger-test.dev/jeffdev` y 3000000002 sin llave.
+
+        El dinero ya movido en las billeteras reales no se devuelve. Apaga los fallos forzados.
+      security: []
+      responses:
+        '204':
+          description: Demo reiniciada.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /agents/{agentId}:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      tags: [agents]
+      operationId: getAgent
+      summary: Perfil y saldos de un corresponsal
+      description: El rol `agent` solo puede leer su propio corresponsal; el rol `admin` puede leer cualquiera.
+      responses:
+        '200':
+          description: Corresponsal con saldos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /agents/{agentId}/history:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      tags: [agents]
+      operationId: listAgentHistory
+      summary: Historial del corresponsal
+      description: |
+        Entradas del historial, la más reciente primero: operaciones en cualquier estado, ajustes de efectivo y liquidaciones.
+        Las entradas no completadas muestran antes = después con el último saldo conocido.
+      parameters:
+        - name: kind
+          in: query
+          description: Filtra por clase de entrada. El filtro "Efectivo" de la UI corresponde a `cashAdjustment`.
+          schema:
+            $ref: '#/components/schemas/HistoryEntryKind'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/EntryStatus'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Página del historial.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /keys/{phone}:
+    parameters:
+      - $ref: '#/components/parameters/Phone'
+    get:
+      tags: [keys]
+      operationId: getKey
+      summary: Validar la llave de un usuario
+      description: Responde 404 `key_not_found` si el celular no tiene billetera vinculada.
+      responses:
+        '200':
+          description: Llave encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyLookup'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /keys/{phone}/invitations:
+    parameters:
+      - $ref: '#/components/parameters/Phone'
+    post:
+      tags: [keys]
+      operationId: createKeyInvitation
+      summary: Invitar por WhatsApp a vincular la billetera
+      description: Genera el enlace wa.me y deja el WhatsApp simulado en la bandeja del teléfono de ese celular.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Invitación enviada (simulada).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyInvitation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /key-links:
+    post:
+      tags: [keyLinks]
+      operationId: startKeyLink
+      summary: Iniciar la vinculación y enviar el OTP
+      description: |
+        Valida antes de enviar el código:
+        - el celular no tiene llave (`409 key_already_linked`) ni es de un corresponsal (`409 phone_reserved`);
+        - la wallet no está vinculada a otro celular (`409 wallet_already_linked`, sin revelar cuál) ni es de un corresponsal o de Relia (`409 phone_reserved`);
+        - el payment pointer existe en el riel (`422 wallet_not_found`).
+
+        Genera un OTP de 6 dígitos que vence en 5 minutos, con 5 intentos, y lo deja por SMS simulado en la bandeja del teléfono.
+        Llamarlo de nuevo para el mismo celular ("Reenviar código") invalida el desafío anterior.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateKeyLinkRequest'
+      responses:
+        '201':
+          description: Código enviado (simulado).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyLinkChallenge'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/RailUnavailable'
+
+  /key-links/{challengeId}/verify:
+    parameters:
+      - name: challengeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [keyLinks]
+      operationId: verifyKeyLink
+      summary: Verificar el OTP y crear la llave
+      description: |
+        Con el código correcto crea la llave y responde con el payment pointer completo, que es el eco de lo que escribió el usuario.
+        Errores: `invalid_otp` (con `attemptsRemaining`), `otp_expired`, `otp_attempts_exceeded`.
+        Si mientras tanto otro flujo vinculó el celular o la wallet, responde el mismo 409 que al iniciar.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyKeyLinkRequest'
+      responses:
+        '200':
+          description: Celular vinculado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyLink'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /agents/{agentId}/operations/preview:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    post:
+      tags: [operations]
+      operationId: previewOperation
+      summary: Desglose en vivo de un depósito o retiro
+      description: |
+        Calcula el desglose con las reglas vigentes y los saldos disponibles del corresponsal, sin crear nada.
+        Responde 200 aunque haya violaciones; el frontend las muestra y deshabilita el botón.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationPreviewRequest'
+      responses:
+        '200':
+          description: Desglose calculado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationPreview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /agents/{agentId}/deposits:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    post:
+      tags: [operations]
+      operationId: createDeposit
+      summary: Crear un depósito
+      description: |
+        Crear el depósito es la confirmación de que el corresponsal recibió el efectivo.
+        Reserva `chargedAmount` de cupo y paga `netAmount` desde la billetera de Relia a la del usuario.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDepositRequest'
+      responses:
+        '202':
+          $ref: '#/components/responses/OperationAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/RailUnavailable'
+
+  /agents/{agentId}/withdrawals:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    post:
+      tags: [operations]
+      operationId: createWithdrawal
+      summary: Crear un retiro (solicitud de pago al usuario)
+      description: |
+        Reserva `netAmount` del efectivo en caja y solicita `chargedAmount` a la billetera del usuario.
+        La operación trae `approvalUrl` y vence en 5 minutos (`expiresAt`). El backend envía la `approvalUrl` por SMS simulado.
+        No se entrega efectivo hasta que la operación esté `completed`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWithdrawalRequest'
+      responses:
+        '202':
+          $ref: '#/components/responses/OperationAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/RailUnavailable'
+
+  /agents/{agentId}/quota-top-ups:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    post:
+      tags: [operations]
+      operationId: createQuotaTopUp
+      summary: Cargar cupo por Bre-B o por Wallet
+      description: |
+        - `breB`: devuelve `qrPayload` simulado y vence en 10 minutos. El pago se marca recibido desde el Modo demo.
+        - `wallet`: solicita el pago al payment pointer registrado del corresponsal; devuelve `approvalUrl` y vence en 5 minutos.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateQuotaTopUpRequest'
+      responses:
+        '202':
+          $ref: '#/components/responses/OperationAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/RailUnavailable'
+
+  /operations/{operationId}:
+    parameters:
+      - $ref: '#/components/parameters/OperationId'
+    get:
+      tags: [operations]
+      operationId: getOperation
+      summary: Consultar una operación
+      description: El frontend la consulta cada 1 a 2 s mientras esté `pending`.
+      responses:
+        '200':
+          description: Operación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /operations/{operationId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/OperationId'
+    post:
+      tags: [operations]
+      operationId: cancelOperation
+      summary: Cancelar una solicitud pendiente
+      description: |
+        Solo retiros y cargas de cupo en `pending`, y solo antes de que el pagador apruebe.
+        Si ya no se puede cancelar, responde 409 `operation_not_cancellable` y la operación sigue su curso.
+      responses:
+        '200':
+          description: Operación cancelada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/RailUnavailable'
+
+  /operations/{operationId}/cash-handover:
+    parameters:
+      - $ref: '#/components/parameters/OperationId'
+    post:
+      tags: [operations]
+      operationId: confirmCashHandover
+      summary: Confirmar que se entregó el efectivo de un retiro
+      description: |
+        Solo retiros `completed`. Registra la confirmación como evento de auditoría y llena `cashHandedOverAt`.
+        No cambia estado ni saldos. Repetirla es idempotente.
+      responses:
+        '200':
+          description: Entrega registrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /operations/{operationId}/receipt:
+    parameters:
+      - $ref: '#/components/parameters/OperationId'
+    get:
+      tags: [receipts]
+      operationId: getReceipt
+      summary: Ver el recibo de un depósito o retiro completado
+      description: |
+        Cada llamada registra una emisión por el canal indicado. Desde la segunda emisión `isCopy` es true.
+        Cargas de cupo, ajustes y liquidaciones no tienen recibo: responden 409 `receipt_not_available`.
+      parameters:
+        - name: channel
+          in: query
+          schema:
+            type: string
+            enum: [screen, print, pdf]
+            default: screen
+      responses:
+        '200':
+          description: Recibo congelado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Receipt'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /operations/{operationId}/receipt/send:
+    parameters:
+      - $ref: '#/components/parameters/OperationId'
+    post:
+      tags: [receipts]
+      operationId: sendReceipt
+      summary: Enviar el recibo al celular del usuario (simulado)
+      description: Deja el mensaje en la bandeja del teléfono simulado y registra una emisión.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel]
+              properties:
+                channel:
+                  type: string
+                  enum: [sms, whatsapp]
+      responses:
+        '202':
+          description: Recibo enviado (simulado).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptDelivery'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /agents/{agentId}/cash-adjustments:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    post:
+      tags: [cash]
+      operationId: createCashAdjustment
+      summary: Sumar efectivo o fijar el total en caja
+      description: |
+        No toca cupo ni comisión. Un total por debajo del efectivo reservado responde 422 `insufficient_cash`.
+        Un ajuste sin variación responde 422 `no_change`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCashAdjustmentRequest'
+      responses:
+        '201':
+          description: Ajuste registrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashAdjustment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de `POST /auth/login`. Lleva el rol (`agent` o `admin`) y, si aplica, el `agentId`.
+
+  parameters:
+    AgentId:
+      name: agentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OperationId:
+      name: operationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Phone:
+      name: phone
+      in: path
+      required: true
+      description: Celular colombiano de 10 dígitos, sin espacios.
+      schema:
+        $ref: '#/components/schemas/Phone'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Clave única por intento del usuario. Si la respuesta fue un error (4xx o 503), no se creó nada y se puede
+        reintentar con la misma clave. "Intentar de nuevo" tras una operación `failed`, `expired` o `cancelled` usa
+        una clave nueva.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+    Cursor:
+      name: cursor
+      in: query
+      description: Valor `nextCursor` de la página anterior.
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    OperationAccepted:
+      description: Operación creada en `pending`. Consultar `GET /operations/{operationId}` hasta un estado final.
+      headers:
+        Location:
+          description: URL de la operación.
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Operation'
+    Unauthorized:
+      description: Sin sesión o credenciales incorrectas (`unauthorized`, `invalid_credentials`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: El rol no puede acceder a este recurso (`forbidden`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Recurso inexistente (`not_found`, `key_not_found`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: |
+        Conflicto de estado o de idempotencia (`idempotency_conflict`, `operation_not_cancellable`,
+        `operation_not_completed`, `receipt_not_available`, `key_already_linked`, `wallet_already_linked`,
+        `phone_reserved`, `settlement_in_progress`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ValidationError:
+      description: |
+        Regla de negocio o validación (`validation_error`, `amount_too_low`, `insufficient_quota`,
+        `insufficient_cash`, `no_change`, `wallet_not_found`, `invalid_otp`, `otp_expired`,
+        `otp_attempts_exceeded`, `no_commission`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TooManyRequests:
+      description: Demasiados intentos (`rate_limited`). Esperar lo que indique `Retry-After`.
+      headers:
+        Retry-After:
+          description: Segundos que hay que esperar.
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    RailUnavailable:
+      description: El riel no respondió (`rail_unavailable`). No se creó nada; se puede reintentar.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    Cop:
+      type: integer
+      format: int64
+      description: Pesos colombianos, sin decimales.
+      examples: [50000]
+
+    Phone:
+      type: string
+      pattern: '^3[0-9]{9}$'
+      examples: ['3000000001']
+
+    MaskedPhone:
+      type: string
+      description: Celular enmascarado para mostrar.
+      examples: ['300 *** 0001']
+
+    MaskedWalletAddress:
+      type: string
+      description: Payment pointer enmascarado para mostrar.
+      examples: ['$ilp...test.dev/us***']
+
+    ErrorCode:
+      type: string
+      description: Código estable del error. El frontend lo traduce a español.
+      enum:
+        - validation_error
+        - unauthorized
+        - invalid_credentials
+        - forbidden
+        - not_found
+        - key_not_found
+        - idempotency_conflict
+        - amount_too_low
+        - insufficient_quota
+        - insufficient_cash
+        - no_change
+        - operation_not_cancellable
+        - operation_not_completed
+        - receipt_not_available
+        - rail_unavailable
+        - rate_limited
+        - key_already_linked
+        - wallet_already_linked
+        - phone_reserved
+        - wallet_not_found
+        - invalid_otp
+        - otp_expired
+        - otp_attempts_exceeded
+        - settlement_in_progress
+        - no_commission
+
+    Problem:
+      type: object
+      description: RFC 9457.
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          default: about:blank
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        shortfall:
+          $ref: '#/components/schemas/Cop'
+          description: Cuánto falta, en `insufficient_quota` e `insufficient_cash`.
+        attemptsRemaining:
+          type: integer
+          minimum: 0
+          description: Intentos que quedan, en `invalid_otp`.
+        errors:
+          type: array
+          description: Detalle por campo en `validation_error`.
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    Role:
+      type: string
+      enum: [agent, admin]
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    LoginResponse:
+      type: object
+      required: [accessToken, expiresIn, role]
+      properties:
+        accessToken:
+          type: string
+        expiresIn:
+          type: integer
+          description: Segundos de vida del token.
+        role:
+          $ref: '#/components/schemas/Role'
+        agentId:
+          type: [string, 'null']
+          format: uuid
+          description: Solo para el rol `agent`.
+
+    Me:
+      type: object
+      required: [role, email, name]
+      properties:
+        role:
+          $ref: '#/components/schemas/Role'
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+          description: Responsable del comercio o nombre del admin.
+        agent:
+          oneOf:
+            - $ref: '#/components/schemas/Agent'
+            - type: 'null'
+
+    Agent:
+      type: object
+      required: [id, name, managerName, city, address, phone, walletAddress, balances]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          examples: ['Tienda Doña Rosa']
+        managerName:
+          type: string
+          description: Responsable del comercio.
+          examples: ['Rosa Gómez']
+        city:
+          type: string
+        address:
+          type: string
+        phone:
+          $ref: '#/components/schemas/Phone'
+          description: Llave del corresponsal.
+        walletAddress:
+          type: string
+          description: Payment pointer del corresponsal. Origen de la carga por Wallet y destino de la liquidación.
+          examples: ['$ilp.interledger-test.dev/tienda-rosa']
+        balances:
+          $ref: '#/components/schemas/AgentBalances'
+
+    CountAmount:
+      type: object
+      required: [count, amount]
+      properties:
+        count:
+          type: integer
+        amount:
+          $ref: '#/components/schemas/Cop'
+
+    AgentSummary:
+      type: object
+      description: Fila de la tabla de corresponsales del panel admin.
+      required:
+        - id
+        - name
+        - managerName
+        - city
+        - walletAddress
+        - operations
+        - deposits
+        - withdrawals
+        - totalMoved
+        - quota
+        - cashOnHand
+        - accruedCommission
+        - settledCommissionTotal
+        - commissionPaidToday
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        managerName:
+          type: string
+        city:
+          type: string
+        walletAddress:
+          type: string
+          description: Payment pointer del corresponsal, destino de la liquidación.
+        walletSimulated:
+          type: boolean
+          description: Solo en demo. true si la billetera no existe en el riel; su liquidación se paga sin riel.
+        operations:
+          type: integer
+          description: Depósitos y retiros completados.
+        deposits:
+          $ref: '#/components/schemas/CountAmount'
+        withdrawals:
+          $ref: '#/components/schemas/CountAmount'
+        totalMoved:
+          $ref: '#/components/schemas/Cop'
+        quota:
+          $ref: '#/components/schemas/Cop'
+        cashOnHand:
+          $ref: '#/components/schemas/Cop'
+        accruedCommission:
+          $ref: '#/components/schemas/Cop'
+          description: Comisión por pagar.
+        settledCommissionTotal:
+          $ref: '#/components/schemas/Cop'
+        commissionPaidToday:
+          $ref: '#/components/schemas/Cop'
+
+    NetworkTotals:
+      type: object
+      description: Indicadores de la red. Solo depósitos y retiros completados, con el monto solicitado (M).
+      required: [totalMoved, deposits, withdrawals, commissionPayable, commissionPaidToday]
+      properties:
+        totalMoved:
+          $ref: '#/components/schemas/CountAmount'
+        deposits:
+          $ref: '#/components/schemas/CountAmount'
+        withdrawals:
+          $ref: '#/components/schemas/CountAmount'
+        commissionPayable:
+          $ref: '#/components/schemas/Cop'
+        commissionPaidToday:
+          $ref: '#/components/schemas/Cop'
+
+    AgentList:
+      type: object
+      required: [items, totals]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentSummary'
+        totals:
+          $ref: '#/components/schemas/NetworkTotals'
+
+    DemoFaults:
+      type: object
+      required: [failNextPayment]
+      properties:
+        failNextPayment:
+          type: boolean
+
+    DemoMessageType:
+      type: string
+      enum: [otp, invitacion_wallet, aviso_deposito, solicitud_pago, comprobante, aviso_comision]
+
+    DemoMessage:
+      type: object
+      required: [id, phone, channel, type, content, read, createdAt]
+      properties:
+        id:
+          type: string
+        phone:
+          $ref: '#/components/schemas/Phone'
+        channel:
+          type: string
+          enum: [sms, whatsapp]
+        type:
+          $ref: '#/components/schemas/DemoMessageType'
+        content:
+          type: string
+        link:
+          type: [string, 'null']
+          format: uri
+          description: Enlace de vinculación o de aprobación del pago.
+        operationId:
+          type: [string, 'null']
+          format: uuid
+        read:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    DemoMessagePage:
+      type: object
+      required: [items, unreadCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DemoMessage'
+        unreadCount:
+          type: integer
+          description: No leídos con el mismo filtro de celular.
+        nextCursor:
+          type: [string, 'null']
+
+    DemoPaymentRequest:
+      type: object
+      required: [operationId, reference, type, agentName, chargedAmount, expiresAt, approvalUrl]
+      properties:
+        operationId:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        type:
+          type: string
+          enum: [withdrawal, quotaTopUp]
+        agentName:
+          type: string
+          description: Comercio que pide el pago.
+        chargedAmount:
+          $ref: '#/components/schemas/Cop'
+          description: Lo que paga el dueño de la billetera.
+        expiresAt:
+          type: string
+          format: date-time
+        approvalUrl:
+          type: string
+          format: uri
+
+    SettlementStatus:
+      type: string
+      description: '`paid` aparece como `completed` en el historial y `voided` como `cancelled`.'
+      enum: [pending, paid, voided]
+
+    Settlement:
+      type: object
+      required: [id, reference, agentId, agentName, walletAddress, amount, periodFrom, periodTo, status, createdAt, createdByAdmin]
+      properties:
+        id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+          pattern: '^LQ-[0-9]{6}$'
+          examples: ['LQ-000007']
+        agentId:
+          type: string
+          format: uuid
+        agentName:
+          type: string
+        walletAddress:
+          type: string
+          description: Billetera destino, copiada del corresponsal al crear la liquidación.
+        amount:
+          $ref: '#/components/schemas/Cop'
+        periodFrom:
+          type: string
+          format: date
+        periodTo:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/SettlementStatus'
+        voidReason:
+          type: [string, 'null']
+          description: Motivo de la anulación, por ejemplo el error del riel.
+        createdAt:
+          type: string
+          format: date-time
+        paidAt:
+          type: [string, 'null']
+          format: date-time
+        createdByAdmin:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+
+    SettlementPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Settlement'
+        nextCursor:
+          type: [string, 'null']
+
+    AgentBalances:
+      type: object
+      required: [quota, quotaReserved, cashOnHand, cashReserved, accruedCommission, settledCommissionTotal]
+      properties:
+        quota:
+          $ref: '#/components/schemas/Cop'
+          description: Cupo actual.
+        quotaReserved:
+          $ref: '#/components/schemas/Cop'
+          description: Cupo comprometido por depósitos pendientes.
+        cashOnHand:
+          $ref: '#/components/schemas/Cop'
+          description: Efectivo que Relia espera en la caja.
+        cashReserved:
+          $ref: '#/components/schemas/Cop'
+          description: Efectivo comprometido por retiros pendientes.
+        accruedCommission:
+          $ref: '#/components/schemas/Cop'
+          description: Comisión por liquidar.
+        settledCommissionTotal:
+          $ref: '#/components/schemas/Cop'
+          description: Comisión ya liquidada en total.
+
+    BalancePair:
+      type: object
+      required: [before, after]
+      properties:
+        before:
+          $ref: '#/components/schemas/Cop'
+        after:
+          $ref: '#/components/schemas/Cop'
+
+    BalanceChange:
+      type: object
+      description: Saldos antes y después. En entradas no completadas, antes = después con el último saldo conocido.
+      required: [quota, accruedCommission, cashOnHand]
+      properties:
+        quota:
+          $ref: '#/components/schemas/BalancePair'
+        accruedCommission:
+          $ref: '#/components/schemas/BalancePair'
+        cashOnHand:
+          $ref: '#/components/schemas/BalancePair'
+
+    KeyLookup:
+      type: object
+      required: [phone, walletAddressMasked]
+      properties:
+        phone:
+          $ref: '#/components/schemas/Phone'
+        walletAddressMasked:
+          $ref: '#/components/schemas/MaskedWalletAddress'
+
+    KeyInvitation:
+      type: object
+      required: [phone, waLink, message, sentAt]
+      properties:
+        phone:
+          $ref: '#/components/schemas/Phone'
+        waLink:
+          type: string
+          format: uri
+          examples: ['https://wa.me/573000000002?text=Hola%2C%20te%20invito%20a%20vincular%20tu%20wallet%20en%20relia.com%2Fselectkey%3Fphone%3D3000000002']
+        message:
+          type: string
+          description: El enlace lleva el celular para que la página pública lo precargue.
+          examples: ['Hola, te invito a vincular tu wallet en relia.com/selectkey?phone=3000000002']
+        sentAt:
+          type: string
+          format: date-time
+
+    WalletAddress:
+      type: string
+      description: Payment pointer ($dominio/ruta).
+      pattern: '^\$[^\s/]+(/\S*)?$'
+      examples: ['$ilp.interledger-test.dev/maria']
+
+    CreateKeyLinkRequest:
+      type: object
+      required: [phone, walletAddress]
+      properties:
+        phone:
+          $ref: '#/components/schemas/Phone'
+        walletAddress:
+          $ref: '#/components/schemas/WalletAddress'
+
+    KeyLinkChallenge:
+      type: object
+      required: [challengeId, phone, expiresAt, maxAttempts]
+      properties:
+        challengeId:
+          type: string
+          format: uuid
+        phone:
+          $ref: '#/components/schemas/Phone'
+        expiresAt:
+          type: string
+          format: date-time
+          description: 5 minutos después de creado.
+        maxAttempts:
+          type: integer
+          examples: [5]
+
+    VerifyKeyLinkRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+
+    KeyLink:
+      type: object
+      required: [phone, walletAddress, linkedAt]
+      properties:
+        phone:
+          $ref: '#/components/schemas/Phone'
+        walletAddress:
+          $ref: '#/components/schemas/WalletAddress'
+          description: Completo; es el eco de lo que escribió el usuario.
+        linkedAt:
+          type: string
+          format: date-time
+
+    Fee:
+      type: object
+      description: Comisión Relia copiada de la tarifa vigente al crear la operación. En carga de cupo todo es 0.
+      required: [total, relia, agent]
+      properties:
+        total:
+          $ref: '#/components/schemas/Cop'
+          examples: [1000]
+        relia:
+          $ref: '#/components/schemas/Cop'
+          examples: [500]
+        agent:
+          $ref: '#/components/schemas/Cop'
+          examples: [500]
+
+    CashMovingOperationType:
+      type: string
+      enum: [deposit, withdrawal]
+
+    OperationPreviewRequest:
+      type: object
+      required: [type, requestedAmount, roundAmount]
+      properties:
+        type:
+          $ref: '#/components/schemas/CashMovingOperationType'
+        requestedAmount:
+          $ref: '#/components/schemas/Cop'
+          minimum: 1
+        roundAmount:
+          type: boolean
+          description: true si el usuario recibe el valor redondo y paga la comisión aparte.
+
+    PreviewViolation:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          enum: [amount_too_low, insufficient_quota, insufficient_cash]
+        shortfall:
+          $ref: '#/components/schemas/Cop'
+
+    OperationPreview:
+      type: object
+      description: |
+        Depósito: el usuario entrega `chargedAmount` en efectivo y recibe `netAmount` en su billetera.
+        Retiro: el usuario paga `chargedAmount` desde su billetera y recibe `netAmount` en efectivo.
+      required: [type, requestedAmount, roundAmount, fee, netAmount, chargedAmount, quotaAfter, cashOnHandAfter, accruedCommissionAfter, violations]
+      properties:
+        type:
+          $ref: '#/components/schemas/CashMovingOperationType'
+        requestedAmount:
+          $ref: '#/components/schemas/Cop'
+        roundAmount:
+          type: boolean
+        fee:
+          $ref: '#/components/schemas/Fee'
+        netAmount:
+          $ref: '#/components/schemas/Cop'
+        chargedAmount:
+          $ref: '#/components/schemas/Cop'
+        quotaAfter:
+          $ref: '#/components/schemas/Cop'
+        cashOnHandAfter:
+          $ref: '#/components/schemas/Cop'
+        accruedCommissionAfter:
+          $ref: '#/components/schemas/Cop'
+        violations:
+          type: array
+          description: Vacío si la operación se puede crear.
+          items:
+            $ref: '#/components/schemas/PreviewViolation'
+
+    CreateDepositRequest:
+      type: object
+      required: [phone, requestedAmount, roundAmount, cashReceivedConfirmed]
+      properties:
+        phone:
+          $ref: '#/components/schemas/Phone'
+        requestedAmount:
+          $ref: '#/components/schemas/Cop'
+          exclusiveMinimum: 1000
+        roundAmount:
+          type: boolean
+        cashReceivedConfirmed:
+          type: boolean
+          const: true
+          description: El corresponsal confirmó que recibió `chargedAmount` en efectivo.
+
+    CreateWithdrawalRequest:
+      type: object
+      required: [phone, requestedAmount, roundAmount]
+      properties:
+        phone:
+          $ref: '#/components/schemas/Phone'
+        requestedAmount:
+          $ref: '#/components/schemas/Cop'
+          exclusiveMinimum: 1000
+        roundAmount:
+          type: boolean
+
+    TopUpMethod:
+      type: string
+      enum: [breB, wallet]
+
+    CreateQuotaTopUpRequest:
+      type: object
+      required: [method, requestedAmount]
+      properties:
+        method:
+          $ref: '#/components/schemas/TopUpMethod'
+        requestedAmount:
+          $ref: '#/components/schemas/Cop'
+          minimum: 1
+
+    OperationType:
+      type: string
+      enum: [deposit, withdrawal, quotaTopUp]
+
+    OperationStatus:
+      type: string
+      enum: [pending, completed, failed, expired, cancelled]
+
+    FailureCode:
+      type: string
+      description: |
+        Motivo de una operación `failed`, `expired` o `cancelled`. Traducción desde el estado del pago de riel:
+
+        | Pago de riel (`rail-proxy`) | Operación | `failureCode` |
+        |---|---|---|
+        | `pending_approval`, `processing` | `pending` | null |
+        | `completed` | `completed` | null |
+        | `rejected` | `failed` | `customer_rejected` |
+        | `expired` | `expired` | `request_expired` |
+        | `cancelled` | `cancelled` | `request_cancelled` |
+        | `failed` | `failed` | `payment_failed` |
+
+        `rail_unavailable` queda para cuando el riel deja de responder con la operación ya creada.
+        En liquidaciones: `completed` → `paid`; `failed` → `voided`.
+      enum:
+        - customer_rejected
+        - request_expired
+        - request_cancelled
+        - payment_failed
+        - rail_unavailable
+
+    Operation:
+      type: object
+      required:
+        - id
+        - reference
+        - agentId
+        - type
+        - status
+        - createdAt
+        - requestedAmount
+        - roundAmount
+        - fee
+        - netAmount
+        - chargedAmount
+        - balances
+      properties:
+        id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+          pattern: '^OP-[0-9]{6}$'
+          examples: ['OP-000123']
+        agentId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/OperationType'
+        status:
+          $ref: '#/components/schemas/OperationStatus'
+        failureCode:
+          oneOf:
+            - $ref: '#/components/schemas/FailureCode'
+            - type: 'null'
+        failureDetail:
+          type: [string, 'null']
+          description: Explicación libre para soporte; no se muestra tal cual al usuario.
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: [string, 'null']
+          format: date-time
+        expiresAt:
+          type: [string, 'null']
+          format: date-time
+          description: Retiros y cargas de cupo pendientes (5 min Wallet, 10 min Bre-B).
+        requestedAmount:
+          $ref: '#/components/schemas/Cop'
+        roundAmount:
+          type: boolean
+        fee:
+          $ref: '#/components/schemas/Fee'
+        netAmount:
+          $ref: '#/components/schemas/Cop'
+          description: Lo que recibe el usuario. En carga de cupo, el monto cargado.
+        chargedAmount:
+          $ref: '#/components/schemas/Cop'
+          description: Lo que paga el usuario. En carga de cupo, el monto cargado.
+        customer:
+          description: Depósito y retiro. Null en carga de cupo.
+          oneOf:
+            - $ref: '#/components/schemas/OperationCustomer'
+            - type: 'null'
+        topUpMethod:
+          description: Solo en carga de cupo.
+          oneOf:
+            - $ref: '#/components/schemas/TopUpMethod'
+            - type: 'null'
+        approvalUrl:
+          type: [string, 'null']
+          format: uri
+          description: Retiro y carga por Wallet pendientes. URL donde el pagador aprueba en su billetera.
+        qrPayload:
+          type: [string, 'null']
+          description: Carga por Bre-B pendiente (simulado).
+        cashHandedOverAt:
+          type: [string, 'null']
+          format: date-time
+          description: Solo retiros. Cuándo el corresponsal confirmó la entrega del efectivo.
+        balances:
+          $ref: '#/components/schemas/BalanceChange'
+
+    OperationCustomer:
+      type: object
+      required: [phoneMasked, walletAddressMasked]
+      properties:
+        phoneMasked:
+          $ref: '#/components/schemas/MaskedPhone'
+        walletAddressMasked:
+          $ref: '#/components/schemas/MaskedWalletAddress'
+
+    CashAdjustmentMode:
+      type: string
+      description: '`add` suma al efectivo actual ("Asignación de efectivo"); `set` fija el total ("Ajuste de efectivo").'
+      enum: [add, set]
+
+    CreateCashAdjustmentRequest:
+      type: object
+      required: [mode, amount]
+      properties:
+        mode:
+          $ref: '#/components/schemas/CashAdjustmentMode'
+        amount:
+          $ref: '#/components/schemas/Cop'
+          minimum: 0
+          description: Con `add`, lo que se suma (mayor a 0). Con `set`, el nuevo total.
+        reason:
+          type: string
+          maxLength: 200
+          description: Opcional. Por defecto "Asignación de efectivo" o "Ajuste de efectivo".
+
+    CashAdjustment:
+      type: object
+      required: [id, agentId, mode, variation, reason, cashOnHand, createdAt]
+      properties:
+        id:
+          type: string
+          description: Identificador del movimiento.
+        agentId:
+          type: string
+          format: uuid
+        mode:
+          $ref: '#/components/schemas/CashAdjustmentMode'
+        variation:
+          type: integer
+          format: int64
+          description: Variación del efectivo, distinta de 0. Negativa si `set` bajó el total.
+        reason:
+          type: string
+        cashOnHand:
+          $ref: '#/components/schemas/BalancePair'
+        createdAt:
+          type: string
+          format: date-time
+
+    HistoryEntryKind:
+      type: string
+      enum: [deposit, withdrawal, quotaTopUp, cashAdjustment, settlement]
+
+    EntryStatus:
+      type: string
+      description: Las liquidaciones pagadas aparecen como `completed` y las anuladas como `cancelled`.
+      enum: [pending, completed, failed, expired, cancelled]
+
+    HistoryEntry:
+      type: object
+      required: [id, kind, occurredAt, status, amount, balances]
+      properties:
+        id:
+          type: string
+          description: Identificador estable de la entrada.
+        kind:
+          $ref: '#/components/schemas/HistoryEntryKind'
+        reference:
+          type: [string, 'null']
+          description: '`OP-000123` en operaciones, `LQ-000007` en liquidaciones, null en ajustes.'
+        occurredAt:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/EntryStatus'
+        amount:
+          type: integer
+          format: int64
+          description: Monto solicitado (M) en operaciones, monto en liquidaciones, variación en ajustes.
+        balances:
+          $ref: '#/components/schemas/BalanceChange'
+        reason:
+          type: [string, 'null']
+          description: Motivo del ajuste o del fallo.
+        failureCode:
+          oneOf:
+            - $ref: '#/components/schemas/FailureCode'
+            - type: 'null'
+        operationId:
+          type: [string, 'null']
+          format: uuid
+          description: Para abrir `GET /operations/{operationId}`.
+        settlementId:
+          type: [string, 'null']
+          format: uuid
+          description: Para abrir la liquidación (sección admin).
+
+    HistoryPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryEntry'
+        nextCursor:
+          type: [string, 'null']
+
+    Receipt:
+      type: object
+      required: [code, operationId, contentHash, isCopy, issuedAt, data]
+      properties:
+        code:
+          type: string
+          pattern: '^[0-9A-F]{12}$'
+          description: Código aleatorio del recibo.
+        operationId:
+          type: string
+          format: uuid
+        contentHash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: SHA-256 del contenido congelado.
+        isCopy:
+          type: boolean
+          description: true desde la segunda emisión; el documento debe decir "COPIA".
+        issuedAt:
+          type: string
+          format: date-time
+          description: Cuándo se congeló el recibo original.
+        data:
+          $ref: '#/components/schemas/ReceiptData'
+
+    ReceiptData:
+      type: object
+      description: Contenido congelado al completarse la operación. Celular y billetera van enmascarados.
+      required: [reference, type, date, currency, merchant, customer, amounts, payment]
+      properties:
+        reference:
+          type: string
+          examples: ['OP-000123']
+        type:
+          $ref: '#/components/schemas/CashMovingOperationType'
+        date:
+          type: string
+          format: date-time
+        currency:
+          type: string
+          const: COP
+        merchant:
+          type: object
+          required: [name, address, phone]
+          properties:
+            name:
+              type: string
+            address:
+              type: string
+            phone:
+              $ref: '#/components/schemas/Phone'
+        customer:
+          $ref: '#/components/schemas/OperationCustomer'
+        amounts:
+          type: object
+          required: [requestedAmount, roundAmount, fee, netAmount, chargedAmount]
+          properties:
+            requestedAmount:
+              $ref: '#/components/schemas/Cop'
+            roundAmount:
+              type: boolean
+            fee:
+              $ref: '#/components/schemas/Cop'
+            netAmount:
+              $ref: '#/components/schemas/Cop'
+            chargedAmount:
+              $ref: '#/components/schemas/Cop'
+        payment:
+          type: object
+          required: [rail, reference]
+          properties:
+            rail:
+              type: string
+              enum: [openPayments, breBSimulated]
+            reference:
+              type: string
+              description: Identificador del pago en el riel.
+
+    ReceiptDelivery:
+      type: object
+      required: [channel, sentTo, isCopy, sentAt]
+      properties:
+        channel:
+          type: string
+          enum: [sms, whatsapp]
+        sentTo:
+          $ref: '#/components/schemas/MaskedPhone'
+        isCopy:
+          type: boolean
+        sentAt:
+          type: string
+          format: date-time

@@ -1,0 +1,553 @@
+openapi: 3.1.0
+info:
+  title: Relia Rail Proxy
+  version: 0.1.0
+  summary: Contrato de riel entre el backend .NET de Relia y el adaptador de Open Payments (Node).
+  description: |
+    Contrato agnóstico al riel (ver ADR 0001). El backend pide "cobrar a una billetera" o "pagar a una billetera"
+    y consulta el estado. Un adaptador Bre-B futuro implementa este mismo contrato.
+
+    Solo el proxy conoce Open Payments: grants GNAP, quotes, incoming y outgoing payments, y las llaves de la
+    billetera de Relia (variable de entorno, en base64).
+
+    Convenciones:
+    - Red privada. Toda llamada lleva `X-Api-Key`.
+    - Sin webhooks. El backend consulta `GET /payments/{paymentId}`, que devuelve el último estado que conoce el
+      proxy sin llamar al riel en esa petición. El proxy consulta Open Payments por su cuenta.
+    - Montos en unidades mínimas del riel: `{ value, assetCode, assetScale }`. En la red de prueba, COP con escala 2.
+    - Toda creación lleva `Idempotency-Key`, que es el id del pago en el backend (`pagos.id`).
+    - Errores en `application/problem+json` (RFC 9457) con un `code` estable.
+    - Los fallos forzados del Modo demo no pasan por aquí: el backend los simula.
+servers:
+  - url: http://localhost:4000
+    description: Proxy local (red privada)
+tags:
+  - name: wallets
+    description: Resolución de payment pointers.
+  - name: payments
+    description: Pagos de riel. `outgoing` = Relia paga; `incoming` = Relia cobra.
+  - name: operator
+    description: |
+      Permiso permanente de la billetera de Relia para pagar sin aprobación por pago. Lo usa un operador
+      (script o curl); el backend no lo consume y el panel admin no lo muestra.
+  - name: health
+    description: Estado del proxy y del riel.
+security:
+  - apiKey: []
+
+paths:
+  /wallet-addresses:
+    get:
+      tags: [wallets]
+      operationId: resolveWalletAddress
+      summary: Resolver un payment pointer
+      description: Confirma que existe y devuelve su moneda y escala. Lo usa la vinculación de llave.
+      parameters:
+        - name: pointer
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/PaymentPointer'
+      responses:
+        '200':
+          description: Billetera encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletAddress'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/RailUnavailable'
+
+  /payments:
+    post:
+      tags: [payments]
+      operationId: createPayment
+      summary: Crear un pago de riel
+      description: |
+        - `outgoing`: Relia paga desde su billetera a `counterparty`. Usa el permiso permanente de Relia; si no está
+          activo responde 503 `relia_grant_unavailable`. Arranca en `processing`.
+        - `incoming`: Relia cobra a la billetera `counterparty`. Arranca en `pending_approval` con `approval.url`,
+          que el backend entrega al pagador por SMS simulado. El pagador aprueba en su billetera (su app bancaria) y
+          no vuelve a ninguna página de Relia; el proxy detecta la aprobación o el rechazo consultando el riel.
+
+        En ambos casos `receiveAmount` es fijo: el destino recibe exactamente ese monto y el costo del riel, si lo
+        hay, lo absorbe el pagador.
+
+        El proxy hace cumplir `expiresAt` con su propio temporizador, porque Open Payments no reporta el
+        vencimiento de una aprobación. Al vencer, cancela la aprobación, cierra el cobro y pasa a `expired`.
+        Repetir la misma `Idempotency-Key` con el mismo cuerpo devuelve el pago existente con 200.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentRequest'
+      responses:
+        '200':
+          description: Pago ya creado con esta `Idempotency-Key`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '201':
+          description: Pago creado.
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/RailUnavailable'
+
+  /payments/{paymentId}:
+    parameters:
+      - $ref: '#/components/parameters/PaymentId'
+    get:
+      tags: [payments]
+      operationId: getPayment
+      summary: Consultar un pago de riel
+      description: |
+        Devuelve el último estado conocido por el proxy, sin llamar al riel en esta petición.
+        El backend lo consulta al leer una operación pendiente (máximo una vez por segundo por pago) y en un
+        barrido de fondo cada 15 s.
+      responses:
+        '200':
+          description: Pago.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /payments/{paymentId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/PaymentId'
+    post:
+      tags: [payments]
+      operationId: cancelPayment
+      summary: Cancelar un cobro pendiente de aprobación
+      description: |
+        Solo `incoming` en `pending_approval`. Cancela la aprobación en el riel y cierra el cobro.
+        Después de la aprobación ya no se puede cancelar: responde 409 `payment_not_cancellable` y el pago sigue su
+        curso. Cancelar un pago ya cancelado devuelve 200 con el mismo pago.
+      responses:
+        '200':
+          description: Pago cancelado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/RailUnavailable'
+
+  /relia-grant:
+    get:
+      tags: [operator]
+      operationId: getReliaGrant
+      summary: Estado del permiso permanente de Relia
+      responses:
+        '200':
+          description: Estado del permiso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReliaGrant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [operator]
+      operationId: requestReliaGrant
+      summary: Pedir un nuevo permiso permanente para la billetera de Relia
+      description: |
+        Pide un permiso de pago con tope por intervalo. Devuelve `approvalUrl`, que el operador abre y aprueba en la
+        billetera de Relia. Mientras no se apruebe, el estado es `awaiting_approval` y los pagos `outgoing`
+        responden 503 `relia_grant_unavailable`. Un permiso nuevo aprobado reemplaza al anterior.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReliaGrantRequest'
+      responses:
+        '202':
+          description: Permiso pedido; falta la aprobación del operador.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReliaGrant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/RailUnavailable'
+
+  /health:
+    get:
+      tags: [health]
+      operationId: getHealth
+      summary: Estado del proxy, del riel y del permiso de Relia
+      security: []
+      responses:
+        '200':
+          description: Estado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '429':
+          description: Demasiadas consultas.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: Clave compartida entre backend y proxy.
+
+  parameters:
+    PaymentId:
+      name: paymentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Id del pago en el backend (`pagos.id`).
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Unauthorized:
+      description: Falta `X-Api-Key` o es incorrecta (`unauthorized`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Pago o billetera inexistente (`not_found`, `wallet_not_found`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: Conflicto de estado o de idempotencia (`idempotency_conflict`, `payment_not_cancellable`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ValidationError:
+      description: |
+        Cuerpo inválido (`validation_error`) o moneda distinta a la del riel (`unsupported_asset`), o
+        contraparte igual a la billetera de Relia (`same_wallet`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    RailUnavailable:
+      description: |
+        El riel no respondió (`rail_unavailable`) o Relia no tiene permiso activo para pagar
+        (`relia_grant_unavailable`). No se creó ni cambió nada; se puede reintentar.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    PaymentPointer:
+      type: string
+      description: Payment pointer ($dominio/ruta).
+      pattern: '^\$[^\s/]+(/\S*)?$'
+      examples: ['$ilp.interledger-test.dev/rosa-test']
+
+    Amount:
+      type: object
+      description: Monto en unidades mínimas del riel. COP con escala 2 → $50.000 = "5000000".
+      required: [value, assetCode, assetScale]
+      properties:
+        value:
+          type: string
+          pattern: '^[0-9]+$'
+          examples: ['5000000']
+        assetCode:
+          type: string
+          examples: [COP]
+        assetScale:
+          type: integer
+          minimum: 0
+          maximum: 255
+          examples: [2]
+
+    WalletAddress:
+      type: object
+      required: [pointer, url, assetCode, assetScale]
+      properties:
+        pointer:
+          $ref: '#/components/schemas/PaymentPointer'
+        url:
+          type: string
+          format: uri
+          examples: ['https://ilp.interledger-test.dev/rosa-test']
+        assetCode:
+          type: string
+          examples: [COP]
+        assetScale:
+          type: integer
+          examples: [2]
+
+    Direction:
+      type: string
+      description: Visto desde Relia. `outgoing` = Relia paga (depósito, liquidación); `incoming` = Relia cobra (retiro, carga por Wallet).
+      enum: [outgoing, incoming]
+
+    PaymentStatus:
+      type: string
+      description: |
+        `pending_approval` solo en `incoming`, mientras el pagador no aprueba. `processing`: el dinero se está moviendo.
+        Finales: `completed`, `failed`, `rejected` (el pagador rechazó), `expired`, `cancelled`.
+        No existe `unknown`: si el riel no confirma, el pago sigue en `processing` y el proxy sigue consultando.
+      enum: [pending_approval, processing, completed, failed, rejected, expired, cancelled]
+
+    CreatePaymentRequest:
+      type: object
+      required: [direction, counterparty, receiveAmount]
+      properties:
+        direction:
+          $ref: '#/components/schemas/Direction'
+        counterparty:
+          $ref: '#/components/schemas/PaymentPointer'
+          description: Con `outgoing`, quien recibe. Con `incoming`, quien paga. La otra punta es siempre la billetera de Relia.
+        receiveAmount:
+          $ref: '#/components/schemas/Amount'
+          description: Lo que recibe el destino, exacto.
+        expiresAt:
+          type: string
+          format: date-time
+          description: Obligatorio en `incoming`. Plazo para aprobar (5 min en retiro y carga por Wallet).
+        description:
+          type: string
+          maxLength: 140
+          description: Texto que puede ver el pagador en su billetera.
+          examples: ['Retiro OP-000123 · Tienda Doña Rosa']
+
+    Approval:
+      type: object
+      description: Cómo aprueba el pagador. Open Payments usa `redirect`; un adaptador Bre-B podría usar `qr`.
+      required: [method]
+      properties:
+        method:
+          type: string
+          enum: [redirect, qr]
+        url:
+          type: string
+          format: uri
+          description: Con `redirect`, la URL donde el pagador aprueba en su billetera.
+        payload:
+          type: string
+          description: Con `qr`, el contenido del código.
+
+    FailureCode:
+      type: string
+      description: Motivo técnico de un pago `failed`.
+      enum:
+        - insufficient_funds
+        - quote_expired
+        - relia_grant_unavailable
+        - partial_payment
+        - rail_error
+
+    RailReferences:
+      type: object
+      description: Identificadores en el riel, para trazabilidad y conciliación.
+      properties:
+        incomingPaymentUrl:
+          type: [string, 'null']
+          format: uri
+        quoteUrl:
+          type: [string, 'null']
+          format: uri
+        outgoingPaymentUrl:
+          type: [string, 'null']
+          format: uri
+
+    Payment:
+      type: object
+      required: [id, idempotencyKey, direction, status, sender, receiver, receiveAmount, createdAt, updatedAt, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id del pago en el proxy (`railPaymentId` en el backend).
+        idempotencyKey:
+          type: string
+          format: uuid
+          description: Eco del id del pago en el backend.
+        direction:
+          $ref: '#/components/schemas/Direction'
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        sender:
+          $ref: '#/components/schemas/PaymentPointer'
+        receiver:
+          $ref: '#/components/schemas/PaymentPointer'
+        receiveAmount:
+          $ref: '#/components/schemas/Amount'
+        debitAmount:
+          description: Lo que se debita al pagador según la cotización. Null hasta cotizar.
+          oneOf:
+            - $ref: '#/components/schemas/Amount'
+            - type: 'null'
+        receivedAmount:
+          description: Lo que efectivamente recibió el destino. Null hasta que empiece a llegar.
+          oneOf:
+            - $ref: '#/components/schemas/Amount'
+            - type: 'null'
+        approval:
+          description: Solo en `incoming` mientras esté `pending_approval`.
+          oneOf:
+            - $ref: '#/components/schemas/Approval'
+            - type: 'null'
+        expiresAt:
+          type: [string, 'null']
+          format: date-time
+        failureCode:
+          oneOf:
+            - $ref: '#/components/schemas/FailureCode'
+            - type: 'null'
+        failureDetail:
+          type: [string, 'null']
+          description: Mensaje del riel, para soporte.
+        rail:
+          $ref: '#/components/schemas/RailReferences'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: [string, 'null']
+          format: date-time
+        version:
+          type: integer
+          minimum: 1
+          description: Crece con cada cambio. El backend descarta lecturas con una versión menor a la que ya procesó.
+
+    ReliaGrantRequest:
+      type: object
+      required: [debitLimit, interval]
+      properties:
+        debitLimit:
+          $ref: '#/components/schemas/Amount'
+          description: Tope de pagos por intervalo.
+        interval:
+          type: string
+          description: Intervalo repetitivo ISO 8601.
+          examples: ['R/2026-10-16T00:00:00-05:00/P1D']
+
+    ReliaGrant:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [active, awaiting_approval, exhausted, missing]
+        approvalUrl:
+          type: [string, 'null']
+          format: uri
+          description: Solo en `awaiting_approval`.
+        debitLimit:
+          oneOf:
+            - $ref: '#/components/schemas/Amount'
+            - type: 'null'
+        interval:
+          type: [string, 'null']
+        approvedAt:
+          type: [string, 'null']
+          format: date-time
+
+    Health:
+      type: object
+      required: [status, rail, reliaGrant]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        rail:
+          type: string
+          enum: [openPayments]
+        reliaWallet:
+          $ref: '#/components/schemas/WalletAddress'
+        reliaGrant:
+          type: string
+          enum: [active, awaiting_approval, exhausted, missing]
+
+    ErrorCode:
+      type: string
+      enum:
+        - validation_error
+        - unauthorized
+        - not_found
+        - wallet_not_found
+        - idempotency_conflict
+        - payment_not_cancellable
+        - unsupported_asset
+        - same_wallet
+        - relia_grant_unavailable
+        - rail_unavailable
+
+    Problem:
+      type: object
+      description: RFC 9457.
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          default: about:blank
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        code:
+          $ref: '#/components/schemas/ErrorCode'

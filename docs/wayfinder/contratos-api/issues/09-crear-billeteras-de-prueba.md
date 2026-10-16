@@ -1,7 +1,7 @@
 # Crear las billeteras de prueba y confirmar COP
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 03
 Labels: wayfinder:task
 
@@ -17,3 +17,12 @@ El contrato de riel necesita saber con qué moneda y escala opera el demo. Eso s
 6. Si COP no está disponible: repetir en USD y registrar que se usará el plan B (tasa fija en el backend).
 
 Resuelto cuando estén anotados los pointers reales, la moneda y escala, el saldo de Relia y dónde viven las llaves.
+
+## Respuesta
+
+1. Ok
+2. ok
+3. ok
+4. si
+5. ok
+6. COP si está disponible
