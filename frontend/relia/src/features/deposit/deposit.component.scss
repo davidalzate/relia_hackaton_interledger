@@ -1,6 +1,163 @@
-main {
+main.container-ops {
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding-block: 1.5rem;
+}
+
+h1,
+h2,
+p,
+dl,
+dd {
+  margin: 0;
+}
+
+.subtitle {
+  margin-top: 4px;
+  color: var(--relia-muted-text);
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  label {
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+}
+
+// El input lo pinta PrimeNG dentro de p-inputnumber
+:host ::ng-deep .amount-input {
+  width: 100%;
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+
+  label {
+    font-weight: 600;
+  }
+}
+
+.hint {
+  font-size: 0.8125rem;
+  color: var(--relia-muted-text);
+}
+
+.key,
+.error {
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.key-checking {
+  background: var(--relia-page);
+  color: var(--relia-muted-text);
+}
+
+.key-ok {
+  background: var(--relia-completed);
+  color: var(--relia-completed-text);
+}
+
+.key-error,
+.error {
+  background: var(--relia-failed);
+  color: var(--relia-failed-text);
+
+  a {
+    color: inherit;
+  }
+}
+
+.tell,
+.mine {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--relia-radius-card);
+
+  h2 {
+    font-size: 0.875rem;
+  }
+}
+
+.tell {
+  background: var(--relia-info);
+  color: var(--relia-info-text);
+}
+
+.mine {
+  background: var(--relia-page);
+}
+
+.highlight {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  span {
+    font-weight: 600;
+  }
+
+  .amount {
+    font-size: 2.5rem;
+  }
+}
+
+dl {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  dd {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.plus {
+  color: var(--relia-success);
+}
+
+.success {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-block: 4rem;
+}
+
+.success-label {
+  font-weight: 600;
+}
+
+.success-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
 }
