@@ -1,5 +1,5 @@
 <main class="container-ops">
-  <a class="link-back" routerLink="/caja/retirar">← Volver a la caja</a>
+  <a class="link-back" [routerLink]="backLink()">← Volver a la caja</a>
 
   <header>
     <h1>Teléfono del usuario</h1>
@@ -29,7 +29,15 @@
         <button type="button" class="btn-secondary" (click)="reject()">Rechazar</button>
       </div>
     </section>
-  } @else {
+  } @else if (!invitations().length) {
     <p class="card">No hay solicitudes pendientes.</p>
+  }
+
+  @for (invite of invitations(); track invite.sentAt) {
+    <section class="card whatsapp" aria-label="Mensaje de WhatsApp">
+      <strong>WhatsApp</strong>
+      <p class="bubble">{{ invite.message }}</p>
+      <a class="btn-primary" routerLink="/vincular">Abrir enlace para vincular</a>
+    </section>
   }
 </main>

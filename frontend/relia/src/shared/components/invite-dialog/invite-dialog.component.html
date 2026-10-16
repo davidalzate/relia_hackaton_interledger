@@ -1,0 +1,35 @@
+<p-dialog
+  [(visible)]="visible"
+  [modal]="true"
+  [closable]="false"
+  [draggable]="false"
+  [resizable]="false"
+  maskStyleClass="modal-mask"
+  [style]="{ width: 'min(420px, calc(100vw - 32px))' }"
+  ariaLabelledBy="invite-title"
+>
+  <ng-template #header>
+    <div class="title">
+      <h2 id="invite-title">Esta llave no existe</h2>
+      <span class="badge-sim">Simulación</span>
+    </div>
+  </ng-template>
+
+  <p>
+    El {{ formattedPhone() }} no tiene billetera vinculada. ¿Quieres enviarle una invitación por
+    WhatsApp?
+  </p>
+
+  <p class="label">Enlace generado</p>
+  <p class="link">{{ link() }}</p>
+
+  <p class="label">Mensaje</p>
+  <p class="bubble">{{ message }}</p>
+
+  <ng-template #footer>
+    <div class="actions">
+      <button type="button" class="btn-success" (click)="send()">Sí, enviar mensaje</button>
+      <button type="button" class="btn-secondary" (click)="visible.set(false)">Ahora no</button>
+    </div>
+  </ng-template>
+</p-dialog>

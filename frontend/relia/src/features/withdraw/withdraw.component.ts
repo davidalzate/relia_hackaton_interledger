@@ -20,6 +20,7 @@ import { interval, map } from 'rxjs';
 
 import { AgentService, WITHDRAWAL_TTL_MS } from '../../core/services/agent.service';
 import { AGENT_COMMISSION, RELIA_FEE } from '../../shared/types/agent';
+import { InviteDialogComponent } from '../../shared/components/invite-dialog/invite-dialog.component';
 import { formatPhone, phoneDigits } from '../../shared/utils/phone';
 import { withdrawBreakdown } from './withdraw-breakdown';
 
@@ -37,6 +38,7 @@ type KeyState = 'idle' | 'checking' | 'found' | 'missing' | 'error';
     InputNumber,
     InputText,
     ProgressSpinner,
+    InviteDialogComponent,
   ],
   templateUrl: './withdraw.component.html',
   styleUrl: './withdraw.component.scss',
@@ -65,9 +67,12 @@ export class WithdrawComponent {
   });
 
   protected readonly keyState = signal<KeyState>('idle');
+  /** B5: modal de invitación cuando la llave no existe */
+  protected readonly inviteOpen = signal(false);
+  protected readonly inviteSent = signal(false);
 
   protected readonly amount = computed(() => this.value().amount ?? 0);
-  private readonly phoneDigits = computed(() => phoneDigits(this.value().phone ?? ''));
+  protected readonly phoneDigits = computed(() => phoneDigits(this.value().phone ?? ''));
   protected readonly phoneComplete = computed(() => this.phoneDigits().length === 10);
   protected readonly amountTooLow = computed(() => this.amount() > 0 && this.amount() <= RELIA_FEE);
   protected readonly breakdown = computed(() =>
@@ -94,9 +99,10 @@ export class WithdrawComponent {
 
   constructor() {
     // Cambiar el celular borra la validación previa
-    this.form.controls.phone.valueChanges
-      .pipe(takeUntilDestroyed())
-      .subscribe(() => this.keyState.set('idle'));
+    this.form.controls.phone.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => {
+      this.keyState.set('idle');
+      this.inviteSent.set(false);
+    });
   }
 
   protected formatPhone(): void {
@@ -111,7 +117,10 @@ export class WithdrawComponent {
       .validateKey(this.phoneDigits(), this.form.getRawValue().simulateMissing)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (exists) => this.keyState.set(exists ? 'found' : 'missing'),
+        next: (exists) => {
+          this.keyState.set(exists ? 'found' : 'missing');
+          this.inviteOpen.set(!exists);
+        },
         error: () => this.keyState.set('error'),
       });
   }

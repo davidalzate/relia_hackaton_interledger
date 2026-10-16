@@ -136,7 +136,16 @@
             <p class="key key-ok">Llave validada: el celular tiene billetera Relia.</p>
           }
           @case ('missing') {
-            <p class="key key-error">Este celular no tiene billetera Relia.</p>
+            <div class="key key-error">
+              <p>Este celular no tiene billetera Relia.</p>
+              @if (inviteSent()) {
+                <p>Invitación enviada por WhatsApp.</p>
+              } @else {
+                <button type="button" class="link-inline" (click)="inviteOpen.set(true)">
+                  Invitar por WhatsApp
+                </button>
+              }
+            </div>
           }
           @case ('error') {
             <p class="key key-error">No pudimos validar la llave. Intenta de nuevo.</p>
@@ -239,4 +248,9 @@
       }
     </form>
   </main>
+  <app-invite-dialog
+    [phone]="phoneDigits()"
+    [(visible)]="inviteOpen"
+    (sent)="inviteSent.set(true)"
+  />
 }
