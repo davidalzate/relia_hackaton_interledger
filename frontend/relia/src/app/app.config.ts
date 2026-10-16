@@ -8,7 +8,7 @@ import {
   provideZoneChangeDetection,
 } from '@angular/core';
 import { provideHttpClient, withInterceptors, withXsrfConfiguration } from '@angular/common/http';
-import { provideRouter } from '@angular/router';
+import { provideRouter, withComponentInputBinding } from '@angular/router';
 import { providePrimeNG } from 'primeng/config';
 
 import { routes } from './app.routes';
@@ -26,7 +26,7 @@ export const appConfig: ApplicationConfig = {
     { provide: DEFAULT_CURRENCY_CODE, useValue: 'COP' },
     provideBrowserGlobalErrorListeners(),
     provideZoneChangeDetection({ eventCoalescing: true }),
-    provideRouter(routes),
+    provideRouter(routes, withComponentInputBinding()),
     provideHttpClient(
       withInterceptors([credentialsInterceptor, authInterceptor, errorInterceptor]),
       withXsrfConfiguration({ cookieName: 'XSRF-TOKEN', headerName: 'X-XSRF-TOKEN' }),

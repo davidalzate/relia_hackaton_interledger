@@ -1,17 +1,91 @@
-@if (completed(); as op) {
-  <!-- shortcut: pantalla de éxito mínima hasta tener su especificación -->
-  <main class="screen-success">
-    <div class="container-ops success">
-      <p class="success-label">Depósito completado</p>
-      <p class="amount">{{ op.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
-      <p>Operación {{ op.id }}</p>
-      <div class="success-actions">
-        <button type="button" class="btn-secondary" (click)="newOperation()">
-          Nueva operación
-        </button>
-        <a class="btn-secondary" routerLink="/caja">Volver a Caja</a>
+@let s = step();
+@if (s.kind === 'sending') {
+  <!-- B2.4 -->
+  <main class="container-ops center">
+    <section class="card sending" role="status" aria-live="polite">
+      <p-progressspinner strokeWidth="4" ariaLabel="Enviando" />
+      <h1>Enviando a la billetera</h1>
+      <p class="amount">{{ s.walletOut | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+      <p class="hint">No cierres esta pantalla.</p>
+    </section>
+  </main>
+} @else if (s.kind === 'done') {
+  <!-- B2.5 -->
+  <main class="container-ops">
+    <section class="card result-ok" aria-labelledby="done-title">
+      <h1 id="done-title">Depósito completado</h1>
+      <div>
+        <p class="amount">
+          {{ s.receipt.walletOut | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+        </p>
+        <p>llegaron a la billetera del usuario</p>
       </div>
-    </div>
+      <dl>
+        <div>
+          <dt>Efectivo recibido</dt>
+          <dd>{{ s.receipt.operation.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+        </div>
+        <div>
+          <dt>Comisión Relia</dt>
+          <dd>{{ fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+        </div>
+        <div>
+          <dt>Cupo antes</dt>
+          <dd>{{ s.receipt.before.cupo | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+        </div>
+        <div>
+          <dt>Cupo después</dt>
+          <dd>{{ s.receipt.after.cupo | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+        </div>
+        <div>
+          <dt>Efectivo en caja</dt>
+          <dd>
+            {{ s.receipt.before.cash | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} →
+            {{ s.receipt.after.cash | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+          </dd>
+        </div>
+        <div>
+          <dt>Operación</dt>
+          <dd>{{ s.receipt.operation.id }}</dd>
+        </div>
+      </dl>
+      <div class="result-actions">
+        <button type="button" class="btn-light" (click)="newOperation()">Nueva operación</button>
+        <a class="btn-outline-light" [routerLink]="['/caja/comprobante', s.receipt.operation.id]">
+          Ver comprobante
+        </a>
+        <a class="link-light" routerLink="/caja">Volver a la caja</a>
+      </div>
+    </section>
+
+    <!-- Efecto: SMS que recibe el usuario (simulado) -->
+    <aside class="sms" aria-label="SMS enviado al usuario">
+      <span class="badge-sim">Simulación</span>
+      <p>
+        Recibiste {{ s.receipt.walletOut | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} en tu
+        billetera Relia. Operación {{ s.receipt.operation.id }}.
+      </p>
+    </aside>
+  </main>
+} @else if (s.kind === 'error') {
+  <!-- B2.6 -->
+  <main class="container-ops">
+    <section class="card result-error" role="alert" aria-labelledby="error-title">
+      @if (s.error === 'cupo') {
+        <h1 id="error-title">Cupo insuficiente</h1>
+        <p>No hay cupo para este depósito. Carga cupo y vuelve a intentar.</p>
+      } @else {
+        <h1 id="error-title">Error de red</h1>
+        <p>El simulador no respondió. No se movió dinero. Intenta de nuevo.</p>
+      }
+      <p class="hint">
+        Operación {{ s.operationId }} · {{ s.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+      </p>
+      <div class="result-actions">
+        <button type="button" class="btn-primary" (click)="retry()">Intentar de nuevo</button>
+        <a class="link-back" routerLink="/caja">Volver a la caja</a>
+      </div>
+    </section>
   </main>
 } @else {
   <main class="container-ops">
