@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Observable, catchError, map, switchMap, tap, throwError, timeout } from 'rxjs';
+import { Observable, catchError, map, of, switchMap, tap, throwError, timeout } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import {
@@ -11,11 +11,31 @@ import {
   SessionUser,
 } from '../../shared/schemas/auth.schema';
 
+// sessionStorage y no localStorage: sobrevive a recargar, muere al cerrar la pestaña
+const TOKEN_KEY = 'relia.token';
+
+const storage = {
+  get: () => {
+    try {
+      return sessionStorage.getItem(TOKEN_KEY);
+    } catch {
+      return null;
+    }
+  },
+  set: (token: string | null) => {
+    try {
+      if (token) sessionStorage.setItem(TOKEN_KEY, token);
+      else sessionStorage.removeItem(TOKEN_KEY);
+    } catch {
+      // Sin storage (modo privado): la sesión queda solo en memoria
+    }
+  },
+};
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
 
-  // Nunca en localStorage: la sesión vive solo en memoria
   private readonly _token = signal<string | null>(null);
   private readonly _agentId = signal<string | null>(null);
   private readonly _user = signal<SessionUser | null>(null);
@@ -31,28 +51,52 @@ export class AuthService {
     return this.http
       .post(`${environment.apiUrl}/auth/login`, { email: email.trim().toLowerCase(), password })
       .pipe(
-        map((res) => LoginResponseSchema.parse(res)),
-        tap(({ accessToken, agentId }) => {
-          this._token.set(accessToken);
-          this._agentId.set(agentId ?? null);
-        }),
-        switchMap(() => this.http.get(`${environment.apiUrl}/me`)),
-        map((res) => MeSchema.parse(res)),
-        map(({ role, email, name, agent }) => {
-          this._user.set({ role, email, name, store: agent?.name });
-          return role;
-        }),
         timeout(environment.httpTimeoutMs),
-        catchError((error: unknown) => {
-          this.clear();
-          return throwError(() => error);
-        }),
+        map((res) => LoginResponseSchema.parse(res)),
+        tap(({ accessToken }) => this.setToken(accessToken)),
+        switchMap(() => this.loadMe()),
+        this.clearOnError(),
       );
   }
 
+  /** Al arrancar: si hay token guardado, rehidrata el perfil. Nunca falla; sin sesión emite null */
+  restore(): Observable<Role | null> {
+    const token = storage.get();
+    if (!token) return of(null);
+    this._token.set(token);
+    return this.loadMe().pipe(
+      this.clearOnError(),
+      catchError(() => of(null)),
+    );
+  }
+
   clear(): void {
-    this._token.set(null);
+    this.setToken(null);
     this._agentId.set(null);
     this._user.set(null);
+  }
+
+  private setToken(token: string | null): void {
+    this._token.set(token);
+    storage.set(token);
+  }
+
+  private loadMe(): Observable<Role> {
+    return this.http.get(`${environment.apiUrl}/me`).pipe(
+      timeout(environment.httpTimeoutMs),
+      map((res) => MeSchema.parse(res)),
+      map(({ role, email, name, agent }) => {
+        this._agentId.set(agent?.id ?? null);
+        this._user.set({ role, email, name, store: agent?.name });
+        return role;
+      }),
+    );
+  }
+
+  private clearOnError<T>() {
+    return catchError<T, Observable<never>>((error: unknown) => {
+      this.clear();
+      return throwError(() => error);
+    });
   }
 }
