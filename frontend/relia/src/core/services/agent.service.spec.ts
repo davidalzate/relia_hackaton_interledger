@@ -135,3 +135,32 @@ describe('AgentService efectivo en caja', () => {
     expect(agent.balances()).toEqual({ cupo: 10, commission: 5, cash: 0 });
   });
 });
+
+describe('AgentService saldos por operación (B8)', () => {
+  it('pendiente sin saldos; completada y fallida con antes/después', () => {
+    vi.useFakeTimers();
+    const agent = TestBed.inject(AgentService);
+    agent['_balances'].set({ cupo: 0, commission: 0, cash: 80_000 });
+
+    agent.requestWithdrawal({
+      phone: '3000000001',
+      amount: 50_000,
+      roundForUser: true,
+      cashOut: 50_000,
+      walletIn: 51_000,
+      commission: 500,
+    });
+    expect(agent.operations()[0].before).toBeUndefined();
+    agent.approveWithdrawal();
+    expect(agent.operations()[0]).toMatchObject({
+      before: { cupo: 0, cash: 80_000, commission: 0 },
+      after: { cupo: 50_000, cash: 30_000, commission: 500 },
+    });
+
+    agent.requestCupoLoad({ method: 'breb', amount: 10 });
+    agent.failCupoLoad('rejected');
+    const failed = agent.operations()[0];
+    expect(failed.before).toEqual(failed.after);
+    vi.useRealTimers();
+  });
+});

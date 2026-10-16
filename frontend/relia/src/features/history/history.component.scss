@@ -4,3 +4,198 @@ main {
   gap: 16px;
   padding-block: 1.5rem;
 }
+
+h1,
+p,
+dl,
+dd {
+  margin: 0;
+}
+
+.summary {
+  margin-top: 4px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.hint {
+  margin-top: 4px;
+  font-size: 0.875rem;
+  color: var(--relia-muted-text);
+}
+
+.filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.pill {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border: 1px solid var(--relia-line);
+  border-radius: 9999px;
+  background: var(--relia-surface);
+  color: var(--relia-text);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &.active {
+    border-color: var(--relia-cobalt);
+    background: var(--relia-cobalt);
+    color: #fff;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--relia-cobalt);
+    outline-offset: 2px;
+  }
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.strong {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pending {
+  color: var(--relia-pending-text);
+}
+
+.table-wrap {
+  display: none;
+  padding: 0;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+th,
+td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--relia-line);
+  text-align: left;
+}
+
+th.num,
+td.num {
+  text-align: right;
+}
+
+th {
+  font-size: 0.75rem;
+  color: var(--relia-muted-text);
+  white-space: nowrap;
+}
+
+tbody tr {
+  cursor: pointer;
+
+  &:hover {
+    background: var(--relia-page);
+  }
+
+  &:last-child td {
+    border-bottom: 0;
+  }
+}
+
+td a {
+  font-weight: 600;
+  color: var(--relia-cobalt);
+}
+
+.op-id,
+.op-meta {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--relia-muted-text);
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.op-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: inherit;
+  text-decoration: none;
+  border: 1px solid transparent;
+
+  &:hover {
+    border-color: var(--relia-cobalt);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--relia-cobalt);
+    outline-offset: 2px;
+  }
+}
+
+.op-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.op-type {
+  font-weight: 600;
+}
+
+.op-end {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 16px;
+  font-size: 0.8125rem;
+
+  dt {
+    color: var(--relia-muted-text);
+  }
+
+  dd {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.empty {
+  color: var(--relia-muted-text);
+  text-align: center;
+}
+
+@media (min-width: 900px) {
+  .table-wrap {
+    display: block;
+  }
+
+  .cards {
+    display: none;
+  }
+}

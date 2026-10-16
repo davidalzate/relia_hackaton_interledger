@@ -4,7 +4,7 @@ export interface AgentBalances {
   cash: number;
 }
 
-export type OperationType = 'deposit' | 'withdrawal' | 'cupo' | 'cash' | 'cash-set';
+export type OperationType = 'deposit' | 'withdrawal' | 'cupo' | 'cash' | 'cash-set' | 'commission';
 export type OperationStatus = 'pending' | 'completed' | 'failed' | 'expired' | 'cancelled';
 
 export interface Operation {
@@ -14,6 +14,9 @@ export interface Operation {
   /** ISO 8601 */
   createdAt: string;
   status: OperationStatus;
+  /** Saldos alrededor de la operación; ausentes mientras está pendiente */
+  before?: AgentBalances;
+  after?: AgentBalances;
 }
 
 export const OPERATION_LABEL: Record<OperationType, string> = {
@@ -22,6 +25,7 @@ export const OPERATION_LABEL: Record<OperationType, string> = {
   cupo: 'Carga de cupo',
   cash: 'Asignación de efectivo',
   'cash-set': 'Ajuste de efectivo',
+  commission: 'Pago de comisión',
 };
 
 export const STATUS_LABEL: Record<OperationStatus, string> = {
