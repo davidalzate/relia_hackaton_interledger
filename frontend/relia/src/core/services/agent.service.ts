@@ -97,6 +97,11 @@ export type CupoLoad =
   | (CupoLoadBase & { status: 'done'; before: AgentBalances; after: AgentBalances })
   | (CupoLoadBase & { status: 'error'; error: CupoLoadErrorKind });
 
+interface BalanceChange {
+  before: AgentBalances;
+  after: AgentBalances;
+}
+
 /** B7: sumar efectivo o fijar el total contado en caja */
 export type CashMode = 'add' | 'set';
 
@@ -191,7 +196,7 @@ export class AgentService {
     this._withdrawal.set({
       status: 'approved',
       request: current.request,
-      operation: this.setStatus(current.operation, 'completed'),
+      operation: this.setStatus(current.operation, 'completed', { before, after }),
       before,
       after,
     });
@@ -218,11 +223,14 @@ export class AgentService {
 
   /** B7: ajusta solo el efectivo; cupo y comisión no cambian */
   updateCash(mode: CashMode, amount: number): CashUpdate {
-    const before = this._balances().cash;
-    const after = mode === 'add' ? before + amount : amount;
-    this._balances.update((b) => ({ ...b, cash: after }));
-    const operation = this.record(amount, 'completed', mode === 'add' ? 'cash' : 'cash-set');
-    return { operation, before, after };
+    const before = this._balances();
+    const after = { ...before, cash: mode === 'add' ? before.cash + amount : amount };
+    this._balances.set(after);
+    const operation = this.record(amount, 'completed', mode === 'add' ? 'cash' : 'cash-set', {
+      before,
+      after,
+    });
+    return { operation, before: before.cash, after: after.cash };
   }
 
   /** B6.3: genera el QR Bre-B o la solicitud a la Wallet; vence según el método */
@@ -249,7 +257,7 @@ export class AgentService {
     this._cupoLoad.set({
       status: 'done',
       request: current.request,
-      operation: this.setStatus(current.operation, 'completed'),
+      operation: this.setStatus(current.operation, 'completed', { before, after }),
       before,
       after,
     });
@@ -283,13 +291,19 @@ export class AgentService {
       commission: before.commission + commission,
     };
     this._balances.set(after);
-    return { operation: this.record(cashIn, 'completed'), walletOut, before, after };
+    return {
+      operation: this.record(cashIn, 'completed', 'deposit', { before, after }),
+      walletOut,
+      before,
+      after,
+    };
   }
 
   private record(
     amount: number,
     status: Operation['status'],
     type: Operation['type'] = 'deposit',
+    balances?: BalanceChange,
   ): Operation {
     const operation: Operation = {
       id: `RL-${String(++this.sequence).padStart(4, '0')}`,
@@ -297,14 +311,26 @@ export class AgentService {
       amount,
       status,
       createdAt: new Date().toISOString(),
+      ...this.snapshot(status, balances),
     };
     this._operations.update((ops) => [operation, ...ops]);
     return operation;
   }
 
-  private setStatus(operation: Operation, status: Operation['status']): Operation {
-    const updated = { ...operation, status };
+  private setStatus(
+    operation: Operation,
+    status: Operation['status'],
+    balances?: BalanceChange,
+  ): Operation {
+    const updated = { ...operation, status, ...this.snapshot(status, balances) };
     this._operations.update((ops) => ops.map((op) => (op.id === operation.id ? updated : op)));
     return updated;
+  }
+
+  /** Saldos para el historial (B8): sin cambios si no se pasan; ninguno si sigue pendiente */
+  private snapshot(status: Operation['status'], balances?: BalanceChange): Partial<BalanceChange> {
+    if (status === 'pending') return {};
+    const current = this._balances();
+    return balances ?? { before: current, after: current };
   }
 }
