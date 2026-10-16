@@ -10,10 +10,31 @@ export const routes: Routes = [
   },
   {
     path: 'caja',
-    title: 'Caja | Relia',
     canActivate: [authGuard],
     data: { role: 'agent' },
-    loadComponent: () => import('../features/home/home.component').then((m) => m.HomeComponent),
+    loadComponent: () =>
+      import('../features/agent-shell/agent-shell.component').then((m) => m.AgentShellComponent),
+    children: [
+      {
+        path: '',
+        title: 'Caja | Relia',
+        loadComponent: () => import('../features/home/home.component').then((m) => m.HomeComponent),
+      },
+      {
+        path: 'historial',
+        title: 'Historial | Relia',
+        loadComponent: () =>
+          import('../features/history/history.component').then((m) => m.HistoryComponent),
+      },
+      {
+        path: 'efectivo',
+        title: 'Efectivo en caja | Relia',
+        loadComponent: () =>
+          import('../features/cash-on-hand/cash-on-hand.component').then(
+            (m) => m.CashOnHandComponent,
+          ),
+      },
+    ],
   },
   {
     path: 'admin',

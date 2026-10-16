@@ -1,0 +1,68 @@
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--relia-surface);
+  border-bottom: 1px solid var(--relia-line);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+
+  .wordmark {
+    font-size: 24px;
+  }
+}
+
+.store {
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.menu-button {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--relia-text);
+  font-size: 1.25rem;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--relia-page);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--relia-cobalt);
+    outline-offset: 2px;
+  }
+}
+
+// El start template conserva el encapsulamiento aunque el menú se pinte en body
+.menu-user {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px 8px;
+  font-size: 0.875rem;
+
+  span {
+    color: var(--relia-muted-text);
+  }
+}
