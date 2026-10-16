@@ -1,9 +1,4 @@
-import { AgentBalances } from '../../shared/types/agent';
-
-/** Comisión que paga el usuario por depósito (COP) */
-export const RELIA_FEE = 1_000;
-/** Parte de esa comisión que gana el corresponsal (COP) */
-export const AGENT_COMMISSION = 500;
+import { AgentBalances, RELIA_FEE } from '../../shared/types/agent';
 
 export interface DepositBreakdown {
   /** Efectivo que entrega el usuario y recibe el corresponsal */

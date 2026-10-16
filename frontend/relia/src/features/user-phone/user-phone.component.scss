@@ -1,0 +1,55 @@
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-block: 1.5rem;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.25rem;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sms {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  border-radius: var(--relia-radius-card);
+  background: var(--relia-info);
+  color: var(--relia-info-text);
+  font-size: 0.875rem;
+}
+
+.hint {
+  font-size: 0.875rem;
+  color: var(--relia-muted-text);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+
+  button {
+    flex: 1 1 140px;
+  }
+}

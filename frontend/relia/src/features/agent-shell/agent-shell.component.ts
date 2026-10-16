@@ -4,6 +4,7 @@ import { ConfirmationService, MenuItem } from 'primeng/api';
 import { ConfirmDialog } from 'primeng/confirmdialog';
 import { Menu } from 'primeng/menu';
 
+import { AgentService } from '../../core/services/agent.service';
 import { AuthService } from '../../core/services/auth.service';
 
 // B0: encabezado fijo y menú del corresponsal; envuelve todas sus vistas.
@@ -18,6 +19,7 @@ import { AuthService } from '../../core/services/auth.service';
 })
 export class AgentShellComponent {
   private readonly auth = inject(AuthService);
+  private readonly agent = inject(AgentService);
   private readonly router = inject(Router);
 
   protected readonly user = this.auth.user;
@@ -31,8 +33,9 @@ export class AgentShellComponent {
     { label: 'Cerrar sesión', styleClass: 'menu-danger', command: () => this.logout() },
   ];
 
-  // Limpiar la sesión descarta cualquier flujo en curso (todo vive en memoria)
+  // Cerrar sesión descarta cualquier flujo en curso (p. ej. un retiro esperando aprobación)
   private logout(): void {
+    this.agent.clearWithdrawal();
     this.auth.clear();
     void this.router.navigateByUrl('/login');
   }

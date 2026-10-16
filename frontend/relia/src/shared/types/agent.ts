@@ -39,3 +39,8 @@ export const STATUS_BADGE: Record<OperationStatus, string> = {
   expired: 'badge-muted',
   cancelled: 'badge-muted',
 };
+
+/** Comisión que paga el usuario por depósito o retiro (COP) */
+export const RELIA_FEE = 1_000;
+/** Parte de esa comisión que gana el corresponsal (COP) */
+export const AGENT_COMMISSION = 500;

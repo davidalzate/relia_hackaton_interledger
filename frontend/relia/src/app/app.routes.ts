@@ -69,6 +69,12 @@ export const routes: Routes = [
       import('../features/admin-home/admin-home.component').then((m) => m.AdminHomeComponent),
   },
   {
+    path: 'telefono',
+    title: 'Teléfono del usuario | Relia',
+    loadComponent: () =>
+      import('../features/user-phone/user-phone.component').then((m) => m.UserPhoneComponent),
+  },
+  {
     path: 'vincular',
     title: 'Vincula tu celular | Relia',
     loadComponent: () =>

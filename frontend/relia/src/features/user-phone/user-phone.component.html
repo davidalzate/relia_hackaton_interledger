@@ -1,0 +1,35 @@
+<main class="container-ops">
+  <a class="link-back" routerLink="/caja/retirar">← Volver a la caja</a>
+
+  <header>
+    <h1>Teléfono del usuario</h1>
+    <span class="badge-sim">Simulación</span>
+  </header>
+
+  @if (pending(); as w) {
+    <aside class="sms" aria-label="SMS recibido">
+      <strong>SMS</strong>
+      <p>
+        {{ store() }} te solicita un pago de
+        {{ w.request.walletIn | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}. Apruébalo en Mi
+        billetera.
+      </p>
+    </aside>
+
+    <section class="card" aria-labelledby="wallet-title">
+      <h2 id="wallet-title">Mi billetera</h2>
+      <p>Solicitud de pago de {{ store() }}</p>
+      <p class="amount">{{ w.request.walletIn | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+      <p class="hint">
+        Recibirás {{ w.request.cashOut | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} en efectivo.
+        Operación {{ w.operation.id }}.
+      </p>
+      <div class="actions">
+        <button type="button" class="btn-primary" (click)="approve()">Aprobar</button>
+        <button type="button" class="btn-secondary" (click)="reject()">Rechazar</button>
+      </div>
+    </section>
+  } @else {
+    <p class="card">No hay solicitudes pendientes.</p>
+  }
+</main>
