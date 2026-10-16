@@ -2,6 +2,8 @@ import { createAuthenticatedClient } from '@interledger/open-payments';
 import { pino } from 'pino';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
+import { NonInteractiveGrants } from './grants.js';
+import { PaymentService } from './payments.js';
 import { ReliaGrantService } from './relia-grant.js';
 import { openStore } from './store.js';
 import { Synchronizer } from './synchronizer.js';
@@ -18,6 +20,8 @@ async function main(): Promise<void> {
     // El SDK registra la URL de cada petición fallida (p. ej. la continuación GNAP). Los errores del riel
     // los registra el proxy con describeRailError.
     logLevel: 'silent',
+    // Una petición colgada no debe frenar al sincronizador ni a un POST.
+    requestTimeoutMs: 10_000,
   });
 
   const wallets = new WalletResolver(client);
@@ -28,8 +32,20 @@ async function main(): Promise<void> {
 
   const db = openStore(config.databasePath);
   const reliaGrants = new ReliaGrantService(db, client, reliaWallet, logger.child({ module: 'relia-grant' }));
+  const payments = new PaymentService({
+    db,
+    client,
+    wallets,
+    reliaWallet,
+    reliaGrants,
+    grants: new NonInteractiveGrants(client),
+    log: logger.child({ module: 'payments' }),
+  });
   const synchronizer = new Synchronizer(
-    [{ name: 'relia-grant', run: () => reliaGrants.sync() }],
+    [
+      { name: 'relia-grant', run: () => reliaGrants.sync() },
+      { name: 'payments', run: () => payments.sync() },
+    ],
     logger.child({ module: 'synchronizer' }),
   );
 
@@ -40,6 +56,7 @@ async function main(): Promise<void> {
     reliaWallet,
     reliaGrants,
     wallets,
+    payments,
   });
 
   const shutdown = async (signal: string) => {
