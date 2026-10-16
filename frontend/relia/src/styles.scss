@@ -5,6 +5,7 @@
   --relia-text: #171717;
   --relia-cobalt: #2e3192;
   --relia-coral: #ff6f61;
+  --relia-yellow: #ffd54f;
   --relia-disabled: #e8e8e8;
   --relia-disabled-text: #707070;
   --relia-line: #d4d4d4;
@@ -180,4 +181,14 @@ body {
 /* Ítems destructivos de menús PrimeNG (MenuItem.styleClass) */
 .p-menu .menu-danger .p-menu-item-label {
   color: var(--relia-failed-text);
+}
+
+/* Visible solo para lectores de pantalla */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

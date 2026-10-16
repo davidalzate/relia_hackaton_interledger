@@ -21,6 +21,24 @@ export const routes: Routes = [
         loadComponent: () => import('../features/home/home.component').then((m) => m.HomeComponent),
       },
       {
+        path: 'depositar',
+        title: 'Depositar | Relia',
+        loadComponent: () =>
+          import('../features/deposit/deposit.component').then((m) => m.DepositComponent),
+      },
+      {
+        path: 'retirar',
+        title: 'Retirar | Relia',
+        loadComponent: () =>
+          import('../features/withdraw/withdraw.component').then((m) => m.WithdrawComponent),
+      },
+      {
+        path: 'cupo',
+        title: 'Cargar cupo | Relia',
+        loadComponent: () =>
+          import('../features/load-cupo/load-cupo.component').then((m) => m.LoadCupoComponent),
+      },
+      {
         path: 'historial',
         title: 'Historial | Relia',
         loadComponent: () =>
