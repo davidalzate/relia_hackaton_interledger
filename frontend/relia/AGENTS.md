@@ -55,11 +55,22 @@ You are an expert in TypeScript, Angular, and scalable web application developme
 - Use the `providedIn: 'root'` option for singleton services
 - Use the `inject()` function instead of constructor injection
 
+## Infraestructura (solo front, sin BFF)
+
+- Angular 21 standalone con zone.js, signals, control flow y formularios reactivos tipados (`NonNullableFormBuilder`). Sin SSR.
+- UI: PrimeNG con preset `ReliaPreset` (Aura + primario cobalto) en `src/shared/theme/`. Modo oscuro con `.app-dark`, ripple apagado, iconos `primeicons`.
+- Estructura: `app/` (shell, config, rutas), `core/` (services, interceptors, guards), `shared/` (schemas Zod, tipos, theme, componentes reutilizables), `features/<feature>/<feature>.component.{ts,html,scss}`, `environments/`.
+- Rutas siempre lazy con `loadComponent`; `**` lleva a NotFound.
+- Servicios `providedIn: 'root'` con `inject(HttpClient)`, URL desde `environment.apiUrl`, `timeout(environment.httpTimeoutMs)` y respuesta validada con Zod (`import * as z from 'zod/mini'`; `import { z } from 'zod'` infla el bundle ~400kB).
+- Suscripciones con `takeUntilDestroyed(destroyRef)`.
+- Auth: cookie HttpOnly (`credentialsInterceptor` → `withCredentials`) + XSRF; si el backend devuelve token, va solo en memoria (`AuthService`) como `Authorization: Bearer`. Nunca en `localStorage`. Un 401 manda a `/login`. `authGuard` es solo UX.
+- En local, `proxy.conf.json` redirige `/api` al backend.
+
 ## Convenciones visuales (predefinidas por el equipo)
 
-Tokens y clases viven en `src/styles.css` (Tailwind 4 `@theme` + `@utility`). Úsalos en vez de colores sueltos.
+Los tokens son variables CSS en `:root` y las clases viven en `src/styles.scss`. Úsalos en vez de colores sueltos.
 
-- Fondo de página gris claro `#F5F5F5` (`bg-page`, ya aplicado al `body`); tarjetas blancas con radio 16 a 24 px (`card`, `rounded-card` / `rounded-card-lg`).
+- Fondo de página gris claro `#F5F5F5` (`--relia-page`, ya aplicado al `body`); tarjetas blancas con radio 16 a 24 px (`card`, `card card-lg`).
 - Botón principal: píldora cobalto `#2E3192`, texto blanco, alto 52 px (`btn-primary`). Deshabilitado: gris `#E8E8E8` con texto `#707070` (automático con `disabled`).
 - Botón secundario: píldora blanca con borde gris; al pasar el cursor el borde se vuelve cobalto (`btn-secondary`).
 - Insignia **Simulación**: píldora amarilla clara `#FDF1C4`, texto `#5C4700`, borde punteado (`badge-sim`).
@@ -67,4 +78,4 @@ Tokens y clases viven en `src/styles.css` (Tailwind 4 `@theme` + `@utility`). Ú
 - Pantallas de éxito: fondo verde `#1E7A36`, texto blanco (`screen-success`).
 - Montos con números tabulares; los montos son el elemento más grande de cada vista (`amount`).
 - Enlace de regreso "← Caja" arriba a la izquierda en las vistas internas del corresponsal (`link-back`).
-- Ancho máximo de contenido: 560 px en vistas operativas (`max-w-ops`), 1240 px en historial y admin (`max-w-wide`).
+- Ancho máximo de contenido: 560 px en vistas operativas (`container-ops`), 1240 px en historial y admin (`container-wide`).
