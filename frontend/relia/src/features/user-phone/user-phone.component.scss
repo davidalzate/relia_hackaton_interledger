@@ -53,3 +53,16 @@ h1 {
     flex: 1 1 140px;
   }
 }
+
+// Burbuja estilo WhatsApp (misma que en B5)
+.bubble {
+  padding: 10px 14px;
+  border-radius: 12px 12px 12px 4px;
+  background: var(--relia-completed);
+  color: var(--relia-completed-text);
+}
+
+.whatsapp .btn-primary {
+  margin-top: 4px;
+  text-decoration: none;
+}

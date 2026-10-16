@@ -117,6 +117,14 @@ body {
   }
 }
 
+/* Acción positiva verde (p. ej. enviar invitación en B5) */
+.btn-success {
+  @extend %btn;
+  border: 0;
+  background: var(--relia-success);
+  color: #fff;
+}
+
 /* Variantes sobre fondo de color (p. ej. tarjetas de éxito verdes) */
 .btn-light {
   @extend %btn;
@@ -215,12 +223,13 @@ body {
   white-space: nowrap;
 }
 
-/* B4: modal de confirmación de efectivo (p-confirmdialog en AgentShell) */
-.cash-confirm-mask {
+/* Máscara cobalto translúcida de los modales (B4, B5) */
+.modal-mask {
   // PrimeNG pinta la máscara (y su animación de entrada) con esta variable
   --px-mask-background: rgb(46 49 146 / 55%);
 }
 
+/* B4: modal de confirmación de efectivo (p-confirmdialog en AgentShell) */
 .cash-confirm {
   .p-dialog-title {
     font-size: 0.875rem;

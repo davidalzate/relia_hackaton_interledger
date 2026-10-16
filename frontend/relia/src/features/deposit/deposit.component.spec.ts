@@ -137,6 +137,21 @@ describe('DepositComponent', () => {
     expect(button().textContent).toContain('Validar llave');
   });
 
+  it('si la llave no existe abre B5 y al enviar marca la invitación', () => {
+    const { fixture, c, fill } = setup(100_000, false);
+    fill('300 000 0002', 50_000);
+    c['submit']();
+    fixture.detectChanges();
+    expect(c['inviteOpen']()).toBe(true);
+
+    c['inviteSent'].set(true);
+    c['inviteOpen'].set(false);
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'Invitación enviada por WhatsApp.',
+    );
+  });
+
   it('formatea el celular a 300 000 0001 con máximo 10 dígitos', () => {
     const { c } = setup(0);
     c['form'].controls.phone.setValue('300-000a00019999');

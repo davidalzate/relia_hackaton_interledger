@@ -24,6 +24,7 @@ import {
   DepositReceipt,
 } from '../../core/services/agent.service';
 import { AGENT_COMMISSION, RELIA_FEE } from '../../shared/types/agent';
+import { InviteDialogComponent } from '../../shared/components/invite-dialog/invite-dialog.component';
 import { formatPhone, phoneDigits } from '../../shared/utils/phone';
 import { depositBreakdown } from './deposit-breakdown';
 
@@ -47,6 +48,7 @@ type Step =
     InputNumber,
     InputText,
     ProgressSpinner,
+    InviteDialogComponent,
   ],
   templateUrl: './deposit.component.html',
   styleUrl: './deposit.component.scss',
@@ -74,11 +76,14 @@ export class DepositComponent {
   });
 
   protected readonly keyState = signal<KeyState>('idle');
+  /** B5: modal de invitación cuando la llave no existe */
+  protected readonly inviteOpen = signal(false);
+  protected readonly inviteSent = signal(false);
   protected readonly step = signal<Step>({ kind: 'form' });
 
   protected readonly amount = computed(() => this.value().amount ?? 0);
   // El campo guarda el formato "300 000 0001"; se trabaja con los dígitos
-  private readonly phoneDigits = computed(() => phoneDigits(this.value().phone ?? ''));
+  protected readonly phoneDigits = computed(() => phoneDigits(this.value().phone ?? ''));
   protected readonly phoneComplete = computed(() => this.phoneDigits().length === 10);
   protected readonly amountTooLow = computed(() => this.amount() > 0 && this.amount() <= RELIA_FEE);
   protected readonly breakdown = computed(() =>
@@ -92,9 +97,10 @@ export class DepositComponent {
 
   constructor() {
     // Cambiar el celular borra la validación previa
-    this.form.controls.phone.valueChanges
-      .pipe(takeUntilDestroyed())
-      .subscribe(() => this.keyState.set('idle'));
+    this.form.controls.phone.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => {
+      this.keyState.set('idle');
+      this.inviteSent.set(false);
+    });
   }
 
   protected formatPhone(): void {
@@ -110,7 +116,10 @@ export class DepositComponent {
       .validateKey(this.phoneDigits(), simulateMissing)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (exists) => this.keyState.set(exists ? 'found' : 'missing'),
+        next: (exists) => {
+          this.keyState.set(exists ? 'found' : 'missing');
+          this.inviteOpen.set(!exists);
+        },
         error: () => this.keyState.set('error'),
       });
   }
