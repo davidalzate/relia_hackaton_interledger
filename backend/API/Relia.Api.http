@@ -1,6 +1,10 @@
-@Relia.Api_HostAddress = http://localhost:5062
+@host = http://localhost:5080
 
-GET {{Relia.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### Login (en desarrollo: 501)
+POST {{host}}/auth/login
+Content-Type: application/json
 
-###
+{ "email": "rosa@relia.dev", "password": "demo1234" }
+
+### Sin token: 401 problem+json
+GET {{host}}/me
