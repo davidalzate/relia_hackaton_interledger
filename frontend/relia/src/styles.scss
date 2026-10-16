@@ -6,6 +6,8 @@
   --relia-cobalt: #2e3192;
   --relia-coral: #ff6f61;
   --relia-yellow: #ffd54f;
+  --relia-info: #e8ebfa;
+  --relia-info-text: #1a1c53;
   --relia-disabled: #e8e8e8;
   --relia-disabled-text: #707070;
   --relia-line: #d4d4d4;
@@ -112,6 +114,26 @@ body {
 
   &:hover {
     border-color: var(--relia-cobalt);
+  }
+}
+
+/* Variantes sobre fondo de color (p. ej. tarjetas de éxito verdes) */
+.btn-light {
+  @extend %btn;
+  border: 0;
+  background: #fff;
+  color: var(--relia-cobalt);
+}
+
+.btn-outline-light {
+  @extend %btn;
+  border: 1px solid #fff;
+  background: transparent;
+  color: #fff;
+  text-decoration: none;
+
+  &:focus-visible {
+    outline-color: #fff;
   }
 }
 

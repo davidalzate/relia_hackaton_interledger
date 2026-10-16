@@ -36,3 +36,17 @@
 </header>
 
 <router-outlet />
+
+<!-- B4: las vistas hijas lo abren con ConfirmationService.confirm() -->
+<p-confirmdialog #confirm [closable]="false" [style]="{ width: 'min(400px, calc(100vw - 32px))' }">
+  <ng-template #footer>
+    <div class="confirm-actions">
+      <button type="button" class="btn-secondary" (click)="confirm.onReject()">
+        {{ confirm.confirmation?.rejectLabel ?? 'Cancelar' }}
+      </button>
+      <button type="button" class="btn-primary" (click)="confirm.onAccept()">
+        {{ confirm.confirmation?.acceptLabel ?? 'Confirmar' }}
+      </button>
+    </div>
+  </ng-template>
+</p-confirmdialog>

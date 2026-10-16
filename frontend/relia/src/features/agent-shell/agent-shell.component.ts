@@ -1,14 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterOutlet } from '@angular/router';
-import { MenuItem } from 'primeng/api';
+import { ConfirmationService, MenuItem } from 'primeng/api';
+import { ConfirmDialog } from 'primeng/confirmdialog';
 import { Menu } from 'primeng/menu';
 
 import { AuthService } from '../../core/services/auth.service';
 
-// B0: encabezado fijo y menú del corresponsal; envuelve todas sus vistas
+// B0: encabezado fijo y menú del corresponsal; envuelve todas sus vistas.
+// También aloja B4 (diálogo de confirmación) para las vistas hijas vía ConfirmationService
 @Component({
   selector: 'app-agent-shell',
-  imports: [RouterLink, RouterOutlet, Menu],
+  imports: [RouterLink, RouterOutlet, Menu, ConfirmDialog],
+  providers: [ConfirmationService],
   templateUrl: './agent-shell.component.html',
   styleUrl: './agent-shell.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
