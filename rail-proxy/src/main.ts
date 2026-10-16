@@ -1,17 +1,23 @@
 import { createAuthenticatedClient } from '@interledger/open-payments';
+import { pino } from 'pino';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
+import { ReliaGrantService } from './relia-grant.js';
 import { openStore } from './store.js';
+import { Synchronizer } from './synchronizer.js';
 import { assertKeyPublished, toWalletUrl, WalletResolver } from './wallets.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
+  const logger = pino({ level: config.logLevel, redact: ['req.headers["x-api-key"]'] });
 
   const client = await createAuthenticatedClient({
     walletAddressUrl: toWalletUrl(config.reliaWalletAddress),
     privateKey: config.reliaPrivateKey,
     keyId: config.reliaKeyId,
-    logLevel: 'warn',
+    // El SDK registra la URL de cada petición fallida (p. ej. la continuación GNAP). Los errores del riel
+    // los registra el proxy con describeRailError.
+    logLevel: 'silent',
   });
 
   const wallets = new WalletResolver(client);
@@ -21,19 +27,26 @@ async function main(): Promise<void> {
   await assertKeyPublished(client, reliaWallet, config.reliaKeyId, config.reliaPrivateKey);
 
   const db = openStore(config.databasePath);
+  const reliaGrants = new ReliaGrantService(db, client, reliaWallet, logger.child({ module: 'relia-grant' }));
+  const synchronizer = new Synchronizer(
+    [{ name: 'relia-grant', run: () => reliaGrants.sync() }],
+    logger.child({ module: 'synchronizer' }),
+  );
 
   const app = await buildApp({
     apiKey: config.apiKey,
-    logLevel: config.logLevel,
+    logger,
     healthRateLimitPerMinute: config.healthRateLimitPerMinute,
     reliaWallet,
-    reliaGrantStatus: () => 'missing',
+    reliaGrants,
     wallets,
   });
 
   const shutdown = async (signal: string) => {
-    app.log.info({ signal }, 'apagando');
+    logger.info({ signal }, 'apagando');
     await app.close();
+    await synchronizer.stop();
+    await reliaGrants.drain();
     db.close();
     process.exit(0);
   };
@@ -41,7 +54,11 @@ async function main(): Promise<void> {
   process.once('SIGTERM', shutdown);
 
   await app.listen({ host: config.host, port: config.port });
-  app.log.info({ reliaWallet: reliaWallet.pointer, assetCode: reliaWallet.assetCode }, 'proxy de riel listo');
+  synchronizer.start();
+  logger.info(
+    { reliaWallet: reliaWallet.pointer, assetCode: reliaWallet.assetCode, reliaGrant: reliaGrants.status() },
+    'proxy de riel listo',
+  );
 }
 
 main().catch((error: unknown) => {

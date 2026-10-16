@@ -1,17 +1,18 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyError } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
+import type { Logger } from 'pino';
+import { amountSchema, type Amount } from './amount.js';
 import { PROBLEM_CONTENT_TYPE, ProblemError } from './problem.js';
+import type { ReliaGrantService } from './relia-grant.js';
 import { PAYMENT_POINTER_PATTERN, type ResolvedWallet, type WalletResolver } from './wallets.js';
-
-export type ReliaGrantStatus = 'active' | 'awaiting_approval' | 'exhausted' | 'missing';
 
 export interface AppDeps {
   apiKey: string;
-  logLevel: string;
+  logger: Logger;
   healthRateLimitPerMinute: number;
   reliaWallet: ResolvedWallet;
-  reliaGrantStatus: () => ReliaGrantStatus;
+  reliaGrants: Pick<ReliaGrantService, 'status' | 'view' | 'request'>;
   wallets: Pick<WalletResolver, 'resolve'>;
 }
 
@@ -22,9 +23,9 @@ declare module 'fastify' {
   }
 }
 
-export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
+export async function buildApp(deps: AppDeps) {
   const app = Fastify({
-    logger: { level: deps.logLevel, redact: ['req.headers["x-api-key"]'] },
+    loggerInstance: deps.logger,
     // El contrato valida con sus propios patrones; no coaccionar tipos en silencio.
     ajv: { customOptions: { coerceTypes: false, removeAdditional: false } },
   });
@@ -68,7 +69,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     '/health',
     { config: { public: true, rateLimit: { max: deps.healthRateLimitPerMinute, timeWindow: '1 minute' } } },
     async () => {
-      const reliaGrant = deps.reliaGrantStatus();
+      const reliaGrant = deps.reliaGrants.status();
       const { pointer, url, assetCode, assetScale } = deps.reliaWallet;
       return {
         status: reliaGrant === 'active' ? 'ok' : 'degraded',
@@ -93,6 +94,26 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     async (request) => {
       const { pointer, url, assetCode, assetScale } = await deps.wallets.resolve(request.query.pointer);
       return { pointer, url, assetCode, assetScale };
+    },
+  );
+
+  app.get('/relia-grant', async () => deps.reliaGrants.view());
+
+  app.post<{ Body: { debitLimit: Amount; interval: string } }>(
+    '/relia-grant',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['debitLimit', 'interval'],
+          additionalProperties: false,
+          properties: { debitLimit: amountSchema, interval: { type: 'string', minLength: 1 } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const grant = await deps.reliaGrants.request(request.body.debitLimit, request.body.interval);
+      return reply.status(202).send(grant);
     },
   );
 

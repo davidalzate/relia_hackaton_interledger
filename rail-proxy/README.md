@@ -40,6 +40,21 @@ Comprobar: `curl localhost:4000/health`. Responde `degraded` mientras el permiso
 
 Para probar el resto de rutas, usa la colección [contracts/rail-proxy.collection.json](../contracts/rail-proxy.collection.json) (ver [contracts/README.md](../contracts/README.md)).
 
+## Permiso permanente de Relia (una vez, operador)
+
+Sin él, los pagos `outgoing` (depósitos y pagos de comisión) responden `503 relia_grant_unavailable`.
+
+```sh
+curl -X POST localhost:4000/relia-grant -H "X-Api-Key: $RAIL_PROXY_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"debitLimit":{"value":"100000000","assetCode":"COP","assetScale":2},"interval":"R/2026-10-16T00:00:00-05:00/P1D"}'
+```
+
+1. Abre la `approvalUrl` de la respuesta, inicia sesión con la cuenta de Relia en la wallet de prueba y aprueba. Tienes ~10 minutos.
+2. Después de aprobar, la wallet queda en una página en blanco: es normal. El proxy detecta la aprobación solo.
+3. `GET /relia-grant` pasa a `active` y `/health` a `ok`. El permiso queda en `DATABASE_PATH` y sobrevive a los reinicios.
+
+Para subir el tope, pide uno nuevo: al aprobarlo reemplaza al anterior, que se revoca en el riel. Mientras el nuevo no se apruebe, el estado es `awaiting_approval` y los `outgoing` responden `503`. Si el operador lo rechaza o se vence la ventana, vuelve a regir el anterior.
+
 ## Errores
 
 Todo error sale en `application/problem+json` con un `code` del enum `ErrorCode` del contrato. Programa contra el `code`, no contra el texto.
