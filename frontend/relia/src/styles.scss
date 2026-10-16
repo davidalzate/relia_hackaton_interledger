@@ -214,3 +214,24 @@ body {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* B4: modal de confirmación de efectivo (p-confirmdialog en AgentShell) */
+.cash-confirm-mask {
+  // PrimeNG pinta la máscara (y su animación de entrada) con esta variable
+  --px-mask-background: rgb(46 49 146 / 55%);
+}
+
+.cash-confirm {
+  .p-dialog-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--relia-muted-text);
+  }
+
+  .p-confirmdialog-message {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+}

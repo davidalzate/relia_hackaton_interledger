@@ -121,10 +121,7 @@ export class DepositComponent {
     if (!breakdown || !this.canConfirm()) return;
     const total = formatCurrency(breakdown.cashIn, this.locale, '$', 'COP', '1.0-0');
     this.confirmation.confirm({
-      header: 'Confirmar depósito',
       message: `¿Confirmas que recibiste en efectivo un total de ${total} por parte del usuario?`,
-      acceptLabel: 'Sí, lo recibí',
-      rejectLabel: 'Cancelar',
       accept: () => this.send(breakdown.cashIn, breakdown.walletOut),
     });
   }
