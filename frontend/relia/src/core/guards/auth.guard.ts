@@ -6,5 +6,7 @@ import { AuthService } from '../services/auth.service';
 export const authGuard: CanActivateFn = (route) => {
   const role = inject(AuthService).role();
   const required = route.data['role'];
-  return (role !== null && (!required || role === required)) || inject(Router).createUrlTree(['/login']);
+  return (
+    (role !== null && (!required || role === required)) || inject(Router).createUrlTree(['/login'])
+  );
 };

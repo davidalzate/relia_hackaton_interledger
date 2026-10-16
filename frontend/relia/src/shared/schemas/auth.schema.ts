@@ -8,18 +8,29 @@ export interface LoginRequest {
   password: string;
 }
 
-export const SessionUserSchema = z.object({
-  role: z.enum(['agent', 'admin']),
-  name: z.string(),
-  email: z.string(),
-  // Solo corresponsales: nombre del comercio
-  store: z.optional(z.string()),
-});
-export type SessionUser = z.infer<typeof SessionUserSchema>;
+const RoleSchema = z.enum(['agent', 'admin']);
 
-// Con cookie HttpOnly el backend no devuelve token; si lo devuelve se guarda solo en memoria
 export const LoginResponseSchema = z.object({
-  user: SessionUserSchema,
-  token: z.optional(z.string()),
+  accessToken: z.string(),
+  expiresIn: z.number(),
+  role: RoleSchema,
+  // Solo corresponsales
+  agentId: z.optional(z.nullable(z.string())),
 });
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
+
+// `GET /me`; del corresponsal por ahora solo se usa el nombre del comercio
+export const MeSchema = z.object({
+  role: RoleSchema,
+  email: z.string(),
+  name: z.string(),
+  agent: z.optional(z.nullable(z.object({ id: z.string(), name: z.string() }))),
+});
+
+export interface SessionUser {
+  role: Role;
+  name: string;
+  email: string;
+  // Solo corresponsales: nombre del comercio
+  store?: string;
+}
