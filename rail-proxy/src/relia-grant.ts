@@ -128,6 +128,16 @@ export class ReliaGrantService {
         'interval debe ser un intervalo ISO 8601 repetitivo, p. ej. R/2026-10-16T00:00:00-05:00/P1D.',
       );
     }
+    // Rafiki rechaza (403) todo pago creado antes del inicio del intervalo: el permiso no serviría hasta entonces.
+    const start = Date.parse(interval.split('/')[1]!);
+    if (start > this.now()) {
+      throw new ProblemError(
+        422,
+        'validation_error',
+        'Solicitud inválida',
+        `El intervalo empieza en el futuro (${new Date(start).toISOString()}); el riel rechaza los pagos hasta entonces. Usa un inicio en el pasado, p. ej. la medianoche de hoy.`,
+      );
+    }
 
     let grant;
     try {
