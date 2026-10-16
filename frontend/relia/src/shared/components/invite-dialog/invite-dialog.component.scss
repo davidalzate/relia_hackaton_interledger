@@ -1,0 +1,50 @@
+p {
+  margin: 0 0 12px;
+}
+
+.title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+
+  h2 {
+    margin: 0;
+    font-size: 1.125rem;
+  }
+}
+
+.label {
+  margin-bottom: 4px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--relia-muted-text);
+}
+
+.link {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--relia-page);
+  font-family: ui-monospace, monospace;
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+// Burbuja estilo WhatsApp
+.bubble {
+  padding: 10px 14px;
+  border-radius: 12px 12px 12px 4px;
+  background: var(--relia-completed);
+  color: var(--relia-completed-text);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+
+  button {
+    flex: 1 1 140px;
+  }
+}

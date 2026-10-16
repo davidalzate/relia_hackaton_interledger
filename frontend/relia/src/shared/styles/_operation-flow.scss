@@ -274,3 +274,24 @@ dl {
 .amount.big {
   font-size: 52px;
 }
+
+.key-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+
+  p {
+    margin: 0;
+  }
+}
+
+.link-inline {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}

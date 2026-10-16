@@ -4,8 +4,9 @@ import { RouterLink } from '@angular/router';
 
 import { AgentService } from '../../core/services/agent.service';
 import { AuthService } from '../../core/services/auth.service';
+import { InvitationService } from '../../core/services/invitation.service';
 
-// shortcut: C2 mínimo (SMS + solicitud con Aprobar/Rechazar) para poder demostrar B3;
+// shortcut: C2 mínimo (SMS + solicitud con Aprobar/Rechazar e invitaciones de B5) para demostrar B3/B5;
 // reemplazar por la pantalla "Mi billetera" cuando llegue su especificación
 @Component({
   selector: 'app-user-phone',
@@ -17,6 +18,12 @@ import { AuthService } from '../../core/services/auth.service';
 export class UserPhoneComponent {
   private readonly agent = inject(AgentService);
   private readonly auth = inject(AuthService);
+
+  protected readonly invitations = inject(InvitationService).invitations;
+  /** Vuelve al retiro si hay una solicitud en curso; si no, a Caja */
+  protected readonly backLink = computed(() =>
+    this.agent.withdrawal() ? '/caja/retirar' : '/caja',
+  );
 
   protected readonly store = computed(() => this.auth.user()?.store ?? 'Relia');
   protected readonly pending = computed(() => {
