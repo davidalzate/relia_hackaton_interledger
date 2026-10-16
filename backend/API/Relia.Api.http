@@ -1,0 +1,10 @@
+@host = http://localhost:5080
+
+### Login (en desarrollo: 501)
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{ "email": "rosa@relia.dev", "password": "demo1234" }
+
+### Sin token: 401 problem+json
+GET {{host}}/me
