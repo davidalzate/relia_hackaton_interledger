@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Relia.Api.Domain;
 using Relia.Api.Persistence;
 
@@ -72,16 +73,6 @@ public class EfOperationRepository(ReliaDbContext db) : IOperationRepository
         return new Reservations(quota, cash);
     }
 
-    public async Task<IReadOnlyList<Operation>> ListByAgentAsync(Guid agentId, OperationKind? kind,
-        OperationState? state, DateTimeOffset? before, int limit, CancellationToken ct = default)
-    {
-        var q = db.Operations.Include(o => o.WalletKey).Where(o => o.AgentId == agentId);
-        if (kind is not null) q = q.Where(o => o.Kind == kind);
-        if (state is not null) q = q.Where(o => o.State == state);
-        if (before is not null) q = q.Where(o => o.CreatedAt < before);
-        return await q.OrderByDescending(o => o.CreatedAt).Take(limit).ToListAsync(ct);
-    }
-
     public void Add(Operation operation) => db.Operations.Add(operation);
 
     public void AddEvent(OperationEvent operationEvent) => db.OperationEvents.Add(operationEvent);
@@ -116,15 +107,61 @@ public class EfLedgerRepository(ReliaDbContext db) : ILedgerRepository
     public Task<LedgerEntry?> GetLatestByAgentAsync(Guid agentId, CancellationToken ct = default) =>
         db.LedgerEntries.Where(l => l.AgentId == agentId).OrderByDescending(l => l.Id).FirstOrDefaultAsync(ct);
 
-    public async Task<IReadOnlyList<LedgerEntry>> ListCashAdjustmentsAsync(Guid agentId, DateTimeOffset? before,
-        int limit, CancellationToken ct = default)
-    {
-        var q = db.LedgerEntries.Where(l => l.AgentId == agentId && l.Kind == LedgerEntryKind.CashAdjustment);
-        if (before is not null) q = q.Where(l => l.CreatedAt < before);
-        return await q.OrderByDescending(l => l.CreatedAt).Take(limit).ToListAsync(ct);
-    }
-
     public void Add(LedgerEntry entry) => db.LedgerEntries.Add(entry);
+}
+
+/// <summary>
+/// Lee v_agent_history con SQL propio: la vista no tiene llave y la paginación compara la tupla
+/// (occurred_at, entry_id), con COLLATE "C" para que el orden sea el mismo en WHERE y ORDER BY.
+/// </summary>
+public class EfHistoryRepository(ReliaDbContext db) : IHistoryRepository
+{
+    public async Task<IReadOnlyList<HistoryRow>> ListAsync(Guid agentId, HistoryFilter filter,
+        CancellationToken ct = default)
+    {
+        var parameters = new List<NpgsqlParameter>
+        {
+            new("agent_id", agentId),
+            new("limit", filter.Limit),
+        };
+        var where = new List<string> { "h.agent_id = @agent_id" };
+        if (filter.Type is not null)
+        {
+            where.Add("h.type = @type");
+            parameters.Add(new NpgsqlParameter("type", filter.Type));
+        }
+        if (filter.Status is not null)
+        {
+            where.Add("h.status::text = @status");
+            parameters.Add(new NpgsqlParameter("status", filter.Status));
+        }
+        if (filter.After is not null)
+        {
+            where.Add("""(h.occurred_at < @after_at OR (h.occurred_at = @after_at AND h.entry_id < @after_id COLLATE "C"))""");
+            parameters.Add(new NpgsqlParameter("after_at", filter.After.OccurredAt));
+            parameters.Add(new NpgsqlParameter("after_id", filter.After.EntryId));
+        }
+
+        var sql = $"""
+            SELECT h.entry_id AS "EntryId", h.type AS "Type", h.reference AS "Reference",
+                   h.occurred_at AS "OccurredAt", h.status::text AS "Status", h.amount AS "Amount",
+                   h.float_before AS "QuotaBefore", h.float_after AS "QuotaAfter",
+                   h.commission_before AS "CommissionBefore", h.commission_after AS "CommissionAfter",
+                   h.cash_before AS "CashBefore", h.cash_after AS "CashAfter", h.reason AS "Reason",
+                   o.failure_code AS "FailureCode", h.operation_id AS "OperationId",
+                   h.settlement_id AS "SettlementId"
+            FROM (
+                SELECT v.*, COALESCE(v.operation_id::text, v.settlement_id::text, 'cash-' || v.ledger_entry_id)
+                           COLLATE "C" AS entry_id
+                FROM v_agent_history v
+            ) h
+            LEFT JOIN operations o ON o.id = h.operation_id
+            WHERE {string.Join(" AND ", where)}
+            ORDER BY h.occurred_at DESC, h.entry_id DESC
+            LIMIT @limit
+            """;
+        return await db.Database.SqlQueryRaw<HistoryRow>(sql, parameters.ToArray<object>()).ToListAsync(ct);
+    }
 }
 
 public class EfReceiptRepository(ReliaDbContext db) : IReceiptRepository

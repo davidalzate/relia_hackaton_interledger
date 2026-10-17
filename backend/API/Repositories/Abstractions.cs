@@ -49,9 +49,6 @@ public interface IOperationRepository
     /// <summary>Depósitos pendientes reservan cupo (cobrado); retiros pendientes reservan efectivo (neto).</summary>
     Task<Reservations> GetReservationsAsync(Guid agentId, CancellationToken ct = default);
 
-    Task<IReadOnlyList<Operation>> ListByAgentAsync(Guid agentId, OperationKind? kind, OperationState? state,
-        DateTimeOffset? before, int limit, CancellationToken ct = default);
-
     void Add(Operation operation);
     void AddEvent(OperationEvent operationEvent);
 }
@@ -71,10 +68,47 @@ public interface ILedgerRepository
     Task<LedgerEntry?> GetBySettlementAsync(Guid settlementId, CancellationToken ct = default);
     Task<LedgerEntry?> GetLatestByAgentAsync(Guid agentId, CancellationToken ct = default);
 
-    Task<IReadOnlyList<LedgerEntry>> ListCashAdjustmentsAsync(Guid agentId, DateTimeOffset? before, int limit,
-        CancellationToken ct = default);
-
     void Add(LedgerEntry entry);
+}
+
+/// <summary>Fila de la vista v_agent_history, con el id estable de la entrada y el motivo de fallo.</summary>
+public record HistoryRow
+{
+    /// <summary>operation_id, settlement_id o "cash-{ledger_entry_id}".</summary>
+    public string EntryId { get; init; } = "";
+
+    /// <summary>Etiqueta de la base: deposit, withdrawal, float_load, cash_adjustment o settlement.</summary>
+    public string Type { get; init; } = "";
+
+    public string? Reference { get; init; }
+    public DateTimeOffset OccurredAt { get; init; }
+
+    /// <summary>operation_status como texto; las liquidaciones ya vienen traducidas por la vista.</summary>
+    public string Status { get; init; } = "";
+
+    public long Amount { get; init; }
+    public long QuotaBefore { get; init; }
+    public long QuotaAfter { get; init; }
+    public long CommissionBefore { get; init; }
+    public long CommissionAfter { get; init; }
+    public long CashBefore { get; init; }
+    public long CashAfter { get; init; }
+    public string? Reason { get; init; }
+    public string? FailureCode { get; init; }
+    public Guid? OperationId { get; init; }
+    public Guid? SettlementId { get; init; }
+}
+
+/// <summary>Posición de la última fila leída: la página siguiente empieza estrictamente después.</summary>
+public record HistoryPosition(DateTimeOffset OccurredAt, string EntryId);
+
+/// <summary>Filtros en etiquetas de la base (Type de <see cref="HistoryRow"/>, operation_status).</summary>
+public record HistoryFilter(string? Type, string? Status, HistoryPosition? After, int Limit);
+
+public interface IHistoryRepository
+{
+    /// <summary>Entradas del corresponsal, la más reciente primero (occurred_at, luego EntryId).</summary>
+    Task<IReadOnlyList<HistoryRow>> ListAsync(Guid agentId, HistoryFilter filter, CancellationToken ct = default);
 }
 
 public interface IReceiptRepository

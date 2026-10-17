@@ -72,6 +72,7 @@ builder.Services.AddScoped<IWalletKeyRepository, EfWalletKeyRepository>();
 builder.Services.AddScoped<IOperationRepository, EfOperationRepository>();
 builder.Services.AddScoped<IPaymentRepository, EfPaymentRepository>();
 builder.Services.AddScoped<ILedgerRepository, EfLedgerRepository>();
+builder.Services.AddScoped<IHistoryRepository, EfHistoryRepository>();
 builder.Services.AddScoped<IReceiptRepository, EfReceiptRepository>();
 builder.Services.AddScoped<ISettlementRepository, EfSettlementRepository>();
 builder.Services.AddScoped<ISimulatedMessageRepository, EfSimulatedMessageRepository>();

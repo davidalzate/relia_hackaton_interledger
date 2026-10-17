@@ -34,20 +34,17 @@ public class AuthService(
         if (currentUser.Role == Role.Admin)
         {
             var admin = await admins.GetByIdAsync(currentUser.UserId, ct);
-            if (admin is null || !admin.Active) throw Unauthorized();
+            if (admin is null || !admin.Active) throw ApiErrors.Unauthorized();
             return new MeDto(Role.Admin, admin.Email, admin.Name, null);
         }
 
         // Tras un reinicio de la demo el token puede apuntar a un corresponsal que ya no existe.
         var agent = currentUser.AgentId is { } agentId ? await agents.GetByIdAsync(agentId, ct) : null;
-        if (agent is null || !agent.Active) throw Unauthorized();
+        if (agent is null || !agent.Active) throw ApiErrors.Unauthorized();
         var reservations = await operations.GetReservationsAsync(agent.Id, ct);
         return new MeDto(Role.Agent, agent.Email, agent.ManagerName, agent.ToDto(reservations));
     }
 
     private static ApiException InvalidCredentials() =>
         new(StatusCodes.Status401Unauthorized, "invalid_credentials", "Correo o contraseña incorrectos");
-
-    private static ApiException Unauthorized() =>
-        new(StatusCodes.Status401Unauthorized, "unauthorized", "Sin sesión");
 }

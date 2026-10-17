@@ -11,19 +11,6 @@ namespace Relia.Api.Services;
 // Implementaciones en desarrollo: reciben ya sus repositorios y responden 501 "En desarrollo".
 // Cada una se implementa en el ticket indicado de docs/issues/backend-relia-api/.
 
-/// <summary>Ticket 02.</summary>
-public class AgentService(
-    IAgentRepository agents, IOperationRepository operations, ILedgerRepository ledger,
-    ISettlementRepository settlements, ICurrentUser currentUser) : IAgentService
-{
-    public Task<AgentDto> GetAgentAsync(Guid agentId, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("getAgent");
-
-    public Task<HistoryPageDto> GetHistoryAsync(Guid agentId, HistoryEntryKind? kind, OperationStatus? status,
-        string? cursor, int limit, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("listAgentHistory");
-}
-
 /// <summary>Ticket 03.</summary>
 public class CashAdjustmentService(
     IAgentRepository agents, IOperationRepository operations, ILedgerRepository ledger, IUnitOfWork unitOfWork,

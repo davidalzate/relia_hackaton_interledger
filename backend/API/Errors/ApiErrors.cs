@@ -15,6 +15,24 @@ public class ApiException(int status, string code, string title, IDictionary<str
     public IDictionary<string, object?> Extensions { get; } = extensions ?? new Dictionary<string, object?>();
 }
 
+/// <summary>Errores comunes del contrato, con el mismo title en todas las rutas.</summary>
+public static class ApiErrors
+{
+    public static ApiException Unauthorized() =>
+        new(StatusCodes.Status401Unauthorized, "unauthorized", "Sin sesión");
+
+    public static ApiException Forbidden() =>
+        new(StatusCodes.Status403Forbidden, "forbidden", "Sin permiso");
+
+    public static ApiException NotFound() =>
+        new(StatusCodes.Status404NotFound, "not_found", "No existe");
+
+    /// <summary>422 validation_error con detalle de un campo, como el de la validación de modelo.</summary>
+    public static ApiException Validation(string field, string message) =>
+        new(StatusCodes.Status422UnprocessableEntity, "validation_error", "Datos inválidos",
+            new Dictionary<string, object?> { ["errors"] = new[] { new { field, message } } });
+}
+
 /// <summary>
 /// Lanzada por los servicios aún sin implementar. Responde 501 con <c>code: not_implemented</c>, que no está en
 /// el contrato: desaparece cuando todos los servicios estén implementados.
