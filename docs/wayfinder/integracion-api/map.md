@@ -89,14 +89,14 @@ PR #33. Abre filas de B8 y D2.
 
 ### 7. Admin (D1–D3)
 
-20 desbloquea D2 (ids reales de corresponsales).
+PR #37. D2 y D3 construidas contra el API.
 
 | # | Endpoint | Pantalla | Bloqueado por | Estado |
 |---|---|---|---|---|
-| [20](issues/20-agents-list.md) | GET /agents | D1 Inicio admin | 00 | open |
-| [21](issues/21-settlements-list.md) | GET /settlements | D1 Pagos de comisión de hoy | 00 | open |
-| [19](issues/19-settlements-get.md) | GET /settlements/{settlementId} | D3 Enviando, B8/D2 abrir fila | 00 | open |
-| [22](issues/22-settlements-create.md) | POST /agents/{agentId}/settlements | D3 Confirmar pago | 19 | open |
+| [20](issues/20-agents-list.md) | GET /agents | D1 Inicio admin | 00 | claimed · [#37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37) |
+| [21](issues/21-settlements-list.md) | GET /settlements | D1 Pagos de comisión de hoy | 00 | claimed · [#37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37) |
+| [19](issues/19-settlements-get.md) | GET /settlements/{settlementId} | D3 Enviando, B8/D2 abrir fila | 00 | claimed · [#37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37) |
+| [22](issues/22-settlements-create.md) | POST /agents/{agentId}/settlements | D3 Confirmar pago | 19 | claimed · [#37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37) |
 
 ## Out of scope
 

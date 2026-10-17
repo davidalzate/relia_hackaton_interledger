@@ -1,7 +1,8 @@
 # Integrar GET /settlements
 
 Type: task
-Status: open
+Status: claimed
+PR: [#37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37)
 Blocked by: [00](00-base-http.md)
 Labels: wayfinder:task, frontend, feature:admin
 Feature: Admin (D1–D3)
@@ -19,3 +20,7 @@ Conectar el frontend (`frontend/relia`) al endpoint real de la Relia API y retir
 
 - [ ] `from` = inicio del día en America/Bogota (no UTC del navegador).
 - [ ] Test unitario del servicio con `HttpTestingController` (éxito y error principal).
+
+## Notas
+
+- `from` = hoy en America/Bogota.

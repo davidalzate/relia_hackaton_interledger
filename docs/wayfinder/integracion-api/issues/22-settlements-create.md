@@ -1,7 +1,8 @@
 # Integrar POST /agents/{agentId}/settlements
 
 Type: task
-Status: open
+Status: claimed
+PR: [#37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37)
 Blocked by: [19](19-settlements-get.md)
 Labels: wayfinder:task, frontend, feature:admin
 Feature: Admin (D1–D3)
@@ -21,3 +22,7 @@ Conectar el frontend (`frontend/relia`) al endpoint real de la Relia API y retir
 - [ ] Errores `409 settlement_in_progress`, `422 no_commission` ("Sin comisión"), `503 rail_unavailable`.
 - [ ] Refresca D1/D2 al terminar.
 - [ ] Test unitario del servicio con `HttpTestingController` (éxito y error principal).
+
+## Notas
+
+- D3 es página (`/admin/pagar/:id`), no modal.
