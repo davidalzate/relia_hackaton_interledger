@@ -15,6 +15,7 @@ const CHALLENGE = {
   phone: PHONE,
   expiresAt: '2026-10-17T12:05:00Z',
   maxAttempts: 5,
+  walletAssetCode: 'COP',
 };
 
 describe('KeyLinkService', () => {
@@ -42,7 +43,12 @@ describe('KeyLinkService', () => {
     expect(req.request.headers.has('Authorization')).toBe(false);
     req.flush(CHALLENGE, { status: 201, statusText: 'Created' });
 
-    expect(service.pending()).toEqual({ phone: PHONE, walletAddress: WALLET, challengeId: 'ch-1' });
+    expect(service.pending()).toEqual({
+      phone: PHONE,
+      walletAddress: WALLET,
+      challengeId: 'ch-1',
+      walletAssetCode: 'COP',
+    });
     http
       .expectOne('/api/demo/messages?phone=%2B573000000002&limit=1')
       .flush({ items: [{ content: 'Relia: tu código es 123456' }], unreadCount: 1 });
