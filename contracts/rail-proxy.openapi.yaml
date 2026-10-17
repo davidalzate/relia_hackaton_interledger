@@ -76,8 +76,21 @@ paths:
           que el backend entrega al pagador por SMS simulado. El pagador aprueba en su billetera (su app bancaria) y
           no vuelve a ninguna página de Relia; el proxy detecta la aprobación o el rechazo consultando el riel.
 
-        En ambos casos `receiveAmount` es fijo: el destino recibe exactamente ese monto y el costo del riel, si lo
-        hay, lo absorbe el pagador.
+        `receiveAmount` va siempre en la moneda de Relia (la de su billetera en el riel, COP con escala 2) y es el
+        lado fijo del pago. La contraparte puede estar en cualquier moneda que el riel sepa convertir:
+        - `incoming`: Relia recibe exactamente `receiveAmount`. El riel cotiza en la billetera del pagador cuánto le
+          debita en su moneda (`debitAmount`), y eso es lo que el pagador ve y aprueba.
+        - `outgoing` a una contraparte en la moneda de Relia: el receptor recibe exactamente `receiveAmount` (igual
+          que antes de multimoneda).
+        - `outgoing` a una contraparte en otra moneda: Relia envía exactamente `receiveAmount` (`debitAmount` igual a
+          `receiveAmount`) y el receptor recibe lo que el riel convierta, en su moneda (`receivedAmount`). El
+          estimado del quote viene en `quotedReceiveAmount`. La conversión y su costo corren por cuenta del receptor.
+
+        En todos los casos `completed` significa que Relia recibió (`incoming`) o envió (`outgoing`) el monto en su
+        moneda. El costo del riel dentro de la misma moneda, si lo hay, lo absorbe el pagador.
+
+        Si el riel no cotiza entre la moneda de Relia y la de la contraparte, responde 422 `unsupported_asset`
+        sin dejar nada abierto en el riel (se detecta al cotizar, antes de mover dinero o pedir aprobación).
 
         El proxy hace cumplir `expiresAt` con su propio temporizador, porque Open Payments no reporta el
         vencimiento de una aprobación. Al vencer, cancela la aprobación, cierra el cobro y pasa a `expired`.
@@ -90,6 +103,50 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CreatePaymentRequest'
+            examples:
+              outgoingCop:
+                summary: Relia paga a una billetera en COP (recibe exacto)
+                value:
+                  direction: outgoing
+                  counterparty: '$ilp.interledger-test.dev/usuario-cop'
+                  receiveAmount: { value: '4900000', assetCode: COP, assetScale: 2 }
+                  description: 'Depósito OP-000123 · Tienda Doña Rosa'
+              outgoingOtraMoneda:
+                summary: Relia paga a una billetera en USD (Relia debita exacto)
+                description: |
+                  Esperado: `completed`, `debitAmount` en COP igual a `receiveAmount`, `quotedReceiveAmount` y
+                  `receivedAmount` en USD, y el incoming del receptor cerrado.
+                value:
+                  direction: outgoing
+                  counterparty: '$ilp.interledger-test.dev/usuario-usd'
+                  receiveAmount: { value: '4900000', assetCode: COP, assetScale: 2 }
+                  description: 'Depósito OP-000124 · Tienda Doña Rosa'
+              incomingCop:
+                summary: Relia cobra a una billetera en COP
+                value:
+                  direction: incoming
+                  counterparty: '$ilp.interledger-test.dev/usuario-cop'
+                  receiveAmount: { value: '5000000', assetCode: COP, assetScale: 2 }
+                  expiresAt: '2026-10-17T15:05:00Z'
+                  description: 'Retiro OP-000125 · Tienda Doña Rosa'
+              incomingOtraMoneda:
+                summary: Relia cobra a una billetera en USD (el pagador aprueba en USD)
+                description: |
+                  Esperado: `pending_approval`, aprobación en la billetera, `completed`, `receivedAmount` en COP igual a
+                  `receiveAmount` y `debitAmount` en USD.
+                value:
+                  direction: incoming
+                  counterparty: '$ilp.interledger-test.dev/usuario-usd'
+                  receiveAmount: { value: '5000000', assetCode: COP, assetScale: 2 }
+                  expiresAt: '2026-10-17T15:05:00Z'
+                  description: 'Retiro OP-000126 · Tienda Doña Rosa'
+              sinRutaDeConversion:
+                summary: Contraparte en una moneda que el riel no convierte
+                description: Esperado 422 `unsupported_asset`, sin incoming payment abierto en el riel.
+                value:
+                  direction: outgoing
+                  counterparty: '$ilp.interledger-test.dev/usuario-sin-ruta'
+                  receiveAmount: { value: '4900000', assetCode: COP, assetScale: 2 }
       responses:
         '200':
           description: Pago ya creado con esta `Idempotency-Key`.
@@ -107,6 +164,95 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Payment'
+              examples:
+                outgoingCop:
+                  summary: Relia paga en COP; el receptor recibe exacto
+                  value:
+                    id: 6f1c2a9e-3b4d-4e5f-8a7b-1c2d3e4f5a6b
+                    idempotencyKey: 0b8e7d6c-5a4b-4c3d-9e2f-1a0b9c8d7e6f
+                    direction: outgoing
+                    status: processing
+                    sender: '$ilp.interledger-test.dev/relia'
+                    receiver: '$ilp.interledger-test.dev/usuario-cop'
+                    receiveAmount: { value: '4900000', assetCode: COP, assetScale: 2 }
+                    debitAmount: { value: '4900000', assetCode: COP, assetScale: 2 }
+                    receivedAmount: null
+                    quotedReceiveAmount: { value: '4900000', assetCode: COP, assetScale: 2 }
+                    approval: null
+                    expiresAt: null
+                    failureCode: null
+                    failureDetail: null
+                    rail: { incomingPaymentUrl: null, quoteUrl: null, outgoingPaymentUrl: null }
+                    createdAt: '2026-10-17T15:00:00Z'
+                    updatedAt: '2026-10-17T15:00:00Z'
+                    completedAt: null
+                    version: 1
+                outgoingOtraMoneda:
+                  summary: Relia paga a USD; Relia debita exacto y el quote estima lo que llega en USD
+                  value:
+                    id: 6f1c2a9e-3b4d-4e5f-8a7b-1c2d3e4f5a6b
+                    idempotencyKey: 0b8e7d6c-5a4b-4c3d-9e2f-1a0b9c8d7e6f
+                    direction: outgoing
+                    status: processing
+                    sender: '$ilp.interledger-test.dev/relia'
+                    receiver: '$ilp.interledger-test.dev/usuario-usd'
+                    receiveAmount: { value: '4900000', assetCode: COP, assetScale: 2 }
+                    debitAmount: { value: '4900000', assetCode: COP, assetScale: 2 }
+                    receivedAmount: null
+                    quotedReceiveAmount: { value: '1190', assetCode: USD, assetScale: 2 }
+                    approval: null
+                    expiresAt: null
+                    failureCode: null
+                    failureDetail: null
+                    rail: { incomingPaymentUrl: null, quoteUrl: null, outgoingPaymentUrl: null }
+                    createdAt: '2026-10-17T15:00:00Z'
+                    updatedAt: '2026-10-17T15:00:00Z'
+                    completedAt: null
+                    version: 1
+                incomingCop:
+                  summary: Relia cobra en COP
+                  value:
+                    id: 6f1c2a9e-3b4d-4e5f-8a7b-1c2d3e4f5a6b
+                    idempotencyKey: 0b8e7d6c-5a4b-4c3d-9e2f-1a0b9c8d7e6f
+                    direction: incoming
+                    status: pending_approval
+                    sender: '$ilp.interledger-test.dev/usuario-cop'
+                    receiver: '$ilp.interledger-test.dev/relia'
+                    receiveAmount: { value: '5000000', assetCode: COP, assetScale: 2 }
+                    debitAmount: { value: '5000000', assetCode: COP, assetScale: 2 }
+                    receivedAmount: null
+                    quotedReceiveAmount: { value: '5000000', assetCode: COP, assetScale: 2 }
+                    approval: { method: redirect, url: 'https://auth.interledger-test.dev/interact/abc' }
+                    expiresAt: '2026-10-17T15:05:00Z'
+                    failureCode: null
+                    failureDetail: null
+                    rail: { incomingPaymentUrl: null, quoteUrl: null, outgoingPaymentUrl: null }
+                    createdAt: '2026-10-17T15:00:00Z'
+                    updatedAt: '2026-10-17T15:00:00Z'
+                    completedAt: null
+                    version: 1
+                incomingOtraMoneda:
+                  summary: Relia cobra a USD; el pagador aprueba el débito en USD y Relia recibe COP exacto
+                  value:
+                    id: 6f1c2a9e-3b4d-4e5f-8a7b-1c2d3e4f5a6b
+                    idempotencyKey: 0b8e7d6c-5a4b-4c3d-9e2f-1a0b9c8d7e6f
+                    direction: incoming
+                    status: pending_approval
+                    sender: '$ilp.interledger-test.dev/usuario-usd'
+                    receiver: '$ilp.interledger-test.dev/relia'
+                    receiveAmount: { value: '5000000', assetCode: COP, assetScale: 2 }
+                    debitAmount: { value: '1225', assetCode: USD, assetScale: 2 }
+                    receivedAmount: null
+                    quotedReceiveAmount: { value: '5000000', assetCode: COP, assetScale: 2 }
+                    approval: { method: redirect, url: 'https://auth.interledger-test.dev/interact/abc' }
+                    expiresAt: '2026-10-17T15:05:00Z'
+                    failureCode: null
+                    failureDetail: null
+                    rail: { incomingPaymentUrl: null, quoteUrl: null, outgoingPaymentUrl: null }
+                    createdAt: '2026-10-17T15:00:00Z'
+                    updatedAt: '2026-10-17T15:00:00Z'
+                    completedAt: null
+                    version: 1
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -114,7 +260,22 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
-          $ref: '#/components/responses/ValidationError'
+          description: |
+            Cuerpo inválido (`validation_error`), contraparte igual a la billetera de Relia (`same_wallet`) o moneda
+            no soportada (`unsupported_asset`). Ver la respuesta `ValidationError`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                sinRutaDeConversion:
+                  summary: El riel no cotiza entre COP y la moneda de la contraparte
+                  value:
+                    type: about:blank
+                    title: Moneda no soportada
+                    status: 422
+                    code: unsupported_asset
+                    detail: 'El riel no cotiza entre COP y XYZ ($ilp.interledger-test.dev/usuario-sin-ruta). Riel: ...'
         '503':
           $ref: '#/components/responses/RailUnavailable'
 
@@ -276,8 +437,9 @@ components:
             $ref: '#/components/schemas/Problem'
     ValidationError:
       description: |
-        Cuerpo inválido (`validation_error`) o moneda distinta a la del riel (`unsupported_asset`), o
-        contraparte igual a la billetera de Relia (`same_wallet`).
+        Cuerpo inválido (`validation_error`), contraparte igual a la billetera de Relia (`same_wallet`) o moneda no
+        soportada (`unsupported_asset`): `receiveAmount` no está en la moneda de Relia, o el riel no cotiza entre la
+        moneda de Relia y la de la contraparte. La moneda de la contraparte por sí sola no es motivo de rechazo.
       content:
         application/problem+json:
           schema:
@@ -357,7 +519,10 @@ components:
           description: Con `outgoing`, quien recibe. Con `incoming`, quien paga. La otra punta es siempre la billetera de Relia.
         receiveAmount:
           $ref: '#/components/schemas/Amount'
-          description: Lo que recibe el destino, exacto.
+          description: |
+            Monto en la moneda de Relia (si no, 422 `unsupported_asset`): lo que Relia recibe (`incoming`) o lo que
+            Relia entrega (`outgoing`). En `outgoing` a una contraparte en la moneda de Relia es lo que recibe el
+            receptor, exacto; a una contraparte en otra moneda es lo que Relia debita, exacto.
         expiresAt:
           type: string
           format: date-time
@@ -430,13 +595,26 @@ components:
           $ref: '#/components/schemas/PaymentPointer'
         receiveAmount:
           $ref: '#/components/schemas/Amount'
+          description: Eco del monto pedido, en la moneda de Relia (ver `CreatePaymentRequest.receiveAmount`).
         debitAmount:
-          description: Lo que se debita al pagador según la cotización. Null hasta cotizar.
+          description: |
+            Lo que se debita al pagador según la cotización, en la moneda del pagador: la de Relia en `outgoing`, la
+            de la contraparte en `incoming`. Null hasta cotizar.
           oneOf:
             - $ref: '#/components/schemas/Amount'
             - type: 'null'
         receivedAmount:
-          description: Lo que efectivamente recibió el destino. Null hasta que empiece a llegar.
+          description: |
+            Lo que efectivamente recibió el destino, en la moneda del receptor: la de Relia en `incoming`, la de la
+            contraparte en `outgoing`. Null hasta que empiece a llegar.
+          oneOf:
+            - $ref: '#/components/schemas/Amount'
+            - type: 'null'
+        quotedReceiveAmount:
+          description: |
+            Lo que el quote promete entregar al receptor, en su moneda. Es un estimado mientras el pago se procesa; lo
+            que llegó de verdad está en `receivedAmount`. En `incoming` y en `outgoing` dentro de la misma moneda
+            coincide con `receiveAmount`. Null hasta cotizar.
           oneOf:
             - $ref: '#/components/schemas/Amount'
             - type: 'null'
