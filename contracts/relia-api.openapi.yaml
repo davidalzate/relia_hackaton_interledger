@@ -394,8 +394,8 @@ paths:
       description: |
         1. Cancela en el riel los cobros pendientes.
         2. Vacía operaciones, pagos, liquidaciones, llaves, OTP, mensajes y recibos.
-        3. Vuelve a sembrar: 4 corresponsales con historiales de ejemplo (Rosa en ceros), 3000000001 vinculado a
-           `$ilp.interledger-test.dev/jeffdev` y 3000000002 sin llave.
+        3. Vuelve a sembrar: 4 corresponsales con historiales de ejemplo (Rosa en ceros), +573000000001 vinculado a
+           `$ilp.interledger-test.dev/jeffdev` y +573000000002 sin llave.
 
         El dinero ya movido en las billeteras reales no se devuelve. Apaga los fallos forzados.
       security: []
@@ -918,7 +918,7 @@ components:
       name: phone
       in: path
       required: true
-      description: Celular colombiano de 10 dígitos, sin espacios.
+      description: Celular en formato E.164 (`+` e indicativo del país, sin espacios). En la ruta va tal cual o como `%2B`.
       schema:
         $ref: '#/components/schemas/Phone'
     IdempotencyKey:
@@ -1023,13 +1023,14 @@ components:
 
     Phone:
       type: string
-      pattern: '^3[0-9]{9}$'
-      examples: ['3000000001']
+      description: Celular en formato E.164 (`+` e indicativo del país, sin espacios).
+      pattern: '^\+[1-9][0-9]{7,14}$'
+      examples: ['+573000000001']
 
     MaskedPhone:
       type: string
       description: Celular enmascarado para mostrar.
-      examples: ['300 *** 0001']
+      examples: ['+57300 *** 0001']
 
     MaskedWalletAddress:
       type: string
@@ -1474,11 +1475,11 @@ components:
         waLink:
           type: string
           format: uri
-          examples: ['https://wa.me/573000000002?text=Hola%2C%20te%20invito%20a%20vincular%20tu%20wallet%20en%20relia.com%2Fselectkey%3Fphone%3D3000000002']
+          examples: ['https://wa.me/573000000002?text=Hola%2C%20te%20invito%20a%20vincular%20tu%20wallet%20en%20relia.com%2Fselectkey%3Fphone%3D%252B573000000002']
         message:
           type: string
           description: El enlace lleva el celular para que la página pública lo precargue.
-          examples: ['Hola, te invito a vincular tu wallet en relia.com/selectkey?phone=3000000002']
+          examples: ['Hola, te invito a vincular tu wallet en relia.com/selectkey?phone=%2B573000000002']
         sentAt:
           type: string
           format: date-time

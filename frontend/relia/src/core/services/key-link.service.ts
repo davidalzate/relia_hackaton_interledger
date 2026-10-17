@@ -60,14 +60,17 @@ export class KeyLinkService {
   // shortcut: el OTP queda en la bandeja simulada del API (`GET /demo/messages`, solo con DEMO_MODE);
   // se copia al teléfono simulado del front (C2). Sin modo demo el código no llega a C2.
   private copyOtpToPhone(phone: string): Observable<void> {
-    return this.http
-      .get(`${environment.apiUrl}/demo/messages`, { params: { phone, limit: 1 } })
-      .pipe(
-        timeout(environment.httpTimeoutMs),
-        map((res) => DemoMessagesSchema.parse(res).items[0]),
-        tap((msg) => msg && this.sms.send(phone, msg.content)),
-        map(() => undefined),
-        catchError(() => of(undefined)),
-      );
+    return (
+      this.http
+        // HttpParams deja el '+' sin codificar y el API lo leería como espacio
+        .get(`${environment.apiUrl}/demo/messages?phone=${encodeURIComponent(phone)}&limit=1`)
+        .pipe(
+          timeout(environment.httpTimeoutMs),
+          map((res) => DemoMessagesSchema.parse(res).items[0]),
+          tap((msg) => msg && this.sms.send(phone, msg.content)),
+          map(() => undefined),
+          catchError(() => of(undefined)),
+        )
+    );
   }
 }

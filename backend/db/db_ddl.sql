@@ -164,7 +164,7 @@ CREATE TABLE public.agents (
 	CONSTRAINT agents_name_check CHECK ((length(btrim(name)) > 0)),
 	CONSTRAINT agents_password_check CHECK ((length(password) >= 4)),
 	CONSTRAINT agents_payment_pointer_check CHECK ((payment_pointer ~ '^\$[^[:space:]/]+(/[^[:space:]]*)?$'::text)),
-	CONSTRAINT agents_phone_check CHECK ((phone ~ '^3[0-9]{9}$'::text)),
+	CONSTRAINT agents_phone_check CHECK ((phone ~ '^\+[1-9][0-9]{7,14}$'::text)),
 	CONSTRAINT agents_pkey PRIMARY KEY (id)
 );
 CREATE UNIQUE INDEX ux_agents_email ON public.agents USING btree (lower(email));
@@ -219,7 +219,7 @@ CREATE TABLE public.otp_challenges (
 	CONSTRAINT ck_otp_purpose CHECK (((purpose = 'wallet_linking'::otp_purpose) = (payment_pointer IS NOT NULL))),
 	CONSTRAINT otp_challenges_attempts_check CHECK ((attempts >= 0)),
 	CONSTRAINT otp_challenges_max_attempts_check CHECK ((max_attempts > 0)),
-	CONSTRAINT otp_challenges_mobile_check CHECK ((mobile ~ '^3[0-9]{9}$'::text)),
+	CONSTRAINT otp_challenges_mobile_check CHECK ((mobile ~ '^\+[1-9][0-9]{7,14}$'::text)),
 	CONSTRAINT otp_challenges_payment_pointer_check CHECK ((payment_pointer ~ '^\$[^[:space:]/]+(/[^[:space:]]*)?$'::text)),
 	CONSTRAINT otp_challenges_pkey PRIMARY KEY (id)
 );
@@ -240,7 +240,7 @@ CREATE TABLE public.wallet_keys (
 	linked_at timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT ux_wallet_keys_mobile UNIQUE (mobile),
 	CONSTRAINT ux_wallet_keys_wallet UNIQUE (wallet_address_url),
-	CONSTRAINT wallet_keys_mobile_check CHECK ((mobile ~ '^3[0-9]{9}$'::text)),
+	CONSTRAINT wallet_keys_mobile_check CHECK ((mobile ~ '^\+[1-9][0-9]{7,14}$'::text)),
 	CONSTRAINT wallet_keys_payment_pointer_check CHECK ((payment_pointer ~ '^\$[^[:space:]/]+(/[^[:space:]]*)?$'::text)),
 	CONSTRAINT wallet_keys_pkey PRIMARY KEY (id)
 );
@@ -393,7 +393,7 @@ CREATE TABLE public.simulated_messages (
 	is_read bool DEFAULT false NOT NULL,
 	created_at timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT simulated_messages_pkey PRIMARY KEY (id),
-	CONSTRAINT simulated_messages_recipient_check CHECK ((recipient ~ '^3[0-9]{9}$'::text)),
+	CONSTRAINT simulated_messages_recipient_check CHECK ((recipient ~ '^\+[1-9][0-9]{7,14}$'::text)),
 	CONSTRAINT simulated_messages_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES public.operations(id) ON DELETE SET NULL
 );
 CREATE INDEX ix_messages_recipient ON public.simulated_messages USING btree (recipient, created_at DESC);
@@ -501,7 +501,7 @@ CREATE TABLE public.receipt_issuances (
 	created_at timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT ck_issuance_requester CHECK ((((requested_by = 'agent'::receipt_requester) AND (agent_id IS NOT NULL)) OR ((requested_by = 'user'::receipt_requester) AND (user_mobile IS NOT NULL)) OR (requested_by = 'system'::receipt_requester))),
 	CONSTRAINT receipt_issuances_pkey PRIMARY KEY (id),
-	CONSTRAINT receipt_issuances_user_mobile_check CHECK ((user_mobile ~ '^3[0-9]{9}$'::text)),
+	CONSTRAINT receipt_issuances_user_mobile_check CHECK ((user_mobile ~ '^\+[1-9][0-9]{7,14}$'::text)),
 	CONSTRAINT receipt_issuances_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES public.agents(id) ON DELETE RESTRICT,
 	CONSTRAINT receipt_issuances_receipt_id_fkey FOREIGN KEY (receipt_id) REFERENCES public.receipts(id) ON DELETE RESTRICT
 );

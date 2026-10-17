@@ -251,7 +251,7 @@ Panel **E1** y teléfono **C2**. Sin login; solo con `DEMO_MODE=true` (si no, 40
 | "Inscribir celular (página pública)" | Navega a C1 → [flujo 8](#8-vincular-billetera-página-pública) |
 | "Reiniciar demo" | `POST /demo/reset` → 204 |
 
-`POST /demo/reset` deja 4 corresponsales de ejemplo (Rosa en ceros), el **3000000001** vinculado a `$ilp.interledger-test.dev/jeffdev` y el **3000000002** sin llave. No devuelve dinero ya movido en las billeteras reales.
+`POST /demo/reset` deja 4 corresponsales de ejemplo (Rosa en ceros), el **+573000000001** vinculado a `$ilp.interledger-test.dev/jeffdev` y el **+573000000002** sin llave. No devuelve dinero ya movido en las billeteras reales.
 
 ---
 
@@ -264,13 +264,13 @@ Orden del guion de [prototype.md §12](../docs/prototype.md), con sus llamadas. 
 | 1 | Entrar como Rosa, ver avisos | `POST /auth/login` → `GET /agents/{agentId}` → `GET /agents/{agentId}/history?limit=3` |
 | 2 | Asignar efectivo $300.000 | `POST /agents/{agentId}/cash-adjustments` `{ mode: "add", amount: 300000 }` |
 | 3 | Cargar cupo por Bre-B y simular el pago | `POST /agents/{agentId}/quota-top-ups` `{ method: "breB", requestedAmount }` → `POST /demo/quota-top-ups/{operationId}/breb-payment` → `GET /operations/{operationId}` |
-| 4 | Depositar $50.000 al 3000000001 | `POST .../operations/preview` (varias veces) → `GET /keys/3000000001` → `POST .../deposits` → `GET /operations/{id}` hasta `completed` → `GET /operations/{id}/receipt` |
-| 5 | Retirar $100.000 | `POST .../operations/preview` → `GET /keys/3000000001` → `POST .../withdrawals` → `GET /demo/payment-requests?phone=3000000001` → aprobar en la wallet → `GET /operations/{id}` hasta `completed` → `POST /operations/{id}/cash-handover` |
-| 6 | Depositar a un celular sin llave e invitarlo | `GET /keys/3000000002` (404) → `POST /keys/3000000002/invitations` → `GET /demo/messages?phone=3000000002` → `POST /key-links` → `GET /demo/messages?phone=3000000002` (OTP) → `POST /key-links/{challengeId}/verify` → `GET /keys/3000000002` → seguir el flujo 5 |
+| 4 | Depositar $50.000 al +573000000001 | `POST .../operations/preview` (varias veces) → `GET /keys/+573000000001` → `POST .../deposits` → `GET /operations/{id}` hasta `completed` → `GET /operations/{id}/receipt` |
+| 5 | Retirar $100.000 | `POST .../operations/preview` → `GET /keys/+573000000001` → `POST .../withdrawals` → `GET /demo/payment-requests?phone=%2B573000000001` → aprobar en la wallet → `GET /operations/{id}` hasta `completed` → `POST /operations/{id}/cash-handover` |
+| 6 | Depositar a un celular sin llave e invitarlo | `GET /keys/+573000000002` (404) → `POST /keys/+573000000002/invitations` → `GET /demo/messages?phone=%2B573000000002` → `POST /key-links` → `GET /demo/messages?phone=%2B573000000002` (OTP) → `POST /key-links/{challengeId}/verify` → `GET /keys/+573000000002` → seguir el flujo 5 |
 | 7 | Historial y comprobante | `GET /agents/{agentId}/history` → `GET /operations/{id}/receipt` |
 | 8 | Admin: totales, detalle de Rosa y pago de comisión | `POST /auth/login` (admin) → `GET /agents` + `GET /settlements?from=hoy` → `GET /agents/{rosaId}` + `/history` → `POST /agents/{rosaId}/settlements` → `GET /settlements/{id}` hasta `paid` |
 
-Paso 6: hace falta una billetera COP libre para el 3000000002 (ticket [11](../docs/wayfinder/contratos-api/issues/11-billetera-para-el-celular-sin-llave.md), abierto). `jeffdev` ya está tomada y las de Relia y Rosa dan `409 phone_reserved`.
+Paso 6: hace falta una billetera COP libre para el +573000000002 (ticket [11](../docs/wayfinder/contratos-api/issues/11-billetera-para-el-celular-sin-llave.md), abierto). `jeffdev` ya está tomada y las de Relia y Rosa dan `409 phone_reserved`.
 
 ---
 
@@ -311,6 +311,6 @@ El prototipo (`Relia.dc.html`) simula cosas que en el contrato son reales o no e
 
 - **Aprobar o rechazar** un retiro o una carga por Wallet no tiene endpoint: se hace en la wallet de prueba abriendo `approvalUrl`. "Mi billetera" y el panel solo listan las solicitudes y enlazan a esa URL.
 - **"Usuario rechaza"** (interruptor permanente) no existe. Para probar un rechazo, se rechaza en la wallet de prueba.
-- **"Simular que la llave no existe"** no existe. Se usa un celular sin llave real (el 3000000002 tras el reinicio).
-- **Usuario de ejemplo:** el prototipo dice `usuario-demo`; tras `POST /demo/reset` el 3000000001 queda vinculado a `jeffdev`.
+- **"Simular que la llave no existe"** no existe. Se usa un celular sin llave real (el +573000000002 tras el reinicio).
+- **Usuario de ejemplo:** el prototipo dice `usuario-demo`; tras `POST /demo/reset` el +573000000001 queda vinculado a `jeffdev`.
 - **Reemplazar la billetera** de un celular ya vinculado no está permitido: `409 key_already_linked`.

@@ -8,9 +8,14 @@ import { AuthService } from './auth.service';
 import { KeyLinkService } from './key-link.service';
 import { SmsService } from './sms.service';
 
-const PHONE = '3000000002';
+const PHONE = '+573000000002';
 const WALLET = '$ilp.interledger-test.dev/maria';
-const CHALLENGE = { challengeId: 'ch-1', phone: PHONE, expiresAt: '2026-10-17T12:05:00Z', maxAttempts: 5 };
+const CHALLENGE = {
+  challengeId: 'ch-1',
+  phone: PHONE,
+  expiresAt: '2026-10-17T12:05:00Z',
+  maxAttempts: 5,
+};
 
 describe('KeyLinkService', () => {
   let service: KeyLinkService;
@@ -39,7 +44,7 @@ describe('KeyLinkService', () => {
 
     expect(service.pending()).toEqual({ phone: PHONE, walletAddress: WALLET, challengeId: 'ch-1' });
     http
-      .expectOne((r) => r.url === '/api/demo/messages' && r.params.get('phone') === PHONE)
+      .expectOne('/api/demo/messages?phone=%2B573000000002&limit=1')
       .flush({ items: [{ content: 'Relia: tu código es 123456' }], unreadCount: 1 });
     expect(TestBed.inject(SmsService).messages()[0]).toMatchObject({
       phone: PHONE,
@@ -51,14 +56,16 @@ describe('KeyLinkService', () => {
     let done = false;
     service.start(PHONE, WALLET).subscribe({ complete: () => (done = true) });
     http.expectOne('/api/key-links').flush(CHALLENGE);
-    http.expectOne((r) => r.url === '/api/demo/messages').flush(null, { status: 404, statusText: 'Not Found' });
+    http
+      .expectOne('/api/demo/messages?phone=%2B573000000002&limit=1')
+      .flush(null, { status: 404, statusText: 'Not Found' });
     expect(done).toBe(true);
   });
 
   it('verify hace POST /key-links/{challengeId}/verify y limpia el desafío', () => {
     service.start(PHONE, WALLET).subscribe();
     http.expectOne('/api/key-links').flush(CHALLENGE);
-    http.expectOne((r) => r.url === '/api/demo/messages').flush({ items: [] });
+    http.expectOne('/api/demo/messages?phone=%2B573000000002&limit=1').flush({ items: [] });
 
     service.verify('123456').subscribe();
     const req = http.expectOne('/api/key-links/ch-1/verify');

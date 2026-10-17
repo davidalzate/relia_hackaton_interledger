@@ -1,0 +1,24 @@
+.phone-field {
+  display: flex;
+  gap: 0.5rem;
+
+  input {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.country {
+  flex: none;
+  padding: 0 0.75rem;
+  border: 1px solid var(--relia-line);
+  border-radius: var(--p-inputtext-border-radius, 8px);
+  background: var(--p-inputtext-background, #fff);
+  color: inherit;
+  font: inherit;
+
+  &:focus-visible {
+    outline: 2px solid var(--relia-cobalt);
+    outline-offset: 1px;
+  }
+}

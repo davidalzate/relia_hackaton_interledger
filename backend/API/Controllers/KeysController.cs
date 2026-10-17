@@ -8,7 +8,7 @@ using Relia.Api.Services;
 namespace Relia.Api.Controllers;
 
 [ApiController]
-[Route("keys/{phone:regex(^3[[0-9]]{{9}}$)}")]
+[Route("keys/{phone:regex(^\\+[[1-9]][[0-9]]{{7,14}}$)}")]
 [Authorize]
 [Tags("keys")]
 public class KeysController(IKeyService keys) : ControllerBase

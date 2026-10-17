@@ -15,7 +15,8 @@ import { InputText } from 'primeng/inputtext';
 import { ApiError } from '../../core/http/api';
 import { KeyLinkService } from '../../core/services/key-link.service';
 import { ErrorCode } from '../../shared/schemas/problem.schema';
-import { formatPhone, phoneDigits } from '../../shared/utils/phone';
+import { PhoneFieldComponent } from '../../shared/components/phone-field/phone-field.component';
+import { displayPhone } from '../../shared/utils/phone';
 
 /** `WalletAddress` del contrato: `$dominio/ruta` */
 const POINTER = /^\$[^\s/]+\/\S+$/;
@@ -34,7 +35,7 @@ type Step = 'form' | 'code' | 'done';
 // C1: página pública para que el usuario asocie su celular (llave) a su payment pointer
 @Component({
   selector: 'app-link-phone',
-  imports: [ReactiveFormsModule, RouterLink, InputText],
+  imports: [ReactiveFormsModule, RouterLink, InputText, PhoneFieldComponent],
   templateUrl: './link-phone.component.html',
   styleUrl: './link-phone.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -53,11 +54,9 @@ export class LinkPhoneComponent {
   protected readonly linking = signal(false);
 
   protected readonly form = this.fb.group({
-    // El enlace del WhatsApp de invitación trae ?phone=
+    // El enlace del WhatsApp de invitación trae ?phone= en E.164
     phone: [
-      formatPhone(
-        this.pending?.phone ?? inject(ActivatedRoute).snapshot.queryParamMap.get('phone') ?? '',
-      ),
+      this.pending?.phone ?? inject(ActivatedRoute).snapshot.queryParamMap.get('phone') ?? '',
     ],
     walletAddress: [this.pending?.walletAddress ?? ''],
     code: [''],
@@ -66,16 +65,12 @@ export class LinkPhoneComponent {
     initialValue: this.form.getRawValue(),
   });
 
-  protected readonly phone = computed(() => phoneDigits(this.value().phone ?? ''));
-  protected readonly formattedPhone = computed(() => formatPhone(this.phone()));
+  /** E.164, o '' mientras el número está incompleto */
+  protected readonly phone = computed(() => this.value().phone ?? '');
+  protected readonly formattedPhone = computed(() => displayPhone(this.phone()));
   protected readonly walletAddress = computed(() => (this.value().walletAddress ?? '').trim());
-  protected readonly phoneInvalid = computed(() => this.phone().length !== 10);
+  protected readonly phoneInvalid = computed(() => !this.phone());
   protected readonly pointerInvalid = computed(() => !POINTER.test(this.walletAddress()));
-
-  protected formatPhone(): void {
-    const formatted = formatPhone(this.form.controls.phone.value);
-    if (formatted !== this.form.controls.phone.value) this.form.controls.phone.setValue(formatted);
-  }
 
   /** C1.1 → C1.2. También "Reenviar código": el API crea el desafío y manda el OTP */
   protected sendCode(): void {
