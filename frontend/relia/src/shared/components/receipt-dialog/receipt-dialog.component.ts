@@ -77,7 +77,7 @@ export class ReceiptDialogComponent {
 
   protected readonly op = computed(() => {
     const id = this.receipt.operationId();
-    return id ? (this.agent.operation(id) ?? null) : null;
+    return id ? (this.receipt.operation() ?? this.agent.operation(id) ?? null) : null;
   });
   /** `GET /operations/{id}/receipt?channel=screen` al abrir (registra la emisión) */
   private readonly official = toSignal(

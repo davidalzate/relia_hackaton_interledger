@@ -1,6 +1,28 @@
-main {
+@use '../../shared/styles/operation-flow';
+
+.confirm {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding-block: 1.5rem;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--relia-muted-text);
+}
+
+.pointer {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
 }

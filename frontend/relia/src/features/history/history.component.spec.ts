@@ -6,7 +6,6 @@ import { LOCALE_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import { AgentService } from '../../core/services/agent.service';
 import { HistoryComponent } from './history.component';
 
 registerLocaleData(localeEsCo);
@@ -20,23 +19,41 @@ function setup() {
       { provide: LOCALE_ID, useValue: 'es-CO' },
     ],
   });
-  const agent = TestBed.inject(AgentService);
   const fixture = TestBed.createComponent(HistoryComponent);
   const c = fixture.componentInstance as unknown as Record<string, any>;
   const el = fixture.nativeElement as HTMLElement;
   const http = TestBed.inject(HttpTestingController);
   const render = () => fixture.detectChanges();
-  return { agent, c, el, render, http };
+  return { c, el, render, http };
 }
 
 describe('HistoryComponent', () => {
-  it('lista más reciente primero con saldos y "Pendiente" en operaciones pendientes', () => {
-    const { agent, el, render } = setup();
-    agent['record'](100_000, 'completed', 'cash', {
-      before: { cupo: 0, commission: 0, cash: 0 },
-      after: { cupo: 0, commission: 0, cash: 100_000 },
-    });
-    agent['record'](300_000, 'pending', 'cupo');
+  const row = (id: string, kind: string, status: string, cash: [number, number]) => ({
+    id,
+    kind,
+    reference: null,
+    occurredAt: '2026-10-16T15:00:00Z',
+    status,
+    amount: 100_000,
+    balances: {
+      quota: { before: 0, after: 0 },
+      accruedCommission: { before: 0, after: 0 },
+      cashOnHand: { before: cash[0], after: cash[1] },
+    },
+    operationId: id,
+  });
+
+  it('lista las filas del API con saldos y "Pendiente" en las pendientes', () => {
+    const { el, render, http } = setup();
+    render();
+    http
+      .expectOne((r) => r.url.endsWith('/history'))
+      .flush({
+        items: [
+          row('op-2', 'quotaTopUp', 'pending', [100_000, 100_000]),
+          row('adj-1', 'cashAdjustment', 'completed', [0, 100_000]),
+        ],
+      });
     render();
 
     const rows = [...el.querySelectorAll('tbody tr')];
@@ -50,11 +67,15 @@ describe('HistoryComponent', () => {
     expect(el.querySelector('.summary')?.textContent).toContain('Efectivo');
   });
 
-  it('filtra por tipo y muestra el vacío', () => {
-    const { agent, c, el, render, http } = setup();
-    agent['record'](50_000, 'completed', 'cash-set');
+  it('filtra por tipo en el API y muestra el vacío', () => {
+    const { c, el, render, http } = setup();
     render();
+    http.expectOne((r) => !r.params.has('kind')).flush({ items: [] });
     c['filter'].set('cashAdjustment');
+    render();
+    http
+      .expectOne((r) => r.params.get('kind') === 'cashAdjustment')
+      .flush({ items: [row('adj-1', 'cashAdjustment', 'completed', [0, 50_000])] });
     render();
     expect(el.querySelectorAll('tbody tr').length).toBe(1);
     expect(el.querySelector('.pill.active')?.textContent?.trim()).toBe('Efectivo');

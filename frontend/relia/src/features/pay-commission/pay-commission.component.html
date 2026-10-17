@@ -1,6 +1,67 @@
-<main class="container-wide">
+<main class="container-ops">
   <a class="link-back" routerLink="/admin">← Corresponsales</a>
-  <section class="card">
-    <h1>Pagar comisión</h1>
-  </section>
+
+  @if (loadError()) {
+    <p class="card" role="alert">No pudimos cargar este corresponsal. Vuelve a Corresponsales.</p>
+  }
+
+  @if (agent(); as a) {
+    @let s = step();
+    @switch (s.kind) {
+      @case ('confirm') {
+        <section class="card confirm" aria-labelledby="pay-title">
+          <p class="label" id="pay-title">Pago de comisión</p>
+          <p class="amount">
+            {{ a.balances.accruedCommission | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+          </p>
+          <p>Para {{ a.name }}</p>
+          <p class="pointer">{{ a.walletAddress }}</p>
+          <p class="hint">La comisión acumulada del corresponsal quedará en $0.</p>
+          <div class="actions">
+            <button
+              type="button"
+              class="btn-primary"
+              [disabled]="a.balances.accruedCommission <= 0"
+              (click)="pay()"
+            >
+              Confirmar pago
+            </button>
+            <a class="btn-secondary" routerLink="/admin">Cancelar</a>
+          </div>
+        </section>
+      }
+      @case ('sending') {
+        <section class="card sending" role="status" aria-live="polite">
+          <p-progressspinner strokeWidth="4" ariaLabel="Enviando pago" />
+          <p>
+            Enviando
+            {{ a.balances.accruedCommission | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} a
+            {{ a.name }}
+          </p>
+        </section>
+      }
+      @case ('done') {
+        <section class="card result-ok" aria-labelledby="done-title">
+          <h1 id="done-title">Comisión pagada</h1>
+          <p class="amount">
+            {{ s.settlement.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+          </p>
+          <p>{{ s.settlement.agentName }} · {{ s.settlement.reference }}</p>
+          <div class="result-actions">
+            <a class="btn-light" routerLink="/admin">Listo</a>
+          </div>
+        </section>
+      }
+      @case ('error') {
+        <section class="card result-error" role="alert" aria-labelledby="error-title">
+          <h1 id="error-title">No se pagó la comisión</h1>
+          <p>{{ s.message }}</p>
+          <div class="result-actions">
+            <button type="button" class="btn-primary" (click)="pay()">Intentar de nuevo</button>
+            <a class="link-back" routerLink="/admin">Cerrar</a>
+          </div>
+        </section>
+      }
+    }
+  }
 </main>
