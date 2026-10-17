@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- dotnet user-secrets set "RailProxy:ApiKey" "..." -->
+    <UserSecretsId>relia-api-backend</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

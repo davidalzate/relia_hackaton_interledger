@@ -28,7 +28,7 @@ public class EfAgentRepository(ReliaDbContext db) : IAgentRepository
 
     public Task<AgentBalance> GetBalanceForUpdateAsync(Guid agentId, CancellationToken ct = default) =>
         db.AgentBalances
-            .FromSqlInterpolated($"SELECT * FROM cupos WHERE corresponsal_id = {agentId} FOR UPDATE")
+            .FromSqlInterpolated($"SELECT * FROM agent_balances WHERE agent_id = {agentId} FOR UPDATE")
             .SingleAsync(ct);
 }
 

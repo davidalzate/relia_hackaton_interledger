@@ -9,20 +9,9 @@ namespace Relia.Api.Services;
 #pragma warning disable CS9113
 
 // Implementaciones en desarrollo: reciben ya sus repositorios y responden 501 "En desarrollo".
-// Cada una se implementa en el ticket indicado de docs/wayfinder/relia-api/issues/.
+// Cada una se implementa en el ticket indicado de docs/issues/backend-relia-api/.
 
 /// <summary>Ticket 02.</summary>
-public class AuthService(IAgentRepository agents, IAdminRepository admins, ICurrentUser currentUser)
-    : IAuthService
-{
-    public Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("login");
-
-    public Task<MeDto> GetMeAsync(CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("me");
-}
-
-/// <summary>Ticket 04.</summary>
 public class AgentService(
     IAgentRepository agents, IOperationRepository operations, ILedgerRepository ledger,
     ISettlementRepository settlements, ICurrentUser currentUser) : IAgentService
@@ -35,7 +24,7 @@ public class AgentService(
         throw new FeatureInDevelopmentException("listAgentHistory");
 }
 
-/// <summary>Ticket 05.</summary>
+/// <summary>Ticket 03.</summary>
 public class CashAdjustmentService(
     IAgentRepository agents, IOperationRepository operations, ILedgerRepository ledger, IUnitOfWork unitOfWork,
     ICurrentUser currentUser) : ICashAdjustmentService
@@ -45,7 +34,7 @@ public class CashAdjustmentService(
         throw new FeatureInDevelopmentException("createCashAdjustment");
 }
 
-/// <summary>Tickets 06 (desglose), 09 (depósito), 11 (retiro) y 12 (carga de cupo).</summary>
+/// <summary>Tickets 04 (desglose), 07 (depósito), 09 (retiro) y 10 (carga de cupo).</summary>
 public class OperationService(
     IAgentRepository agents, IFeeRepository fees, IWalletKeyRepository keys, IOperationRepository operations,
     IPaymentRepository payments, ILedgerRepository ledger, ISimulatedMessageRepository messages,
@@ -77,7 +66,7 @@ public class OperationService(
         throw new FeatureInDevelopmentException("confirmCashHandover");
 }
 
-/// <summary>Ticket 07.</summary>
+/// <summary>Ticket 05.</summary>
 public class KeyService(IWalletKeyRepository keys, ISimulatedMessageRepository messages, IUnitOfWork unitOfWork)
     : IKeyService
 {
@@ -88,7 +77,7 @@ public class KeyService(IWalletKeyRepository keys, ISimulatedMessageRepository m
         throw new FeatureInDevelopmentException("createKeyInvitation");
 }
 
-/// <summary>Ticket 10.</summary>
+/// <summary>Ticket 08.</summary>
 public class ReceiptService(
     IOperationRepository operations, IReceiptRepository receipts, ISimulatedMessageRepository messages,
     IUnitOfWork unitOfWork, ICurrentUser currentUser) : IReceiptService
@@ -101,7 +90,7 @@ public class ReceiptService(
         throw new FeatureInDevelopmentException("sendReceipt");
 }
 
-/// <summary>Ticket 15 (lectura).</summary>
+/// <summary>Ticket 13.</summary>
 public class SettlementService(ISettlementRepository settlements, ICurrentUser currentUser) : ISettlementService
 {
     public Task<SettlementPageDto> ListAsync(SettlementQuery query, CancellationToken ct = default) =>

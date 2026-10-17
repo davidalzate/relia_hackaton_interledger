@@ -2,9 +2,9 @@ using System.Text.Json;
 
 namespace Relia.Api.Domain;
 
-// Una clase por tabla del esquema v0.2. El mapeo a columnas vive en Persistence/ReliaDbContext.
+// Una clase por tabla de backend/db/db_ddl.sql. El mapeo a columnas vive en Persistence/ReliaDbContext.
 
-/// <summary>Tabla tarifas: tarifa vigente por operación, versionada.</summary>
+/// <summary>Tabla fees: tarifa vigente por operación, versionada.</summary>
 public class Fee
 {
     public long Id { get; set; }
@@ -16,7 +16,7 @@ public class Fee
     public DateTimeOffset CreatedAt { get; set; }
 }
 
-/// <summary>Tabla corresponsales.</summary>
+/// <summary>Tabla agents.</summary>
 public class Agent
 {
     public Guid Id { get; set; }
@@ -29,6 +29,10 @@ public class Agent
     public string WalletAddress { get; set; } = "";
     public string Password { get; set; } = "";
     public bool Active { get; set; }
+
+    /// <summary>Solo demo: la billetera no existe en el riel; su liquidación se paga sin riel.</summary>
+    public bool WalletSimulated { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
@@ -47,7 +51,7 @@ public class Admin
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
-/// <summary>Tabla cupos: cupo, comisión y efectivo de un corresponsal. Una fila por corresponsal.</summary>
+/// <summary>Tabla agent_balances: cupo, comisión y efectivo de un corresponsal. Una fila por corresponsal.</summary>
 public class AgentBalance
 {
     public Guid AgentId { get; set; }
@@ -58,7 +62,7 @@ public class AgentBalance
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
-/// <summary>Tabla llaves_wallet: celular vinculado a un payment pointer. Inmutable.</summary>
+/// <summary>Tabla wallet_keys: celular vinculado a un payment pointer. Inmutable.</summary>
 public class WalletKey
 {
     public Guid Id { get; set; }
@@ -68,7 +72,7 @@ public class WalletKey
     public DateTimeOffset LinkedAt { get; set; }
 }
 
-/// <summary>Tabla desafios_otp.</summary>
+/// <summary>Tabla otp_challenges.</summary>
 public class OtpChallenge
 {
     public Guid Id { get; set; }
@@ -83,7 +87,7 @@ public class OtpChallenge
     public DateTimeOffset CreatedAt { get; set; }
 }
 
-/// <summary>Tabla operaciones: depósito, retiro o carga de cupo.</summary>
+/// <summary>Tabla operations: depósito, retiro o carga de cupo.</summary>
 public class Operation
 {
     public Guid Id { get; set; }
@@ -102,16 +106,24 @@ public class Operation
     public long NetAmount { get; set; }
     public long ChargedAmount { get; set; }
     public OperationState State { get; set; }
+
+    /// <summary>FailureCode del contrato (customer_rejected, payment_failed…) en failed, expired o cancelled.</summary>
+    public string? FailureCode { get; set; }
+
     public string IdempotencyKey { get; set; } = "";
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
+
+    /// <summary>Solo retiros completados: cuándo se confirmó la entrega del efectivo.</summary>
+    public DateTimeOffset? CashHandedOverAt { get; set; }
+
     public DateTimeOffset UpdatedAt { get; set; }
 
     public Agent? Agent { get; set; }
     public WalletKey? WalletKey { get; set; }
 }
 
-/// <summary>Tabla mensajes_simulados: bandeja del teléfono simulado.</summary>
+/// <summary>Tabla simulated_messages: bandeja del teléfono simulado.</summary>
 public class SimulatedMessage
 {
     public long Id { get; set; }
@@ -125,7 +137,7 @@ public class SimulatedMessage
     public DateTimeOffset CreatedAt { get; set; }
 }
 
-/// <summary>Tabla liquidaciones: pago de la comisión acumulada.</summary>
+/// <summary>Tabla settlements: pago de la comisión acumulada.</summary>
 public class Settlement
 {
     public Guid Id { get; set; }
@@ -147,7 +159,7 @@ public class Settlement
     public Admin? CreatedByAdmin { get; set; }
 }
 
-/// <summary>Tabla pagos: intento de pago por riel de una operación o liquidación.</summary>
+/// <summary>Tabla payments: intento de pago por riel de una operación o liquidación.</summary>
 public class Payment
 {
     public Guid Id { get; set; }
@@ -167,6 +179,13 @@ public class Payment
     public string? GrantContinueUri { get; set; }
     public byte[]? GrantContinueTokenEncrypted { get; set; }
     public string? RailReference { get; set; }
+
+    /// <summary>Id del pago en el proxy de riel. Null si no pasó por el proxy.</summary>
+    public Guid? RailPaymentId { get; set; }
+
+    /// <summary>Último version del proxy ya procesado.</summary>
+    public int? RailVersion { get; set; }
+
     public string? DebitValue { get; set; }
     public string? DebitAssetCode { get; set; }
     public short? DebitAssetScale { get; set; }
@@ -182,7 +201,7 @@ public class Payment
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
-/// <summary>Tabla eventos_pago: bitácora de solo inserción de cada pago.</summary>
+/// <summary>Tabla payment_events: bitácora de solo inserción de cada pago.</summary>
 public class PaymentEvent
 {
     public long Id { get; set; }
@@ -197,7 +216,7 @@ public class PaymentEvent
     public DateTimeOffset CreatedAt { get; set; }
 }
 
-/// <summary>Tabla eventos_operacion: bitácora de solo inserción de cada operación.</summary>
+/// <summary>Tabla operation_events: bitácora de solo inserción de cada operación.</summary>
 public class OperationEvent
 {
     public long Id { get; set; }
@@ -209,7 +228,7 @@ public class OperationEvent
     public DateTimeOffset CreatedAt { get; set; }
 }
 
-/// <summary>Tabla movimientos_cupo: libro de solo inserción de cupo, comisión y efectivo.</summary>
+/// <summary>Tabla ledger_entries: libro de solo inserción de cupo, comisión y efectivo.</summary>
 public class LedgerEntry
 {
     public long Id { get; set; }
@@ -231,7 +250,7 @@ public class LedgerEntry
     public DateTimeOffset CreatedAt { get; set; }
 }
 
-/// <summary>Tabla recibos: contenido congelado del recibo de un depósito o retiro.</summary>
+/// <summary>Tabla receipts: contenido congelado del recibo de un depósito o retiro.</summary>
 public class Receipt
 {
     public Guid Id { get; set; }
@@ -242,7 +261,7 @@ public class Receipt
     public DateTimeOffset CreatedAt { get; set; }
 }
 
-/// <summary>Tabla emisiones_recibo: cada vez que un recibo se muestra o se envía.</summary>
+/// <summary>Tabla receipt_issuances: cada vez que un recibo se muestra o se envía.</summary>
 public class ReceiptIssue
 {
     public long Id { get; set; }
@@ -252,5 +271,24 @@ public class ReceiptIssue
     public Guid? AgentId { get; set; }
     public string? CustomerPhone { get; set; }
     public bool IsCopy { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>Tabla idempotency_records: respuesta exitosa guardada por Idempotency-Key.</summary>
+public class IdempotencyRecord
+{
+    public long Id { get; set; }
+
+    /// <summary>Ruta + actor, para que la misma clave en otra ruta o de otro actor no choque.</summary>
+    public string Scope { get; set; } = "";
+
+    public string IdempotencyKey { get; set; } = "";
+
+    /// <summary>SHA-256 en hex del cuerpo de la petición.</summary>
+    public string RequestHash { get; set; } = "";
+
+    public short ResponseStatus { get; set; }
+    public JsonDocument ResponseBody { get; set; } = JsonDocument.Parse("{}");
+    public string? ResourceId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }

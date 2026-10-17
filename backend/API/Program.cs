@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Relia.Api.Auth;
+using Relia.Api.Configuration;
 using Relia.Api.Errors;
 using Relia.Api.Persistence;
 using Relia.Api.Repositories;
@@ -36,7 +37,10 @@ builder.Services.AddControllers()
             problem.Extensions["code"] = "validation_error";
             problem.Extensions["errors"] = ctx.ModelState
                 .Where(e => e.Value?.Errors.Count > 0)
-                .SelectMany(e => e.Value!.Errors.Select(err => new { field = e.Key, message = err.ErrorMessage }))
+                .SelectMany(e => e.Value!.Errors.Select(err => new
+                {
+                    field = JsonNamingPolicy.CamelCase.ConvertName(e.Key), message = err.ErrorMessage,
+                }))
                 .ToList();
             return new ObjectResult(problem)
             {
@@ -49,9 +53,16 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddOpenApi();
 
-// ---- Persistencia: PostgreSQL con el esquema v0.2 ----
+// ---- Configuración ----
+builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.Section));
+builder.Services.Configure<RailProxyOptions>(builder.Configuration.GetSection(RailProxyOptions.Section));
+builder.Services.Configure<ReliaOptions>(builder.Configuration.GetSection(ReliaOptions.Section));
+builder.Services.PostConfigure<ReliaOptions>(o => o.DemoMode = builder.Configuration.GetValue<bool>("DEMO_MODE"));
+
+// ---- Persistencia: PostgreSQL con el esquema de backend/db/db_ddl.sql ----
 builder.Services.AddDbContext<ReliaDbContext>(o =>
     o.UseNpgsql(builder.Configuration.GetConnectionString("Relia"), ReliaDbContext.MapEnums));
+builder.Services.AddScoped<DemoSeeder>();
 
 builder.Services.AddScoped<IUnitOfWork, EfUnitOfWork>();
 builder.Services.AddScoped<IAgentRepository, EfAgentRepository>();
@@ -69,6 +80,7 @@ builder.Services.AddScoped<ISimulatedMessageRepository, EfSimulatedMessageReposi
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
+builder.Services.AddSingleton<JwtTokenIssuer>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<ICashAdjustmentService, CashAdjustmentService>();
@@ -78,16 +90,19 @@ builder.Services.AddScoped<IReceiptService, ReceiptService>();
 builder.Services.AddScoped<ISettlementService, SettlementService>();
 
 // ---- Auth: JWT bearer con rol y agentId ----
-var jwt = builder.Configuration.GetSection("Jwt");
+var jwt = builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
+if (Encoding.UTF8.GetByteCount(jwt.SigningKey) < 32)
+    throw new InvalidOperationException(
+        "Falta Jwt:SigningKey (mínimo 32 bytes). Configúrela con user-secrets o la variable Jwt__SigningKey.");
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(o =>
     {
         o.MapInboundClaims = false;
         o.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidIssuer = jwt["Issuer"],
-            ValidAudience = jwt["Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["SigningKey"]!)),
+            ValidIssuer = jwt.Issuer,
+            ValidAudience = jwt.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),
             RoleClaimType = "role",
             NameClaimType = "sub",
         };
@@ -96,6 +111,12 @@ builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, ProblemAuthorizationResultHandler>();
 
 var app = builder.Build();
+
+// Base recién creada (docker compose up sobre un volumen nuevo): sembrar los datos de la demo.
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    await scope.ServiceProvider.GetRequiredService<DemoSeeder>().SeedIfEmptyAsync();
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -108,7 +129,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-app.Run();
+await app.RunAsync();
 
 /// <summary>401 unauthorized y 403 forbidden en problem+json, como el resto de errores.</summary>
 internal class ProblemAuthorizationResultHandler : IAuthorizationMiddlewareResultHandler

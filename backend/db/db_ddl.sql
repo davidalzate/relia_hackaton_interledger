@@ -1,8 +1,20 @@
--- DROP SCHEMA public;
+-- =====================================================================
+-- RELIA (hackathon Interledger) - Esquema PostgreSQL 16
+--
+-- Corre igual en un Postgres limpio (contenedor local, ver backend/docker-compose.yml)
+-- y en Azure. Se aplica sobre el esquema public, que ya existe en ambos.
+-- Orden: tipos, tablas, funciones, triggers y vistas.
+--
+-- Agregados para cumplir contracts/relia-api.openapi.yaml:
+--   * idempotency_records: respuesta guardada por Idempotency-Key.
+--   * operations.failure_code y operations.cash_handed_over_at.
+--   * agents.wallet_simulated: billetera que no existe en el riel (demo).
+--   * payments.rail_payment_id y payments.rail_version: id y versión del pago en el proxy.
+-- =====================================================================
 
-CREATE SCHEMA public AUTHORIZATION azure_pg_admin;
-
-COMMENT ON SCHEMA public IS 'standard public schema';
+-- =====================================================================
+-- TIPOS
+-- =====================================================================
 
 -- DROP TYPE public.event_source;
 
@@ -100,78 +112,11 @@ CREATE TYPE public.settlement_status AS ENUM (
 	'paid',
 	'voided');
 
--- DROP SEQUENCE public.fees_id_seq;
+-- =====================================================================
+-- TABLAS
+-- =====================================================================
 
-CREATE SEQUENCE public.fees_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START 1
-	CACHE 1
-	NO CYCLE;
--- DROP SEQUENCE public.ledger_entries_id_seq;
-
-CREATE SEQUENCE public.ledger_entries_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START 1
-	CACHE 1
-	NO CYCLE;
--- DROP SEQUENCE public.operation_events_id_seq;
-
-CREATE SEQUENCE public.operation_events_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START 1
-	CACHE 1
-	NO CYCLE;
--- DROP SEQUENCE public.operations_number_seq;
-
-CREATE SEQUENCE public.operations_number_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START 1
-	CACHE 1
-	NO CYCLE;
--- DROP SEQUENCE public.payment_events_id_seq;
-
-CREATE SEQUENCE public.payment_events_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START 1
-	CACHE 1
-	NO CYCLE;
--- DROP SEQUENCE public.receipt_issuances_id_seq;
-
-CREATE SEQUENCE public.receipt_issuances_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START 1
-	CACHE 1
-	NO CYCLE;
--- DROP SEQUENCE public.settlements_number_seq;
-
-CREATE SEQUENCE public.settlements_number_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START 1
-	CACHE 1
-	NO CYCLE;
--- DROP SEQUENCE public.simulated_messages_id_seq;
-
-CREATE SEQUENCE public.simulated_messages_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START 1
-	CACHE 1
-	NO CYCLE;-- public.admins definition
+-- public.admins definition
 
 -- Drop table
 
@@ -193,14 +138,6 @@ CREATE TABLE public.admins (
 CREATE UNIQUE INDEX ux_admins_email ON public.admins USING btree (lower(email));
 COMMENT ON TABLE public.admins IS 'Administradores de Relia. Acceden al panel y pagan las comisiones.';
 
--- Table Triggers
-
-create trigger tg_admins_updated before
-update
-    on
-    public.admins for each row execute function set_updated_at();
-
-
 -- public.agents definition
 
 -- Drop table
@@ -218,6 +155,7 @@ CREATE TABLE public.agents (
 	payment_pointer text NOT NULL,
 	"password" text NOT NULL,
 	active bool DEFAULT true NOT NULL,
+	wallet_simulated bool DEFAULT false NOT NULL,
 	created_at timestamptz DEFAULT now() NOT NULL,
 	updated_at timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT agents_city_check CHECK ((length(btrim(city)) > 0)),
@@ -233,18 +171,7 @@ CREATE UNIQUE INDEX ux_agents_email ON public.agents USING btree (lower(email));
 CREATE UNIQUE INDEX ux_agents_phone ON public.agents USING btree (phone);
 CREATE UNIQUE INDEX ux_agents_wallet ON public.agents USING btree (payment_pointer);
 COMMENT ON TABLE public.agents IS 'Comercios que operan efectivo con Relia. Incluye su acceso y su wallet.';
-
--- Table Triggers
-
-create trigger tg_agents_updated before
-update
-    on
-    public.agents for each row execute function set_updated_at();
-create trigger tg_agents_initial_balance after
-insert
-    on
-    public.agents for each row execute function create_initial_balance();
-
+COMMENT ON COLUMN public.agents.wallet_simulated IS 'Solo demo: la billetera no existe en el riel; su liquidación se paga sin riel.';
 
 -- public.fees definition
 
@@ -269,7 +196,6 @@ CREATE TABLE public.fees (
 );
 CREATE UNIQUE INDEX ux_fees_current ON public.fees USING btree ((true)) WHERE (valid_until IS NULL);
 COMMENT ON TABLE public.fees IS 'Tarifa por operación, versionada. Cada operación copia sus valores.';
-
 
 -- public.otp_challenges definition
 
@@ -300,7 +226,6 @@ CREATE TABLE public.otp_challenges (
 CREATE INDEX ix_otp_mobile ON public.otp_challenges USING btree (mobile, created_at DESC);
 COMMENT ON TABLE public.otp_challenges IS 'OTP de vinculación de wallet y de consulta de recibos. Código guardado como hash, con expiración e intentos.';
 
-
 -- public.wallet_keys definition
 
 -- Drop table
@@ -320,16 +245,6 @@ CREATE TABLE public.wallet_keys (
 	CONSTRAINT wallet_keys_pkey PRIMARY KEY (id)
 );
 COMMENT ON TABLE public.wallet_keys IS 'Celular vinculado a un payment pointer. Inmutable. Borrar solo con TRUNCATE en el reinicio del demo.';
-
--- Table Triggers
-
-create trigger tg_wallet_keys_immutable before
-delete
-    or
-update
-    on
-    public.wallet_keys for each row execute function block_modification();
-
 
 -- public.agent_balances definition
 
@@ -352,14 +267,6 @@ CREATE TABLE public.agent_balances (
 	CONSTRAINT agent_balances_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES public.agents(id) ON DELETE RESTRICT
 );
 COMMENT ON TABLE public.agent_balances IS 'Totales de cada corresponsal: cupo, comisión y efectivo esperado. Una fila por corresponsal.';
-
--- Table Triggers
-
-create trigger tg_agent_balances_updated before
-update
-    on
-    public.agent_balances for each row execute function set_updated_at();
-
 
 -- public.operations definition
 
@@ -384,11 +291,15 @@ CREATE TABLE public.operations (
 	net_amount int8 NOT NULL,
 	charged_amount int8 NOT NULL,
 	status public.operation_status DEFAULT 'pending'::operation_status NOT NULL,
+	failure_code text NULL,
 	idempotency_key text NOT NULL,
 	created_at timestamptz DEFAULT now() NOT NULL,
 	completed_at timestamptz NULL,
+	cash_handed_over_at timestamptz NULL,
 	updated_at timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT ck_op_completed CHECK (((status = 'completed'::operation_status) = (completed_at IS NOT NULL))),
+	CONSTRAINT ck_op_failure_code CHECK (((failure_code IS NULL) OR ((failure_code = ANY (ARRAY['customer_rejected'::text, 'request_expired'::text, 'request_cancelled'::text, 'payment_failed'::text, 'rail_unavailable'::text])) AND (status = ANY (ARRAY['failed'::operation_status, 'expired'::operation_status, 'cancelled'::operation_status]))))),
+	CONSTRAINT ck_op_cash_handover CHECK (((cash_handed_over_at IS NULL) OR ((type = 'withdrawal'::operation_type) AND (status = 'completed'::operation_status)))),
 	CONSTRAINT ck_op_deposit_withdrawal CHECK (((type = 'float_load'::operation_type) OR ((load_method IS NULL) AND (wallet_key_id IS NOT NULL) AND (fee_id IS NOT NULL) AND (requested_amount > total_commission) AND (total_commission = (relia_commission + agent_commission)) AND (charged_amount = (net_amount + total_commission)) AND ((round_value AND (net_amount = requested_amount)) OR ((NOT round_value) AND (net_amount = (requested_amount - total_commission))))))),
 	CONSTRAINT ck_op_float_load CHECK (((type <> 'float_load'::operation_type) OR ((load_method IS NOT NULL) AND (wallet_key_id IS NULL) AND (fee_id IS NULL) AND (NOT round_value) AND (total_commission = 0) AND (relia_commission = 0) AND (agent_commission = 0) AND (net_amount = requested_amount) AND (charged_amount = requested_amount)))),
 	CONSTRAINT operations_agent_commission_check CHECK ((agent_commission >= 0)),
@@ -406,24 +317,8 @@ CREATE TABLE public.operations (
 CREATE INDEX ix_operations_agent ON public.operations USING btree (agent_id, created_at DESC);
 CREATE INDEX ix_operations_pending ON public.operations USING btree (created_at) WHERE (status = 'pending'::operation_status);
 COMMENT ON TABLE public.operations IS 'Depósitos, retiros y cargas de cupo. Copia la tarifa y los montos calculados. Sus datos no cambian después de creada.';
-
--- Table Triggers
-
-create trigger tg_operations_updated before
-update
-    on
-    public.operations for each row execute function set_updated_at();
-create trigger tg_operations_protect before
-delete
-    or
-update
-    on
-    public.operations for each row execute function protect_operation();
-create trigger tg_operations_issue_receipt after
-update
-    of status on
-    public.operations for each row execute function issue_receipt_on_completion();
-
+COMMENT ON COLUMN public.operations.failure_code IS 'Motivo de una operación failed, expired o cancelled (FailureCode del contrato).';
+COMMENT ON COLUMN public.operations.cash_handed_over_at IS 'Solo retiros completados: cuándo el corresponsal confirmó la entrega del efectivo. Se fija una vez.';
 
 -- public.receipts definition
 
@@ -446,16 +341,6 @@ CREATE TABLE public.receipts (
 	CONSTRAINT receipts_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES public.operations(id) ON DELETE RESTRICT
 );
 COMMENT ON TABLE public.receipts IS 'Contenido congelado del recibo de cada depósito o retiro completado. Solo inserción.';
-
--- Table Triggers
-
-create trigger tg_receipts_immutable before
-delete
-    or
-update
-    on
-    public.receipts for each row execute function block_modification();
-
 
 -- public.settlements definition
 
@@ -491,14 +376,6 @@ CREATE INDEX ix_settlements_agent ON public.settlements USING btree (agent_id, c
 CREATE UNIQUE INDEX ux_settlements_one_pending ON public.settlements USING btree (agent_id) WHERE (status = 'pending'::settlement_status);
 COMMENT ON TABLE public.settlements IS 'Pago manual mensual de la comisión total pendiente, a la wallet del corresponsal.';
 
--- Table Triggers
-
-create trigger tg_settlements_updated before
-update
-    on
-    public.settlements for each row execute function set_updated_at();
-
-
 -- public.simulated_messages definition
 
 -- Drop table
@@ -522,7 +399,6 @@ CREATE TABLE public.simulated_messages (
 CREATE INDEX ix_messages_recipient ON public.simulated_messages USING btree (recipient, created_at DESC);
 COMMENT ON TABLE public.simulated_messages IS 'Bandeja simulada de SMS y WhatsApp. Solo existe en el demo.';
 
-
 -- public.operation_events definition
 
 -- Drop table
@@ -542,16 +418,6 @@ CREATE TABLE public.operation_events (
 );
 CREATE INDEX ix_operation_events ON public.operation_events USING btree (operation_id, id);
 COMMENT ON TABLE public.operation_events IS 'Bitácora de solo inserción con cada cambio de estado de una operación.';
-
--- Table Triggers
-
-create trigger tg_operation_events_immutable before
-delete
-    or
-update
-    on
-    public.operation_events for each row execute function block_modification();
-
 
 -- public.payments definition
 
@@ -577,6 +443,8 @@ CREATE TABLE public.payments (
 	grant_continue_uri text NULL,
 	grant_continue_token_encrypted bytea NULL,
 	rail_reference text NULL,
+	rail_payment_id uuid NULL,
+	rail_version int4 NULL,
 	debit_value text NULL,
 	debit_asset_code text NULL,
 	debit_asset_scale int2 NULL,
@@ -595,6 +463,7 @@ CREATE TABLE public.payments (
 	CONSTRAINT ck_payments_distinct_wallets CHECK ((source_payment_pointer <> destination_payment_pointer)),
 	CONSTRAINT ck_payments_parent CHECK (((operation_id IS NULL) <> (settlement_id IS NULL))),
 	CONSTRAINT ck_payments_received_complete CHECK ((((received_value IS NULL) = (received_asset_code IS NULL)) AND ((received_value IS NULL) = (received_asset_scale IS NULL)))),
+	CONSTRAINT ck_payments_rail_version CHECK (((rail_version IS NULL) OR (rail_version >= 1))),
 	CONSTRAINT payments_amount_check CHECK ((amount > 0)),
 	CONSTRAINT payments_currency_check CHECK ((currency = 'COP'::bpchar)),
 	CONSTRAINT payments_destination_payment_pointer_check CHECK ((destination_payment_pointer ~ '^\$[^[:space:]/]+(/[^[:space:]]*)?$'::text)),
@@ -610,15 +479,10 @@ CREATE INDEX ix_payments_settlement ON public.payments USING btree (settlement_i
 CREATE INDEX ix_payments_source ON public.payments USING btree (source_payment_pointer, created_at DESC);
 CREATE UNIQUE INDEX ux_payments_incoming_url ON public.payments USING btree (op_incoming_payment_url) WHERE (op_incoming_payment_url IS NOT NULL);
 CREATE UNIQUE INDEX ux_payments_outgoing_url ON public.payments USING btree (op_outgoing_payment_url) WHERE (op_outgoing_payment_url IS NOT NULL);
+CREATE UNIQUE INDEX ux_payments_rail_payment_id ON public.payments USING btree (rail_payment_id) WHERE (rail_payment_id IS NOT NULL);
 COMMENT ON TABLE public.payments IS 'Intentos de pago por riel (Open Payments o Bre-B simulado) de operaciones y liquidaciones.';
-
--- Table Triggers
-
-create trigger tg_payments_updated before
-update
-    on
-    public.payments for each row execute function set_updated_at();
-
+COMMENT ON COLUMN public.payments.rail_payment_id IS 'Id del pago en el proxy de riel (railPaymentId). Null si no pasó por el proxy.';
+COMMENT ON COLUMN public.payments.rail_version IS 'Último version del pago en el proxy ya procesado; lecturas con versión menor o igual se descartan.';
 
 -- public.receipt_issuances definition
 
@@ -643,20 +507,6 @@ CREATE TABLE public.receipt_issuances (
 );
 CREATE INDEX ix_receipt_issuances ON public.receipt_issuances USING btree (receipt_id, id);
 COMMENT ON TABLE public.receipt_issuances IS 'Registro de cada vez que un recibo se muestra, descarga o envía. Desde la segunda es copia.';
-
--- Table Triggers
-
-create trigger tg_issuances_copy before
-insert
-    on
-    public.receipt_issuances for each row execute function mark_receipt_copy();
-create trigger tg_issuances_immutable before
-delete
-    or
-update
-    on
-    public.receipt_issuances for each row execute function block_modification();
-
 
 -- public.ledger_entries definition
 
@@ -705,20 +555,6 @@ CREATE UNIQUE INDEX ux_ledger_payment ON public.ledger_entries USING btree (paym
 CREATE UNIQUE INDEX ux_ledger_settlement ON public.ledger_entries USING btree (settlement_id) WHERE (settlement_id IS NOT NULL);
 COMMENT ON TABLE public.ledger_entries IS 'Libro de solo inserción del cupo, la comisión y el efectivo: antes, variación y después.';
 
--- Table Triggers
-
-create trigger tg_ledger_validate_payment before
-insert
-    on
-    public.ledger_entries for each row execute function validate_ledger_entry_payment();
-create trigger tg_ledger_immutable before
-delete
-    or
-update
-    on
-    public.ledger_entries for each row execute function block_modification();
-
-
 -- public.payment_events definition
 
 -- Drop table
@@ -742,7 +578,395 @@ CREATE TABLE public.payment_events (
 CREATE INDEX ix_payment_events ON public.payment_events USING btree (payment_id, id);
 COMMENT ON TABLE public.payment_events IS 'Bitácora de solo inserción de cada pago: llamadas al riel, respuestas y cambios de estado.';
 
--- Table Triggers
+-- public.idempotency_records definition
+
+CREATE TABLE public.idempotency_records (
+	id int8 GENERATED ALWAYS AS IDENTITY( INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START 1 CACHE 1 NO CYCLE) NOT NULL,
+	"scope" text NOT NULL,
+	idempotency_key text NOT NULL,
+	request_hash text NOT NULL,
+	response_status int2 NOT NULL,
+	response_body jsonb NOT NULL,
+	resource_id text NULL,
+	created_at timestamptz DEFAULT now() NOT NULL,
+	CONSTRAINT ck_idempotency_key_length CHECK (((length(idempotency_key) >= 8) AND (length(idempotency_key) <= 128))),
+	CONSTRAINT ck_idempotency_request_hash CHECK ((request_hash ~ '^[0-9a-f]{64}$'::text)),
+	CONSTRAINT ck_idempotency_response_status CHECK (((response_status >= 200) AND (response_status < 300))),
+	CONSTRAINT idempotency_records_pkey PRIMARY KEY (id),
+	CONSTRAINT ux_idempotency_scope_key UNIQUE (scope, idempotency_key)
+);
+COMMENT ON TABLE public.idempotency_records IS 'Respuesta exitosa de cada creación por Idempotency-Key. scope = ruta + actor; request_hash = SHA-256 del cuerpo. Los errores no se guardan.';
+
+-- =====================================================================
+-- FUNCIONES (después de las tablas: issue_receipt devuelve el tipo de fila receipts)
+-- =====================================================================
+
+-- DROP FUNCTION public.block_modification();
+
+CREATE OR REPLACE FUNCTION public.block_modification()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RAISE EXCEPTION 'La tabla % es de solo inserción: no se permite % de filas',
+        TG_TABLE_NAME, TG_OP;
+END;
+$function$
+;
+
+-- DROP FUNCTION public.create_initial_balance();
+
+CREATE OR REPLACE FUNCTION public.create_initial_balance()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    INSERT INTO agent_balances (agent_id) VALUES (NEW.id);
+    RETURN NEW;
+END;
+$function$
+;
+
+-- DROP FUNCTION public.issue_receipt(uuid);
+
+CREATE OR REPLACE FUNCTION public.issue_receipt(p_operation_id uuid)
+ RETURNS receipts
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    o operations%ROWTYPE;
+    c agents%ROWTYPE;
+    w wallet_keys%ROWTYPE;
+    p payments%ROWTYPE;
+    content jsonb;
+    r receipts%ROWTYPE;
+BEGIN
+    SELECT * INTO o FROM operations WHERE id = p_operation_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'No existe la operación %', p_operation_id;
+    END IF;
+    IF o.status <> 'completed' THEN
+        RAISE EXCEPTION 'La operación % no está completada: no tiene recibo', o.display_number;
+    END IF;
+    IF o.type = 'float_load' THEN
+        RAISE EXCEPTION 'La carga de cupo (%) no genera recibo para el usuario', o.display_number;
+    END IF;
+
+    SELECT * INTO c FROM agents WHERE id = o.agent_id;
+    SELECT * INTO w FROM wallet_keys WHERE id = o.wallet_key_id;
+    SELECT * INTO p FROM payments
+    WHERE operation_id = o.id AND status = 'completed'
+    ORDER BY completed_at DESC, created_at DESC LIMIT 1;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'La operación % no tiene un pago completado', o.display_number;
+    END IF;
+
+    content := jsonb_build_object(
+        'number', o.display_number,
+        'type', o.type,
+        'date', to_char(o.completed_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD"T"HH24:MI:SS'),
+        'currency', 'COP',
+        'merchant', jsonb_build_object(
+            'name', c.name, 'address', c.address, 'phone', c.phone),
+        'user', jsonb_build_object(
+            'mobile', w.mobile,
+            'payment_pointer', w.payment_pointer),
+        'amounts', jsonb_build_object(
+            'requested_amount', o.requested_amount,
+            'round_value', o.round_value,
+            'commission', o.total_commission,
+            'net_amount', o.net_amount,
+            'charged_amount', o.charged_amount),
+        'payment', jsonb_build_object(
+            'rail', p.rail,
+            'reference', COALESCE(p.op_outgoing_payment_url, p.op_incoming_payment_url, p.rail_reference))
+    );
+
+    INSERT INTO receipts (operation_id, data, content_hash)
+    VALUES (o.id, content, encode(sha256(convert_to(content::text, 'UTF8')), 'hex'))
+    RETURNING * INTO r;
+    RETURN r;
+END;
+$function$
+;
+
+-- DROP FUNCTION public.issue_receipt_on_completion();
+
+CREATE OR REPLACE FUNCTION public.issue_receipt_on_completion()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    IF NEW.status = 'completed' AND OLD.status <> 'completed'
+       AND NEW.type IN ('deposit', 'withdrawal') THEN
+        PERFORM issue_receipt(NEW.id);
+    END IF;
+    RETURN NULL;
+END;
+$function$
+;
+
+-- DROP FUNCTION public.mark_receipt_copy();
+
+CREATE OR REPLACE FUNCTION public.mark_receipt_copy()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    NEW.is_copy := EXISTS (SELECT 1 FROM receipt_issuances WHERE receipt_id = NEW.receipt_id);
+    RETURN NEW;
+END;
+$function$
+;
+
+-- DROP FUNCTION public.protect_operation();
+
+CREATE OR REPLACE FUNCTION public.protect_operation()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'Las operaciones no se pueden borrar (%)', OLD.display_number;
+    END IF;
+
+    IF NEW.id IS DISTINCT FROM OLD.id
+       OR NEW.number IS DISTINCT FROM OLD.number
+       OR NEW.agent_id IS DISTINCT FROM OLD.agent_id
+       OR NEW.type IS DISTINCT FROM OLD.type
+       OR NEW.load_method IS DISTINCT FROM OLD.load_method
+       OR NEW.wallet_key_id IS DISTINCT FROM OLD.wallet_key_id
+       OR NEW.requested_amount IS DISTINCT FROM OLD.requested_amount
+       OR NEW.round_value IS DISTINCT FROM OLD.round_value
+       OR NEW.fee_id IS DISTINCT FROM OLD.fee_id
+       OR NEW.total_commission IS DISTINCT FROM OLD.total_commission
+       OR NEW.relia_commission IS DISTINCT FROM OLD.relia_commission
+       OR NEW.agent_commission IS DISTINCT FROM OLD.agent_commission
+       OR NEW.net_amount IS DISTINCT FROM OLD.net_amount
+       OR NEW.charged_amount IS DISTINCT FROM OLD.charged_amount
+       OR NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+        RAISE EXCEPTION 'La operación % no se puede modificar: sus datos quedan fijos al crearla',
+            OLD.display_number;
+    END IF;
+
+    IF OLD.status <> 'pending'
+       AND (NEW.status <> OLD.status
+            OR NEW.completed_at IS DISTINCT FROM OLD.completed_at) THEN
+        RAISE EXCEPTION 'La operación % ya está en estado final (%) y no puede cambiar',
+            OLD.display_number, OLD.status;
+    END IF;
+
+    -- El motivo del fallo queda fijo con el estado final.
+    IF OLD.status <> 'pending'
+       AND NEW.failure_code IS DISTINCT FROM OLD.failure_code THEN
+        RAISE EXCEPTION 'La operación % ya está en estado final: su motivo no puede cambiar',
+            OLD.display_number;
+    END IF;
+
+    -- La entrega del efectivo se registra una sola vez (después de completar).
+    IF OLD.cash_handed_over_at IS NOT NULL
+       AND NEW.cash_handed_over_at IS DISTINCT FROM OLD.cash_handed_over_at THEN
+        RAISE EXCEPTION 'La entrega del efectivo de la operación % ya quedó registrada',
+            OLD.display_number;
+    END IF;
+
+    RETURN NEW;
+END;
+$function$
+;
+
+-- DROP FUNCTION public.receipt_is_intact(text);
+
+CREATE OR REPLACE FUNCTION public.receipt_is_intact(p_code text)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE
+AS $function$
+    SELECT encode(sha256(convert_to(data::text, 'UTF8')), 'hex') = content_hash
+    FROM receipts WHERE code = upper(p_code);
+$function$
+;
+
+-- DROP FUNCTION public.set_updated_at();
+
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$function$
+;
+
+-- DROP FUNCTION public.validate_ledger_entry_payment();
+
+CREATE OR REPLACE FUNCTION public.validate_ledger_entry_payment()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    p payments%ROWTYPE;
+    o operations%ROWTYPE;
+    l settlements%ROWTYPE;
+    expected_float_change bigint;
+BEGIN
+    IF NEW.type = 'cash_adjustment' THEN
+        RETURN NEW;
+    END IF;
+
+    -- El pago debe estar completado y pertenecer a lo que se está registrando.
+    SELECT * INTO p FROM payments WHERE id = NEW.payment_id;
+    IF p.status <> 'completed' THEN
+        RAISE EXCEPTION 'El pago % no está completado (estado: %)', p.id, p.status;
+    END IF;
+    IF p.operation_id IS DISTINCT FROM NEW.operation_id
+       OR p.settlement_id IS DISTINCT FROM NEW.settlement_id THEN
+        RAISE EXCEPTION 'El pago % no pertenece a la operación o liquidación del movimiento', p.id;
+    END IF;
+
+    IF NEW.operation_id IS NOT NULL THEN
+        -- La operación debe ser del mismo corresponsal, estar completada y
+        -- ser del mismo tipo; el cupo y la comisión deben moverse lo que ella dice.
+        SELECT * INTO o FROM operations WHERE id = NEW.operation_id;
+        IF o.agent_id <> NEW.agent_id THEN
+            RAISE EXCEPTION 'La operación % es de otro corresponsal', o.display_number;
+        END IF;
+        IF o.status <> 'completed' THEN
+            RAISE EXCEPTION 'La operación % no está completada (estado: %)', o.display_number, o.status;
+        END IF;
+        IF o.type::text <> NEW.type::text THEN
+            RAISE EXCEPTION 'La operación % es de tipo % y el movimiento de tipo %', o.display_number, o.type, NEW.type;
+        END IF;
+        expected_float_change := CASE o.type
+            WHEN 'deposit' THEN -o.charged_amount   -- el cupo baja lo que recibió en efectivo
+            ELSE o.net_amount                       -- retiro y carga: el cupo sube
+        END;
+        IF NEW.float_change <> expected_float_change THEN
+            RAISE EXCEPTION 'El cupo debe variar % según la operación % y varía %',
+                expected_float_change, o.display_number, NEW.float_change;
+        END IF;
+        IF NEW.commission_change <> o.agent_commission THEN
+            RAISE EXCEPTION 'La comisión debe variar % según la operación % y varía %',
+                o.agent_commission, o.display_number, NEW.commission_change;
+        END IF;
+    ELSE
+        -- La liquidación debe ser del mismo corresponsal, estar pagada y
+        -- descontar exactamente su monto de la comisión acumulada.
+        SELECT * INTO l FROM settlements WHERE id = NEW.settlement_id;
+        IF l.agent_id <> NEW.agent_id THEN
+            RAISE EXCEPTION 'La liquidación % es de otro corresponsal', l.display_number;
+        END IF;
+        IF l.status <> 'paid' THEN
+            RAISE EXCEPTION 'La liquidación % no está pagada (estado: %)', l.display_number, l.status;
+        END IF;
+        IF NEW.commission_change <> -l.amount THEN
+            RAISE EXCEPTION 'La comisión debe variar % según la liquidación % y varía %',
+                -l.amount, l.display_number, NEW.commission_change;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$function$
+;
+
+-- =====================================================================
+-- TRIGGERS
+-- =====================================================================
+
+create trigger tg_admins_updated before
+update
+    on
+    public.admins for each row execute function set_updated_at();
+
+create trigger tg_agents_updated before
+update
+    on
+    public.agents for each row execute function set_updated_at();
+
+create trigger tg_agents_initial_balance after
+insert
+    on
+    public.agents for each row execute function create_initial_balance();
+
+create trigger tg_wallet_keys_immutable before
+delete
+    or
+update
+    on
+    public.wallet_keys for each row execute function block_modification();
+
+create trigger tg_agent_balances_updated before
+update
+    on
+    public.agent_balances for each row execute function set_updated_at();
+
+create trigger tg_operations_updated before
+update
+    on
+    public.operations for each row execute function set_updated_at();
+
+create trigger tg_operations_protect before
+delete
+    or
+update
+    on
+    public.operations for each row execute function protect_operation();
+
+create trigger tg_operations_issue_receipt after
+update
+    of status on
+    public.operations for each row execute function issue_receipt_on_completion();
+
+create trigger tg_receipts_immutable before
+delete
+    or
+update
+    on
+    public.receipts for each row execute function block_modification();
+
+create trigger tg_settlements_updated before
+update
+    on
+    public.settlements for each row execute function set_updated_at();
+
+create trigger tg_operation_events_immutable before
+delete
+    or
+update
+    on
+    public.operation_events for each row execute function block_modification();
+
+create trigger tg_payments_updated before
+update
+    on
+    public.payments for each row execute function set_updated_at();
+
+create trigger tg_issuances_copy before
+insert
+    on
+    public.receipt_issuances for each row execute function mark_receipt_copy();
+
+create trigger tg_issuances_immutable before
+delete
+    or
+update
+    on
+    public.receipt_issuances for each row execute function block_modification();
+
+create trigger tg_ledger_validate_payment before
+insert
+    on
+    public.ledger_entries for each row execute function validate_ledger_entry_payment();
+
+create trigger tg_ledger_immutable before
+delete
+    or
+update
+    on
+    public.ledger_entries for each row execute function block_modification();
 
 create trigger tg_payment_events_immutable before
 delete
@@ -751,6 +975,9 @@ update
     on
     public.payment_events for each row execute function block_modification();
 
+-- =====================================================================
+-- VISTAS
+-- =====================================================================
 
 -- public.v_admin_agent_summary source
 
@@ -951,262 +1178,3 @@ AS SELECT w.payment_pointer,
      LEFT JOIN settlements l ON l.id = p.settlement_id;
 
 COMMENT ON VIEW public.v_wallet_traceability IS 'Recorrido de cada payment pointer: pagos donde participó como origen o destino.';
-
-
-
--- DROP FUNCTION public.block_modification();
-
-CREATE OR REPLACE FUNCTION public.block_modification()
- RETURNS trigger
- LANGUAGE plpgsql
-AS $function$
-BEGIN
-    RAISE EXCEPTION 'La tabla % es de solo inserción: no se permite % de filas',
-        TG_TABLE_NAME, TG_OP;
-END;
-$function$
-;
-
--- DROP FUNCTION public.create_initial_balance();
-
-CREATE OR REPLACE FUNCTION public.create_initial_balance()
- RETURNS trigger
- LANGUAGE plpgsql
-AS $function$
-BEGIN
-    INSERT INTO agent_balances (agent_id) VALUES (NEW.id);
-    RETURN NEW;
-END;
-$function$
-;
-
--- DROP FUNCTION public.issue_receipt(uuid);
-
-CREATE OR REPLACE FUNCTION public.issue_receipt(p_operation_id uuid)
- RETURNS receipts
- LANGUAGE plpgsql
-AS $function$
-DECLARE
-    o operations%ROWTYPE;
-    c agents%ROWTYPE;
-    w wallet_keys%ROWTYPE;
-    p payments%ROWTYPE;
-    content jsonb;
-    r receipts%ROWTYPE;
-BEGIN
-    SELECT * INTO o FROM operations WHERE id = p_operation_id;
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'No existe la operación %', p_operation_id;
-    END IF;
-    IF o.status <> 'completed' THEN
-        RAISE EXCEPTION 'La operación % no está completada: no tiene recibo', o.display_number;
-    END IF;
-    IF o.type = 'float_load' THEN
-        RAISE EXCEPTION 'La carga de cupo (%) no genera recibo para el usuario', o.display_number;
-    END IF;
-
-    SELECT * INTO c FROM agents WHERE id = o.agent_id;
-    SELECT * INTO w FROM wallet_keys WHERE id = o.wallet_key_id;
-    SELECT * INTO p FROM payments
-    WHERE operation_id = o.id AND status = 'completed'
-    ORDER BY completed_at DESC, created_at DESC LIMIT 1;
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'La operación % no tiene un pago completado', o.display_number;
-    END IF;
-
-    content := jsonb_build_object(
-        'number', o.display_number,
-        'type', o.type,
-        'date', to_char(o.completed_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD"T"HH24:MI:SS'),
-        'currency', 'COP',
-        'merchant', jsonb_build_object(
-            'name', c.name, 'address', c.address, 'phone', c.phone),
-        'user', jsonb_build_object(
-            'mobile', w.mobile,
-            'payment_pointer', w.payment_pointer),
-        'amounts', jsonb_build_object(
-            'requested_amount', o.requested_amount,
-            'round_value', o.round_value,
-            'commission', o.total_commission,
-            'net_amount', o.net_amount,
-            'charged_amount', o.charged_amount),
-        'payment', jsonb_build_object(
-            'rail', p.rail,
-            'reference', COALESCE(p.op_outgoing_payment_url, p.op_incoming_payment_url, p.rail_reference))
-    );
-
-    INSERT INTO receipts (operation_id, data, content_hash)
-    VALUES (o.id, content, encode(sha256(convert_to(content::text, 'UTF8')), 'hex'))
-    RETURNING * INTO r;
-    RETURN r;
-END;
-$function$
-;
-
--- DROP FUNCTION public.issue_receipt_on_completion();
-
-CREATE OR REPLACE FUNCTION public.issue_receipt_on_completion()
- RETURNS trigger
- LANGUAGE plpgsql
-AS $function$
-BEGIN
-    IF NEW.status = 'completed' AND OLD.status <> 'completed'
-       AND NEW.type IN ('deposit', 'withdrawal') THEN
-        PERFORM issue_receipt(NEW.id);
-    END IF;
-    RETURN NULL;
-END;
-$function$
-;
-
--- DROP FUNCTION public.mark_receipt_copy();
-
-CREATE OR REPLACE FUNCTION public.mark_receipt_copy()
- RETURNS trigger
- LANGUAGE plpgsql
-AS $function$
-BEGIN
-    NEW.is_copy := EXISTS (SELECT 1 FROM receipt_issuances WHERE receipt_id = NEW.receipt_id);
-    RETURN NEW;
-END;
-$function$
-;
-
--- DROP FUNCTION public.protect_operation();
-
-CREATE OR REPLACE FUNCTION public.protect_operation()
- RETURNS trigger
- LANGUAGE plpgsql
-AS $function$
-BEGIN
-    IF TG_OP = 'DELETE' THEN
-        RAISE EXCEPTION 'Las operaciones no se pueden borrar (%)', OLD.display_number;
-    END IF;
-
-    IF NEW.id IS DISTINCT FROM OLD.id
-       OR NEW.number IS DISTINCT FROM OLD.number
-       OR NEW.agent_id IS DISTINCT FROM OLD.agent_id
-       OR NEW.type IS DISTINCT FROM OLD.type
-       OR NEW.load_method IS DISTINCT FROM OLD.load_method
-       OR NEW.wallet_key_id IS DISTINCT FROM OLD.wallet_key_id
-       OR NEW.requested_amount IS DISTINCT FROM OLD.requested_amount
-       OR NEW.round_value IS DISTINCT FROM OLD.round_value
-       OR NEW.fee_id IS DISTINCT FROM OLD.fee_id
-       OR NEW.total_commission IS DISTINCT FROM OLD.total_commission
-       OR NEW.relia_commission IS DISTINCT FROM OLD.relia_commission
-       OR NEW.agent_commission IS DISTINCT FROM OLD.agent_commission
-       OR NEW.net_amount IS DISTINCT FROM OLD.net_amount
-       OR NEW.charged_amount IS DISTINCT FROM OLD.charged_amount
-       OR NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key
-       OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
-        RAISE EXCEPTION 'La operación % no se puede modificar: sus datos quedan fijos al crearla',
-            OLD.display_number;
-    END IF;
-
-    IF OLD.status <> 'pending'
-       AND (NEW.status <> OLD.status
-            OR NEW.completed_at IS DISTINCT FROM OLD.completed_at) THEN
-        RAISE EXCEPTION 'La operación % ya está en estado final (%) y no puede cambiar',
-            OLD.display_number, OLD.status;
-    END IF;
-
-    RETURN NEW;
-END;
-$function$
-;
-
--- DROP FUNCTION public.receipt_is_intact(text);
-
-CREATE OR REPLACE FUNCTION public.receipt_is_intact(p_code text)
- RETURNS boolean
- LANGUAGE sql
- STABLE
-AS $function$
-    SELECT encode(sha256(convert_to(data::text, 'UTF8')), 'hex') = content_hash
-    FROM receipts WHERE code = upper(p_code);
-$function$
-;
-
--- DROP FUNCTION public.set_updated_at();
-
-CREATE OR REPLACE FUNCTION public.set_updated_at()
- RETURNS trigger
- LANGUAGE plpgsql
-AS $function$
-BEGIN
-    NEW.updated_at = now();
-    RETURN NEW;
-END;
-$function$
-;
-
--- DROP FUNCTION public.validate_ledger_entry_payment();
-
-CREATE OR REPLACE FUNCTION public.validate_ledger_entry_payment()
- RETURNS trigger
- LANGUAGE plpgsql
-AS $function$
-DECLARE
-    p payments%ROWTYPE;
-    o operations%ROWTYPE;
-    l settlements%ROWTYPE;
-    expected_float_change bigint;
-BEGIN
-    IF NEW.type = 'cash_adjustment' THEN
-        RETURN NEW;
-    END IF;
-
-    -- El pago debe estar completado y pertenecer a lo que se está registrando.
-    SELECT * INTO p FROM payments WHERE id = NEW.payment_id;
-    IF p.status <> 'completed' THEN
-        RAISE EXCEPTION 'El pago % no está completado (estado: %)', p.id, p.status;
-    END IF;
-    IF p.operation_id IS DISTINCT FROM NEW.operation_id
-       OR p.settlement_id IS DISTINCT FROM NEW.settlement_id THEN
-        RAISE EXCEPTION 'El pago % no pertenece a la operación o liquidación del movimiento', p.id;
-    END IF;
-
-    IF NEW.operation_id IS NOT NULL THEN
-        -- La operación debe ser del mismo corresponsal, estar completada y
-        -- ser del mismo tipo; el cupo y la comisión deben moverse lo que ella dice.
-        SELECT * INTO o FROM operations WHERE id = NEW.operation_id;
-        IF o.agent_id <> NEW.agent_id THEN
-            RAISE EXCEPTION 'La operación % es de otro corresponsal', o.display_number;
-        END IF;
-        IF o.status <> 'completed' THEN
-            RAISE EXCEPTION 'La operación % no está completada (estado: %)', o.display_number, o.status;
-        END IF;
-        IF o.type::text <> NEW.type::text THEN
-            RAISE EXCEPTION 'La operación % es de tipo % y el movimiento de tipo %', o.display_number, o.type, NEW.type;
-        END IF;
-        expected_float_change := CASE o.type
-            WHEN 'deposit' THEN -o.charged_amount   -- el cupo baja lo que recibió en efectivo
-            ELSE o.net_amount                       -- retiro y carga: el cupo sube
-        END;
-        IF NEW.float_change <> expected_float_change THEN
-            RAISE EXCEPTION 'El cupo debe variar % según la operación % y varía %',
-                expected_float_change, o.display_number, NEW.float_change;
-        END IF;
-        IF NEW.commission_change <> o.agent_commission THEN
-            RAISE EXCEPTION 'La comisión debe variar % según la operación % y varía %',
-                o.agent_commission, o.display_number, NEW.commission_change;
-        END IF;
-    ELSE
-        -- La liquidación debe ser del mismo corresponsal, estar pagada y
-        -- descontar exactamente su monto de la comisión acumulada.
-        SELECT * INTO l FROM settlements WHERE id = NEW.settlement_id;
-        IF l.agent_id <> NEW.agent_id THEN
-            RAISE EXCEPTION 'La liquidación % es de otro corresponsal', l.display_number;
-        END IF;
-        IF l.status <> 'paid' THEN
-            RAISE EXCEPTION 'La liquidación % no está pagada (estado: %)', l.display_number, l.status;
-        END IF;
-        IF NEW.commission_change <> -l.amount THEN
-            RAISE EXCEPTION 'La comisión debe variar % según la liquidación % y varía %',
-                -l.amount, l.display_number, NEW.commission_change;
-        END IF;
-    END IF;
-    RETURN NEW;
-END;
-$function$
-;

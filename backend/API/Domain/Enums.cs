@@ -2,13 +2,13 @@ using NpgsqlTypes;
 
 namespace Relia.Api.Domain;
 
-// Enums de PostgreSQL del esquema v0.2. PgName da la etiqueta en la base.
+// Enums de PostgreSQL de backend/db/db_ddl.sql. PgName da la etiqueta en la base.
 
 public enum OperationKind
 {
-    [PgName("deposito")] Deposit,
-    [PgName("retiro")] Withdrawal,
-    [PgName("carga_cupo")] QuotaTopUp,
+    [PgName("deposit")] Deposit,
+    [PgName("withdrawal")] Withdrawal,
+    [PgName("float_load")] QuotaTopUp,
 }
 
 public enum TopUpMethodKind
@@ -19,30 +19,30 @@ public enum TopUpMethodKind
 
 public enum OperationState
 {
-    [PgName("pendiente")] Pending,
-    [PgName("completada")] Completed,
-    [PgName("fallida")] Failed,
-    [PgName("vencida")] Expired,
-    [PgName("cancelada")] Cancelled,
+    [PgName("pending")] Pending,
+    [PgName("completed")] Completed,
+    [PgName("failed")] Failed,
+    [PgName("expired")] Expired,
+    [PgName("cancelled")] Cancelled,
 }
 
 public enum SettlementState
 {
-    [PgName("pendiente")] Pending,
-    [PgName("pagada")] Paid,
-    [PgName("anulada")] Voided,
+    [PgName("pending")] Pending,
+    [PgName("paid")] Paid,
+    [PgName("voided")] Voided,
 }
 
 public enum PaymentRail
 {
     [PgName("open_payments")] OpenPayments,
-    [PgName("bre_b_simulado")] BreBSimulated,
+    [PgName("bre_b_simulated")] BreBSimulated,
 }
 
 public enum PaymentDirection
 {
-    [PgName("entrante")] Incoming,
-    [PgName("saliente")] Outgoing,
+    [PgName("incoming")] Incoming,
+    [PgName("outgoing")] Outgoing,
 }
 
 public enum MessageChannel
@@ -54,48 +54,48 @@ public enum MessageChannel
 public enum MessageKind
 {
     [PgName("otp")] Otp,
-    [PgName("invitacion_wallet")] WalletInvitation,
-    [PgName("aviso_deposito")] DepositNotice,
-    [PgName("solicitud_pago")] PaymentRequest,
-    [PgName("comprobante")] Receipt,
-    [PgName("aviso_comision")] CommissionNotice,
+    [PgName("wallet_invitation")] WalletInvitation,
+    [PgName("deposit_notice")] DepositNotice,
+    [PgName("payment_request")] PaymentRequest,
+    [PgName("receipt")] Receipt,
+    [PgName("commission_notice")] CommissionNotice,
 }
 
 public enum LedgerEntryKind
 {
-    [PgName("deposito")] Deposit,
-    [PgName("retiro")] Withdrawal,
-    [PgName("carga_cupo")] QuotaTopUp,
-    [PgName("liquidacion")] Settlement,
-    [PgName("ajuste_efectivo")] CashAdjustment,
+    [PgName("deposit")] Deposit,
+    [PgName("withdrawal")] Withdrawal,
+    [PgName("float_load")] QuotaTopUp,
+    [PgName("settlement")] Settlement,
+    [PgName("cash_adjustment")] CashAdjustment,
 }
 
 public enum OtpPurpose
 {
-    [PgName("vinculacion")] KeyLink,
-    [PgName("consulta_recibo")] ReceiptLookup,
+    [PgName("wallet_linking")] KeyLink,
+    [PgName("receipt_lookup")] ReceiptLookup,
 }
 
 public enum ReceiptChannel
 {
-    [PgName("pantalla")] Screen,
+    [PgName("screen")] Screen,
     [PgName("pdf")] Pdf,
-    [PgName("impresion")] Print,
+    [PgName("print")] Print,
     [PgName("whatsapp")] WhatsApp,
     [PgName("sms")] Sms,
 }
 
 public enum ReceiptRequester
 {
-    [PgName("corresponsal")] Agent,
-    [PgName("usuario")] Customer,
-    [PgName("sistema")] System,
+    [PgName("agent")] Agent,
+    [PgName("user")] Customer,
+    [PgName("system")] System,
 }
 
 public enum EventOrigin
 {
-    [PgName("corresponsal")] Agent,
-    [PgName("sistema")] System,
-    [PgName("riel")] Rail,
-    [PgName("simulador")] Simulator,
+    [PgName("agent")] Agent,
+    [PgName("system")] System,
+    [PgName("rail")] Rail,
+    [PgName("simulator")] Simulator,
 }

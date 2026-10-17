@@ -16,7 +16,7 @@ public interface IAgentRepository
     Task<Agent?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<Agent?> GetByEmailAsync(string email, CancellationToken ct = default);
 
-    /// <summary>Lee la fila de cupos con SELECT ... FOR UPDATE. Solo dentro de una transacción.</summary>
+    /// <summary>Lee la fila de agent_balances con SELECT ... FOR UPDATE. Solo dentro de una transacción.</summary>
     Task<AgentBalance> GetBalanceForUpdateAsync(Guid agentId, CancellationToken ct = default);
 }
 
