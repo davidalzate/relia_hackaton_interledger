@@ -147,10 +147,17 @@ describe('ReceiptDialogComponent (B9)', () => {
 
   it('carga de cupo rechazada: método, estado y motivo; sin recibo oficial ni SMS', async () => {
     const { http, card, rows, stable } = await open((agent) => {
-      return agent['record'](20_000, 'failed', 'cupo', undefined, {
-        method: 'wallet',
-        reason: 'Pago rechazado',
-      }).id;
+      agent['_recent'].set([
+        {
+          id: 'op-9',
+          type: 'cupo',
+          amount: 20_000,
+          status: 'failed',
+          createdAt: '2026-10-16T15:00:00Z',
+          details: { method: 'wallet', reason: 'Pago rechazado' },
+        },
+      ]);
+      return 'op-9';
     });
     await stable();
     http.expectNone((r) => r.url.endsWith('/receipt'));
@@ -161,11 +168,20 @@ describe('ReceiptDialogComponent (B9)', () => {
 
   it('ajuste de efectivo muestra "nuevo total en caja"', async () => {
     const { card, rows, stable } = await open(
-      (agent) =>
-        agent['record'](70_000, 'completed', 'cash-set', {
-          before: { cupo: 0, commission: 0, cash: 0 },
-          after: { cupo: 0, commission: 0, cash: 70_000 },
-        }).id,
+      (agent) => (
+        agent['_recent'].set([
+          {
+            id: 'adj-1',
+            type: 'cash-set',
+            amount: 70_000,
+            status: 'completed',
+            createdAt: '2026-10-16T15:00:00Z',
+            before: { cupo: 0, commission: 0, cash: 0 },
+            after: { cupo: 0, commission: 0, cash: 70_000 },
+          },
+        ]),
+        'adj-1'
+      ),
     );
     await stable();
     expect(card().textContent).toContain('nuevo total en caja');

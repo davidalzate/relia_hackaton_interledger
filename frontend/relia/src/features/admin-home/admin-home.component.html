@@ -1,5 +1,8 @@
 <main class="container-wide">
   <h1>Corresponsales</h1>
+  @if (loadError()) {
+    <p class="card empty" role="alert">No pudimos cargar la red. Recarga la página.</p>
+  }
 
   @let t = totals();
   <section class="kpis" aria-label="Indicadores">
@@ -89,7 +92,13 @@
           <li>
             <div>
               <p class="strong">{{ p.agentName }}</p>
-              <p class="meta">{{ p.paidAt | date: 'shortTime' }} · {{ p.id }} · {{ p.pointer }}</p>
+              <p class="meta">
+                {{ p.paidAt ?? p.createdAt | date: 'shortTime' }} · {{ p.reference }} ·
+                {{ p.walletAddress }}
+                @if (p.status !== 'paid') {
+                  · {{ p.status === 'pending' ? 'Enviando' : 'Anulado' }}
+                }
+              </p>
             </div>
             <p class="strong">{{ p.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
           </li>

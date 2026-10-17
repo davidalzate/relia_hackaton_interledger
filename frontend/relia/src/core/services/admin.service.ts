@@ -1,13 +1,22 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Injectable, inject, signal } from '@angular/core';
+import { Observable, map, tap, timeout } from 'rxjs';
 
-import { Operation } from '../../shared/types/agent';
-import { AgentService } from './agent.service';
+import { environment } from '../../environments/environment';
+import {
+  AgentListSchema,
+  Settlement,
+  SettlementPageSchema,
+  SettlementSchema,
+} from '../../shared/schemas/admin.schema';
+import { IDEMPOTENCY_HEADER, SETTLEMENT_TERMINAL, pollUntil } from '../http/api';
 
 export interface Totals {
   total: number;
   count: number;
 }
 
+/** Fila de D1 */
 export interface AgentSummary {
   id: string;
   name: string;
@@ -26,125 +35,113 @@ export interface AgentSummary {
   commissionDue: number;
 }
 
-export interface CommissionPayment {
-  /** PG-XXX */
-  id: string;
-  agentId: string;
-  agentName: string;
-  pointer: string;
-  amount: number;
-  paidAt: string;
+export interface NetworkTotals {
+  moved: Totals;
+  deposits: Totals;
+  withdrawals: Totals;
+  commissionDue: number;
+  paidToday: number;
 }
 
-const LIVE_AGENT = {
-  id: 'dona-rosa',
-  name: 'Tienda Doña Rosa',
-  owner: 'Rosa Gómez',
-  city: 'Bogotá',
-  pointer: '$wallet.relia.co/dona-rosa',
+const EMPTY_TOTALS: NetworkTotals = {
+  moved: { total: 0, count: 0 },
+  deposits: { total: 0, count: 0 },
+  withdrawals: { total: 0, count: 0 },
+  commissionDue: 0,
+  paidToday: 0,
 };
 
-// shortcut: red demo fija para el prototipo; cambiar por GET /api/admin/agents cuando exista backend
-const DEMO_AGENTS: AgentSummary[] = [
-  {
-    id: 'la-esquina',
-    name: 'Droguería La Esquina',
-    owner: 'Carlos Pérez',
-    city: 'Cali',
-    pointer: '$wallet.relia.co/la-esquina',
-    operations: 18,
-    deposits: { total: 1_240_000, count: 11 },
-    withdrawals: { total: 860_000, count: 7 },
-    totalMoved: 2_100_000,
-    cupo: 420_000,
-    cash: 610_000,
-    commissionDue: 9_000,
-  },
-  {
-    id: 'el-sol',
-    name: 'Minimercado El Sol',
-    owner: 'Luz Marina Ríos',
-    city: 'Medellín',
-    pointer: '$wallet.relia.co/el-sol',
-    operations: 9,
-    deposits: { total: 530_000, count: 5 },
-    withdrawals: { total: 390_000, count: 4 },
-    totalMoved: 920_000,
-    cupo: 150_000,
-    cash: 280_000,
-    commissionDue: 4_500,
-  },
-  {
-    id: 'papeleria-central',
-    name: 'Papelería Central',
-    owner: 'Jorge Díaz',
-    city: 'Barranquilla',
-    pointer: '$wallet.relia.co/papeleria-central',
-    operations: 0,
-    deposits: { total: 0, count: 0 },
-    withdrawals: { total: 0, count: 0 },
-    totalMoved: 0,
-    cupo: 80_000,
-    cash: 120_000,
-    commissionDue: 0,
-  },
-];
-
-const sum = (ops: Operation[]): Totals => ({
-  total: ops.reduce((acc, op) => acc + op.amount, 0),
-  count: ops.length,
+const toTotals = ({ count, amount }: { count: number; amount: number }): Totals => ({
+  total: amount,
+  count,
 });
 
-const isToday = (iso: string, now = new Date()): boolean =>
-  new Date(iso).toDateString() === now.toDateString();
+/** Hoy en Colombia (YYYY-MM-DD), no en la zona del navegador */
+export const todayInBogota = (now = new Date()): string =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(now);
 
-/** Visión global de la red para el admin (D1); Tienda Doña Rosa refleja en vivo AgentService */
+/** Visión global de la red para el admin (D1) y pago de comisiones (D3) */
 @Injectable({ providedIn: 'root' })
 export class AdminService {
-  private readonly agent = inject(AgentService);
-  /** Más recientes primero */
-  private readonly _payments = signal<CommissionPayment[]>([]);
+  private readonly http = inject(HttpClient);
+
+  private readonly _agents = signal<AgentSummary[]>([]);
+  private readonly _totals = signal<NetworkTotals>(EMPTY_TOTALS);
+  private readonly _payments = signal<Settlement[]>([]);
+  readonly agents = this._agents.asReadonly();
+  readonly totals = this._totals.asReadonly();
+  /** Pagos de comisión de hoy, más recientes primero */
   readonly payments = this._payments.asReadonly();
 
-  private readonly liveAgent = computed<AgentSummary>(() => {
-    const done = this.agent.operations().filter((op) => op.status === 'completed');
-    const deposits = sum(done.filter((op) => op.type === 'deposit'));
-    const withdrawals = sum(done.filter((op) => op.type === 'withdrawal'));
-    const { cupo, cash, commission } = this.agent.balances();
-    return {
-      ...LIVE_AGENT,
-      operations: deposits.count + withdrawals.count,
-      deposits,
-      withdrawals,
-      totalMoved: deposits.total + withdrawals.total,
-      cupo,
-      cash,
-      commissionDue: commission,
-    };
-  });
+  /** `GET /agents`: filas y tarjetas de D1 en una llamada */
+  loadAgents(): Observable<AgentSummary[]> {
+    return this.http.get(`${environment.apiUrl}/agents`).pipe(
+      timeout(environment.httpTimeoutMs),
+      map((res) => AgentListSchema.parse(res)),
+      map(({ items, totals }) => {
+        const agents = items.map((a) => ({
+          id: a.id,
+          name: a.name,
+          owner: a.managerName,
+          city: a.city,
+          pointer: a.walletAddress,
+          operations: a.operations,
+          deposits: toTotals(a.deposits),
+          withdrawals: toTotals(a.withdrawals),
+          totalMoved: a.totalMoved,
+          cupo: a.quota,
+          cash: a.cashOnHand,
+          commissionDue: a.accruedCommission,
+        }));
+        this._agents.set(agents);
+        this._totals.set({
+          moved: toTotals(totals.totalMoved),
+          deposits: toTotals(totals.deposits),
+          withdrawals: toTotals(totals.withdrawals),
+          commissionDue: totals.commissionPayable,
+          paidToday: totals.commissionPaidToday,
+        });
+        return agents;
+      }),
+    );
+  }
 
-  readonly agents = computed(() => [this.liveAgent(), ...DEMO_AGENTS]);
-
-  readonly totals = computed(() => {
-    const agents = this.agents();
-    const add = (pick: (a: AgentSummary) => Totals): Totals =>
-      agents.reduce(
-        (acc, a) => ({ total: acc.total + pick(a).total, count: acc.count + pick(a).count }),
-        { total: 0, count: 0 },
+  /** `GET /settlements?from=<hoy>`: "Pagos de comisión" de D1 */
+  loadPayments(): Observable<Settlement[]> {
+    return this.http
+      .get(`${environment.apiUrl}/settlements`, { params: { from: todayInBogota() } })
+      .pipe(
+        timeout(environment.httpTimeoutMs),
+        map((res) => SettlementPageSchema.parse(res).items),
+        tap((items) => this._payments.set(items)),
       );
-    const deposits = add((a) => a.deposits);
-    const withdrawals = add((a) => a.withdrawals);
-    return {
-      moved: {
-        total: deposits.total + withdrawals.total,
-        count: deposits.count + withdrawals.count,
-      },
-      deposits,
-      withdrawals,
-      commissionDue: agents.reduce((acc, a) => acc + a.commissionDue, 0),
-      paidToday: this._payments()
-        .filter((p) => isToday(p.paidAt))
-        .reduce((acc, p) => acc + p.amount, 0),
-    };
-  });
+  }
+
+  /** D3: `POST /agents/{agentId}/settlements` → 202 `pending` */
+  createSettlement(agentId: string, idempotencyKey: string): Observable<Settlement> {
+    return this.http
+      .post(`${environment.apiUrl}/agents/${agentId}/settlements`, null, {
+        headers: { [IDEMPOTENCY_HEADER]: idempotencyKey },
+      })
+      .pipe(
+        timeout(environment.httpTimeoutMs),
+        map((res) => SettlementSchema.parse(res)),
+      );
+  }
+
+  getSettlement(id: string): Observable<Settlement> {
+    return this.http.get(`${environment.apiUrl}/settlements/${id}`).pipe(
+      timeout(environment.httpTimeoutMs),
+      map((res) => SettlementSchema.parse(res)),
+    );
+  }
+
+  /** Polling de `GET /settlements/{id}` hasta `paid` o `voided` */
+  watchSettlement(id: string, intervalMs?: number): Observable<Settlement> {
+    return pollUntil(
+      () => this.getSettlement(id),
+      (s) => SETTLEMENT_TERMINAL.has(s.status),
+      intervalMs,
+    );
+  }
 }

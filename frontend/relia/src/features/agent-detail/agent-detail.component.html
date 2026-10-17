@@ -1,6 +1,107 @@
 <main class="container-wide">
   <a class="link-back" routerLink="/admin">← Corresponsales</a>
-  <section class="card">
-    <h1>Detalle del corresponsal</h1>
-  </section>
+
+  @if (loadError()) {
+    <p class="card empty" role="alert">No pudimos cargar este corresponsal. Recarga la página.</p>
+  }
+
+  @if (agent(); as a) {
+    <header>
+      <h1>{{ a.name }}</h1>
+      <p class="meta">{{ a.managerName }} · {{ a.city }} · {{ a.walletAddress }}</p>
+    </header>
+
+    <section class="summary" aria-label="Saldos">
+      <article class="card">
+        <h2>Cupo</h2>
+        <p class="value">{{ a.balances.quota | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
+      </article>
+      <article class="card">
+        <h2>Efectivo</h2>
+        <p class="value">
+          {{ a.balances.cashOnHand | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+        </p>
+      </article>
+      <article class="card due-card">
+        <h2>Comisión por pagar</h2>
+        <p class="value due">
+          {{ a.balances.accruedCommission | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+        </p>
+        @if (a.balances.accruedCommission > 0) {
+          <a class="btn-pay" [routerLink]="['/admin/pagar', a.id]">Pagar comisión</a>
+        } @else {
+          <span class="muted">Sin comisión</span>
+        }
+      </article>
+    </section>
+  }
+
+  @if (operations().length) {
+    <p class="hint">Toca una operación para ver su comprobante.</p>
+    <div class="card table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Fecha</th>
+            <th scope="col">Tipo</th>
+            <th scope="col" class="num">Valor</th>
+            @for (col of balanceColumns; track col.key) {
+              <th scope="col" class="num">{{ col.label }} antes</th>
+              <th scope="col" class="num">{{ col.label }} después</th>
+            }
+            <th scope="col">Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (op of operations(); track op.id) {
+            <tr (click)="open(op)">
+              <td>{{ op.createdAt | date: 'd MMM, h:mm a' }}</td>
+              <td>
+                <!-- La fila entera abre el comprobante; el botón cubre el teclado -->
+                <button
+                  type="button"
+                  class="link-cell"
+                  (click)="$event.stopPropagation(); open(op)"
+                >
+                  {{ typeLabel[op.type] }}
+                </button>
+                <span class="op-id">{{ op.reference ?? op.id }}</span>
+              </td>
+              <td class="num strong">
+                {{ op.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+              </td>
+              @for (col of balanceColumns; track col.key) {
+                @if (op.before && op.after) {
+                  <td class="num">
+                    {{ op.before[col.key] | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+                  </td>
+                  <td class="num">
+                    {{ op.after[col.key] | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+                  </td>
+                } @else {
+                  <td class="num pending">Pendiente</td>
+                  <td class="num pending">Pendiente</td>
+                }
+              }
+              <td>
+                <span [class]="statusBadge[op.status]">{{ statusLabel[op.status] }}</span>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (hasMore()) {
+      <button
+        type="button"
+        class="btn-secondary more"
+        [disabled]="loading()"
+        (click)="loadHistory(true)"
+      >
+        {{ loading() ? 'Cargando…' : 'Ver más' }}
+      </button>
+    }
+  } @else if (!loading() && !loadError()) {
+    <p class="card empty">Este corresponsal aún no tiene operaciones.</p>
+  }
 </main>
