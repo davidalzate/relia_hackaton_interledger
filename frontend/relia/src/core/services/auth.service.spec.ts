@@ -20,6 +20,7 @@ describe('AuthService', () => {
         provideHttpClientTesting(),
       ],
     });
+    sessionStorage.clear();
     auth = TestBed.inject(AuthService);
   });
 
@@ -70,5 +71,47 @@ describe('AuthService', () => {
     ctrl.expectOne('/api/me').flush(null, { status: 500, statusText: 'Error' });
     await expect(done).rejects.toBeInstanceOf(ApiError);
     expect(auth.token()).toBeNull();
+  });
+
+  it('guarda el token para sobrevivir a recargar y lo borra al cerrar sesión', async () => {
+    await loginAs('agent');
+    expect(sessionStorage.getItem('relia.token')).toBe('tok-agent');
+    auth.clear();
+    expect(sessionStorage.getItem('relia.token')).toBeNull();
+  });
+
+  it('restore sin token guardado no llama al API', async () => {
+    expect(await firstValueFrom(auth.restore())).toBeNull();
+    TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('restore rehidrata perfil y agentId con GET /me', async () => {
+    sessionStorage.setItem('relia.token', 'guardado');
+    const done = firstValueFrom(auth.restore());
+    const me = TestBed.inject(HttpTestingController).expectOne('/api/me');
+    expect(me.request.headers.get('Authorization')).toBe('Bearer guardado');
+    me.flush({
+      role: 'agent',
+      email: 'rosa@demo.relia',
+      name: 'Rosa Gómez',
+      agent: { id: 'agent-rosa', name: 'Tienda Doña Rosa' },
+    });
+    expect(await done).toBe('agent');
+    expect(auth.agentId()).toBe('agent-rosa');
+    expect(auth.user()?.store).toBe('Tienda Doña Rosa');
+  });
+
+  it('restore con token vencido (401) limpia la sesión sin fallar', async () => {
+    sessionStorage.setItem('relia.token', 'vencido');
+    const done = firstValueFrom(auth.restore());
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/me')
+      .flush(
+        { title: 'No autorizado', status: 401, code: 'unauthorized' },
+        { status: 401, statusText: 'Unauthorized' },
+      );
+    expect(await done).toBeNull();
+    expect(auth.authenticated()).toBe(false);
+    expect(sessionStorage.getItem('relia.token')).toBeNull();
   });
 });
