@@ -15,7 +15,7 @@ export interface AppDeps {
   reliaWallet: ResolvedWallet;
   reliaGrants: Pick<ReliaGrantService, 'status' | 'view' | 'request'>;
   wallets: Pick<WalletResolver, 'resolve'>;
-  payments: Pick<PaymentService, 'create' | 'get'>;
+  payments: Pick<PaymentService, 'create' | 'get' | 'cancel'>;
 }
 
 const createPaymentSchema = {
@@ -73,6 +73,16 @@ export async function buildApp(deps: AppDeps) {
       problem = new ProblemError(500, 'internal_error', 'Error interno');
     }
     reply.status(problem.status).type(PROBLEM_CONTENT_TYPE).send(problem.toProblem());
+  });
+
+  // Acepta un cuerpo vacío con Content-Type JSON (p. ej. POST /payments/{id}/cancel desde clientes HTTP que
+  // siempre envían el header). Lo demás pasa por el parser de Fastify, que rechaza __proto__ y
+  // constructor.prototype; un JSON inválido sigue siendo 422.
+  const defaultJsonParser = app.getDefaultJsonParser('error', 'error');
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (request, body, done) => {
+    if ((body as string).trim() === '') return done(null, undefined);
+    defaultJsonParser(request, body as string, done);
   });
 
   app.setNotFoundHandler((request, reply) => {
@@ -139,6 +149,12 @@ export async function buildApp(deps: AppDeps) {
 
   app.get<{ Params: { paymentId: string } }>('/payments/:paymentId', { schema: paymentIdSchema }, async (request) =>
     deps.payments.get(request.params.paymentId),
+  );
+
+  app.post<{ Params: { paymentId: string } }>(
+    '/payments/:paymentId/cancel',
+    { schema: paymentIdSchema },
+    async (request) => deps.payments.cancel(request.params.paymentId),
   );
 
   app.get('/relia-grant', async () => deps.reliaGrants.view());

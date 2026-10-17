@@ -116,6 +116,9 @@ const MIGRATIONS: string[] = [
   ALTER TABLE payments ADD COLUMN outgoing_access_token TEXT;
   ALTER TABLE payments ADD COLUMN outgoing_token_manage TEXT;
   ALTER TABLE payments ADD COLUMN requoted INTEGER NOT NULL DEFAULT 0;`,
+
+  // 6. Vencimiento de cobros: el sincronizador busca por fecha límite en cada vuelta.
+  `CREATE INDEX ix_payments_expiry ON payments (status, expires_at);`,
 ];
 
 /** Abre (o crea) el archivo SQLite del proxy y lo lleva a la última versión del esquema. */

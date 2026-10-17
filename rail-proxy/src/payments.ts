@@ -133,6 +133,7 @@ export interface PaymentDeps {
 export class PaymentService {
   private readonly now: () => number;
   private readonly creating = new Map<string, Promise<void>>();
+  private readonly locks = new Map<string, Promise<void>>();
 
   constructor(private readonly deps: PaymentDeps) {
     this.now = deps.now ?? Date.now;
@@ -210,19 +211,114 @@ export class PaymentService {
     return { payment: toView(row), created: true };
   }
 
-  /** Trabajo del sincronizador: consulta aprobaciones y confirma los pagos que ya toca consultar. */
+  /** Trabajo del sincronizador: vence cobros, consulta aprobaciones y confirma los pagos que ya toca consultar. */
   async sync(): Promise<void> {
-    const now = this.now();
+    const start = this.now();
+    // Vencimiento: fecha límite guardada, revisada en cada vuelta (sobrevive a un reinicio). expires_at se
+    // guarda con toISOString, así que se compara como texto.
     const due = this.deps.db
       .prepare(
-        `SELECT * FROM payments WHERE status IN ('pending_approval', 'processing') AND next_poll_at <= ?
-         ORDER BY next_poll_at`,
+        `SELECT id FROM payments WHERE status IN ('pending_approval', 'processing') AND next_poll_at <= @now
+         UNION
+         SELECT id FROM payments WHERE status = 'pending_approval' AND expires_at <= @nowIso`,
       )
-      .all(now) as PaymentRow[];
-    for (const row of due) {
-      if (row.status === 'pending_approval') await this.pollApproval(row, now);
-      else await this.confirm(row, now);
+      .all({ now: start, nowIso: iso(start) }) as Array<{ id: string }>;
+    for (const { id } of due) {
+      // Un pago ocupado (p. ej. un cancel en curso) se deja para la siguiente vuelta en vez de frenar a los demás.
+      if (this.locks.has(id)) continue;
+      await this.withLock(id, async () => {
+        // Releer bajo el candado y con la hora actual: la vuelta pudo tardar.
+        const row = this.findById(id);
+        const now = this.now();
+        if (!row) return;
+        if (row.status === 'pending_approval') {
+          if (row.expires_at !== null && Date.parse(row.expires_at) <= now) await this.expire(row, now);
+          else if (row.next_poll_at !== null && row.next_poll_at <= now) await this.pollApproval(row, now);
+        } else if (row.status === 'processing' && row.next_poll_at !== null && row.next_poll_at <= now) {
+          await this.confirm(row, now);
+        }
+      });
     }
+  }
+
+  /**
+   * Cancela un cobro que aún no se aprueba: revoca la aprobación en el riel, cierra el cobro y lo deja
+   * `cancelled`. Cancelar uno ya cancelado devuelve el mismo pago. Después de aprobado: 409.
+   */
+  async cancel(id: string): Promise<PaymentView> {
+    return this.withLock(id, async () => {
+      const row = this.findById(id);
+      if (!row) throw new ProblemError(404, 'not_found', 'Pago inexistente', `No hay un pago con id ${id}.`);
+      if (row.status === 'cancelled') return toView(row);
+      if (row.direction !== 'incoming' || row.status !== 'pending_approval') {
+        throw new ProblemError(
+          409,
+          'payment_not_cancellable',
+          'El pago no se puede cancelar',
+          row.direction === 'outgoing'
+            ? 'Solo se cancelan cobros (incoming) pendientes de aprobación.'
+            : `El pago está en ${row.status}; solo se cancela en pending_approval.`,
+        );
+      }
+
+      // Si el riel no responde, el pago queda como estaba y el backend puede reintentar.
+      const revoked = await this.revokePayerGrant(row);
+      if (revoked !== true) throw railUnavailable(revoked);
+      const now = this.now();
+      this.transition(row, 'pending_approval', { status: 'cancelled', next_poll_at: null }, now);
+      this.deps.log.info({ paymentId: row.id }, 'cobro cancelado');
+      this.clearPayerTokens(row.id);
+      await this.closeIncoming(row.incoming_auth_server!, row.incoming_payment_url!);
+      return toView(this.findById(id)!);
+    });
+  }
+
+  /**
+   * Venció `expiresAt` sin aprobación: revoca la aprobación en el riel, cierra el cobro y pasa a `expired`.
+   * Si el riel no responde, sigue pendiente y se reintenta en la siguiente vuelta (una aprobación tardía no
+   * se procesa: el vencimiento se revisa antes que la aprobación).
+   */
+  private async expire(row: PaymentRow, now: number): Promise<void> {
+    const revoked = await this.revokePayerGrant(row);
+    if (revoked !== true) {
+      this.deps.log.warn({ paymentId: row.id, error: describeRailError(revoked) }, 'no se pudo revocar un cobro vencido; se reintenta');
+      return;
+    }
+    if (!this.transition(row, 'pending_approval', { status: 'expired', next_poll_at: null }, now)) return;
+    this.deps.log.info({ paymentId: row.id }, 'cobro vencido sin aprobación');
+    this.clearPayerTokens(row.id);
+    await this.closeIncoming(row.incoming_auth_server!, row.incoming_payment_url!);
+  }
+
+  /**
+   * Revoca la continuación del grant del pagador (DELETE). true si quedó revocada o ya no existía (4xx);
+   * el error si el riel no respondió (red o 5xx).
+   */
+  private async revokePayerGrant(row: PaymentRow): Promise<true | unknown> {
+    const current = this.findById(row.id) ?? row;
+    if (!current.continue_uri || !current.continue_token) return true;
+    try {
+      await this.deps.client.grant.cancel({ url: current.continue_uri, accessToken: current.continue_token });
+      return true;
+    } catch (error) {
+      const gone = error instanceof OpenPaymentsClientError && error.status !== undefined && error.status >= 400 && error.status < 500;
+      return gone ? true : error;
+    }
+  }
+
+  /** Serializa el trabajo sobre un mismo pago (sincronizador y cancel). */
+  private async withLock<T>(id: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.locks.get(id) ?? Promise.resolve();
+    const current = previous.then(work);
+    const settled = current.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.locks.set(id, settled);
+    void settled.then(() => {
+      if (this.locks.get(id) === settled) this.locks.delete(id);
+    });
+    return current;
   }
 
   private async validateCounterparty(request: CreatePaymentRequest): Promise<ResolvedWallet> {
@@ -675,19 +771,19 @@ export class PaymentService {
    */
   private async releasePayerGrant(row: PaymentRow): Promise<void> {
     if (row.direction !== 'incoming') return;
-    const current = this.findById(row.id) ?? row;
-    if (current.continue_uri && current.continue_token) {
-      try {
-        await this.deps.client.grant.cancel({ url: current.continue_uri, accessToken: current.continue_token });
-      } catch (error) {
-        this.deps.log.debug({ paymentId: row.id, error: describeRailError(error) }, 'no se pudo revocar el permiso del pagador');
-      }
+    const revoked = await this.revokePayerGrant(row);
+    if (revoked !== true) {
+      this.deps.log.debug({ paymentId: row.id, error: describeRailError(revoked) }, 'no se pudo revocar el permiso del pagador');
     }
+    this.clearPayerTokens(row.id);
+  }
+
+  private clearPayerTokens(id: string): void {
     this.deps.db
       .prepare(
         `UPDATE payments SET continue_token = NULL, outgoing_access_token = NULL, outgoing_token_manage = NULL WHERE id = ?`,
       )
-      .run(row.id);
+      .run(id);
   }
 
   /** Cambia el estado solo si sigue en `from`. Devuelve si lo cambió. */
