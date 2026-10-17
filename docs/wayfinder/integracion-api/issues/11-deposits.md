@@ -1,7 +1,8 @@
 # Integrar POST /agents/{agentId}/deposits
 
 Type: task
-Status: open
+Status: claimed
+PR: [#28](https://github.com/davidalzate/relia_hackaton_interledger/pull/28)
 Blocked by: [07](07-operations-get.md), [10](10-keys-get.md), [09](09-operations-preview.md)
 Labels: wayfinder:task, frontend, feature:depositar
 Feature: Depositar (B2)
@@ -21,3 +22,7 @@ Conectar el frontend (`frontend/relia`) al endpoint real de la Relia API y retir
 - [ ] Polling hasta terminal; `completed` muestra `netAmount`, `fee`, `balances`.
 - [ ] `422 insufficient_quota` → "Cupo insuficiente"; `503 rail_unavailable` → "El simulador no respondió. No se movió dinero."; `failed/payment_failed` → B2.6.
 - [ ] Test unitario del servicio con `HttpTestingController` (éxito y error principal).
+
+## Notas
+
+- Se borró el depósito mock de `AgentService`.

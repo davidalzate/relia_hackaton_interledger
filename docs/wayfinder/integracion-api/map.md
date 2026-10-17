@@ -42,13 +42,13 @@ Servicio listo en #27; depositar, retirar y cargar cupo lo conectan en sus panta
 
 ### 2. Depositar (B2)
 
-Vista previa y llave las reusa Retirar.
+PR #28. Vista previa y llave las reusa Retirar.
 
 | # | Endpoint | Pantalla | Bloqueado por | Estado |
 |---|---|---|---|---|
-| [09](issues/09-operations-preview.md) | POST /agents/{agentId}/operations/preview | B2.1, B3.1 Desglose | 03 | open |
-| [10](issues/10-keys-get.md) | GET /keys/{phone} | B2.2, B3.1 Validar llave | 00 | open |
-| [11](issues/11-deposits.md) | POST /agents/{agentId}/deposits | B2.4 Enviando → B2.5 / B2.6 | 07, 10, 09 | open |
+| [09](issues/09-operations-preview.md) | POST /agents/{agentId}/operations/preview | B2.1, B3.1 Desglose | 03 | claimed · [#28](https://github.com/davidalzate/relia_hackaton_interledger/pull/28) |
+| [10](issues/10-keys-get.md) | GET /keys/{phone} | B2.2, B3.1 Validar llave | 00 | claimed · [#28](https://github.com/davidalzate/relia_hackaton_interledger/pull/28) |
+| [11](issues/11-deposits.md) | POST /agents/{agentId}/deposits | B2.4 Enviando → B2.5 / B2.6 | 07, 10, 09 | claimed · [#28](https://github.com/davidalzate/relia_hackaton_interledger/pull/28) |
 
 ### 3. Retirar (B3)
 
