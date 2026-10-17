@@ -2,9 +2,10 @@
 
 Registro de los prompts usados con **Claude Code** (app de escritorio, modelo Claude Opus) para construir el frontend de Relia en `frontend/relia`. Complementa [AI_USAGE.md](../../AI_USAGE.md).
 
-- **Fecha:** 16 de octubre de 2026, una sola sesión.
+- **Fecha:** 16 de octubre de 2026, en dos sesiones: pantallas con datos simulados (prompts 1–22) e integración con la Relia API (prompts 23–31).
 - **Stack resultante:** Angular 21 standalone, zone.js, signals, PrimeNG 21 (Aura), Zod (`zod/mini`) y SCSS con tokens en `:root`.
 - **Flujo de trabajo:** cada pantalla se pidió pegando su especificación (A1, B0–B9, D0–D1). Claude implementó la pantalla, corrió typecheck, build y tests y la probó en el navegador. Luego, con un segundo prompt, hizo el commit y abrió el PR hacia `main`.
+- **Integración con la API:** a partir de [contracts/FLUJOS.md](../../contracts/FLUJOS.md) Claude creó un ticket por endpoint en [docs/wayfinder/integracion-api](../wayfinder/integracion-api/map.md) y luego se pidió cada ticket por número. Cada uno reemplaza un mock por la llamada real, con schema Zod, tests con `HttpTestingController` y su PR. Los PRs van apilados: cada uno parte del anterior.
 - **Qué hicimos nosotros:** escribimos las especificaciones de cada pantalla, revisamos y mergeamos cada PR y decidimos cuando había alternativas (por ejemplo, quedarnos en Angular 21 en lugar de bajar a 19).
 
 ## Resumen
@@ -33,6 +34,15 @@ Registro de los prompts usados con **Claude Code** (app de escritorio, modelo Cl
 | 20 | D1. Inicio admin | [PR #15](https://github.com/davidalzate/relia_hackaton_interledger/pull/15) |
 | 21 | D0. Encabezado admin | [PR #16](https://github.com/davidalzate/relia_hackaton_interledger/pull/16) |
 | 22 | Este registro de prompts | Este archivo |
+| 23 | Tickets de integración desde FLUJOS.md | 30 tickets en `docs/wayfinder/integracion-api` |
+| 24 | Rama nueva y PR (no hay `dev`) | [PR #18](https://github.com/davidalzate/relia_hackaton_interledger/pull/18) |
+| 25 | Ticket 00. Base HTTP | [PR #19](https://github.com/davidalzate/relia_hackaton_interledger/pull/19) |
+| 26 | Ticket 01. `POST /auth/login` | [PR #20](https://github.com/davidalzate/relia_hackaton_interledger/pull/20) |
+| 27 | Ticket 02. `GET /me` | [PR #21](https://github.com/davidalzate/relia_hackaton_interledger/pull/21) |
+| 28 | Ticket 03. `GET /agents/{agentId}` | [PR #22](https://github.com/davidalzate/relia_hackaton_interledger/pull/22) |
+| 29 | Ticket 04. `GET /agents/{agentId}/history` | [PR #24](https://github.com/davidalzate/relia_hackaton_interledger/pull/24) |
+| 30 | Ticket 05. `POST /agents/{agentId}/cash-adjustments` | [PR #25](https://github.com/davidalzate/relia_hackaton_interledger/pull/25) |
+| 31 | Actualizar este registro | Este archivo |
 
 Después de cada pantalla venía un prompt corto para hacer el commit y abrir el PR. Esos no se listan uno por uno; su forma era siempre la misma:
 
@@ -559,3 +569,59 @@ Barra cobalto fija: wordmark blanco + insignia amarilla "Admin" (al tocarlo → 
 ### 22. Registro de prompts
 
 > crea una nueva rama y en base a docs/jeff_claude y AI_USAGE.md agregar a docs/oscar_claude la lista de proms realizados para frontend
+
+### 23. Tickets de integración
+
+> en base al archivo /Users/oscarcorrea/development/projects/relia_hackaton_interledger/contracts/FLUJOS.md
+>
+> se debe integrar cada uno de los endpoints en realia api, crea tareas para cada integracion de endpoint
+
+Claude siguió la convención de tickets de [docs/wayfinder/contratos-api](../wayfinder/contratos-api/map.md): un `map.md` con la tabla de dependencias y un archivo por endpoint con pantalla, mock que reemplaza y criterios de aceptación. El ticket 00 (base HTTP) bloquea a todos los demás.
+
+### 24. Rama y PR de los tickets
+
+> Haz commit de los tickets de integración
+
+> no tenemos dev, crea una nueva rama con estos cambios y envia pr
+
+Resultado: [PR #18](https://github.com/davidalzate/relia_hackaton_interledger/pull/18).
+
+### 25. Ticket 00. Base HTTP
+
+> inicia con la tarea 00
+
+Bearer en todas las rutas salvo `/auth/login`, `/key-links*` y `/demo/*`; `ApiError` con el `code` tipado de `problem+json`; `newIdempotencyKey` y `pollUntil` (polling cada 1,5 s que reintenta cortes de red y 5xx). Resultado: [PR #19](https://github.com/davidalzate/relia_hackaton_interledger/pull/19).
+
+### 26. Ticket 01. Login
+
+> tiket 001
+
+El login llama a `POST /auth/login` y encadena `GET /me`, porque la respuesta no trae nombre ni comercio. Se eliminaron los usuarios simulados. Resultado: [PR #20](https://github.com/davidalzate/relia_hackaton_interledger/pull/20).
+
+### 27. Ticket 02. Sesión al recargar
+
+> tikect 02
+
+El token pasó a `sessionStorage` y la sesión se rehidrata con `GET /me` al arrancar la app (`provideAppInitializer`). Queda como decisión abierta la cookie HttpOnly. Resultado: [PR #21](https://github.com/davidalzate/relia_hackaton_interledger/pull/21).
+
+### 28. Ticket 03. Saldos del corresponsal
+
+> ticket 03
+
+`GET /agents/{agentId}` al iniciar sesión alimenta Caja, Cargar cupo, Efectivo e Historial. Resultado: [PR #22](https://github.com/davidalzate/relia_hackaton_interledger/pull/22).
+
+### 29. Ticket 04. Historial
+
+> ticket 04
+
+Caja pide las 3 últimas entradas; Historial filtra por `kind` en el servidor y pagina con "Ver más". Resultado: [PR #24](https://github.com/davidalzate/relia_hackaton_interledger/pull/24).
+
+### 30. Ticket 05. Efectivo en caja
+
+> 05
+
+B7 guarda con `POST /agents/{agentId}/cash-adjustments`, muestra los errores `insufficient_cash` y `no_change`, y reusa la clave de idempotencia al reintentar el mismo ajuste. Resultado: [PR #25](https://github.com/davidalzate/relia_hackaton_interledger/pull/25).
+
+### 31. Actualizar este registro
+
+> actualiza el archivo de promps de oscar con lo que se a agregado
