@@ -39,39 +39,39 @@ function setup(phone: string | null = null, pending: PendingLink | null = null) 
 
 describe('LinkPhoneComponent (C1)', () => {
   it('precarga el celular del enlace de invitación', () => {
-    const { c } = setup('3000000002');
-    expect(c['form'].controls.phone.value).toBe('300 000 0002');
+    const { c } = setup('+573000000002');
+    expect(c['form'].controls.phone.value).toBe('+573000000002');
   });
 
   it('valida celular y payment pointer antes de enviar el código', () => {
     const { keyLinks, c, el, render } = setup();
-    c['form'].patchValue({ phone: '300 000', walletAddress: 'ilp.test/maria' });
+    c['form'].patchValue({ phone: '', walletAddress: 'ilp.test/maria' });
     c['sendCode']();
     render();
-    expect(el.textContent).toContain('Escribe un celular de 10 dígitos.');
+    expect(el.textContent).toContain('Escribe el celular completo para el país elegido.');
     expect(el.textContent).toContain('El payment pointer empieza por $ y tiene una ruta');
     expect(keyLinks.start).not.toHaveBeenCalled();
   });
 
   it('paso 1 → 2 → 3: el API envía el OTP, lo verifica y crea la llave', () => {
-    const { keyLinks, linked, c, el, render } = setup('3000000002');
+    const { keyLinks, linked, c, el, render } = setup('+573000000002');
     c['form'].patchValue({ walletAddress: '$ilp.interledger-test.dev/maria' });
     c['sendCode']();
     render();
-    expect(keyLinks.start).toHaveBeenCalledWith('3000000002', '$ilp.interledger-test.dev/maria');
-    expect(el.textContent).toContain('Te enviamos un SMS al 300 000 0002.');
+    expect(keyLinks.start).toHaveBeenCalledWith('+573000000002', '$ilp.interledger-test.dev/maria');
+    expect(el.textContent).toContain('Te enviamos un SMS al +57 300 000 0002.');
 
     c['form'].patchValue({ code: '123456' });
     c['verify']();
     expect(keyLinks.verify).toHaveBeenCalledWith('123456');
-    linked.next({ phone: '3000000002', walletAddress: '$ilp.interledger-test.dev/maria' });
+    linked.next({ phone: '+573000000002', walletAddress: '$ilp.interledger-test.dev/maria' });
     render();
     expect(el.textContent).toContain('Tu celular quedó vinculado a tu billetera');
     expect(el.textContent).toContain('$ilp.interledger-test.dev/maria');
   });
 
   it('422 invalid_otp muestra los intentos que quedan', () => {
-    const { keyLinks, c, el, render } = setup('3000000002');
+    const { keyLinks, c, el, render } = setup('+573000000002');
     keyLinks.verify.mockReturnValue(apiError(422, { code: 'invalid_otp', attemptsRemaining: 4 }));
     c['form'].patchValue({ walletAddress: '$ilp.interledger-test.dev/maria' });
     c['sendCode']();
@@ -81,7 +81,7 @@ describe('LinkPhoneComponent (C1)', () => {
   });
 
   it('409 wallet_already_linked al enviar el código se queda en el paso 1 con el motivo', () => {
-    const { keyLinks, c, el, render } = setup('3000000002');
+    const { keyLinks, c, el, render } = setup('+573000000002');
     keyLinks.start.mockReturnValue(apiError(409, { code: 'wallet_already_linked' }));
     c['form'].patchValue({ walletAddress: '$ilp.interledger-test.dev/jeffdev' });
     c['sendCode']();
@@ -92,13 +92,13 @@ describe('LinkPhoneComponent (C1)', () => {
 
   it('al volver de Ver SMS retoma el paso 2 con los datos', () => {
     const { c, el } = setup(null, {
-      phone: '3000000002',
+      phone: '+573000000002',
       walletAddress: '$ilp.interledger-test.dev/maria',
       challengeId: 'ch-1',
     });
     expect(el.textContent).toContain('Escribe el código');
     expect(c['form'].getRawValue()).toMatchObject({
-      phone: '300 000 0002',
+      phone: '+573000000002',
       walletAddress: '$ilp.interledger-test.dev/maria',
     });
   });

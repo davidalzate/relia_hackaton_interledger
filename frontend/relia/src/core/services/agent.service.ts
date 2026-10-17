@@ -188,7 +188,7 @@ export class AgentService {
 
   /** `GET /keys/{phone}`: null si el celular no tiene billetera (`404 key_not_found`) */
   validateKey(phone: string): Observable<KeyLookup | null> {
-    return this.http.get(`${environment.apiUrl}/keys/${phone}`).pipe(
+    return this.http.get(`${environment.apiUrl}/keys/${encodeURIComponent(phone)}`).pipe(
       timeout(environment.httpTimeoutMs),
       map((res) => KeyLookupSchema.parse(res)),
       catchError((err: unknown) =>

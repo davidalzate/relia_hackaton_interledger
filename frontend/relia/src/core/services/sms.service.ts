@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 
 export interface Sms {
-  /** 10 dígitos */
+  /** E.164 */
   phone: string;
   text: string;
   operationId?: string;

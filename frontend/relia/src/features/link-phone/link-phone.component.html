@@ -16,21 +16,17 @@
 
         <div class="field">
           <label for="phone">Celular</label>
-          <input
-            pInputText
-            id="phone"
-            type="tel"
-            inputmode="numeric"
-            maxlength="12"
-            autocomplete="tel-national"
-            placeholder="300 000 0002"
+          <app-phone-field
+            inputId="phone"
             formControlName="phone"
-            (input)="formatPhone()"
-            [attr.aria-invalid]="submitted() && phoneInvalid() ? true : null"
-            [attr.aria-describedby]="submitted() && phoneInvalid() ? 'phone-error' : null"
+            autocomplete="tel-national"
+            [invalid]="submitted() && phoneInvalid()"
+            [describedBy]="submitted() && phoneInvalid() ? 'phone-error' : null"
           />
           @if (submitted() && phoneInvalid()) {
-            <p id="phone-error" class="error" role="alert">Escribe un celular de 10 dígitos.</p>
+            <p id="phone-error" class="error" role="alert">
+              Escribe el celular completo para el país elegido.
+            </p>
           }
         </div>
 

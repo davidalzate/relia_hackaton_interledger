@@ -14,7 +14,6 @@ import { Router, RouterLink } from '@angular/router';
 import { ConfirmationService } from 'primeng/api';
 import { Checkbox } from 'primeng/checkbox';
 import { InputNumber } from 'primeng/inputnumber';
-import { InputText } from 'primeng/inputtext';
 import { catchError, debounceTime, distinctUntilChanged, interval, map, of, switchMap } from 'rxjs';
 
 import { ReceiptService } from '../../core/services/receipt.service';
@@ -23,8 +22,8 @@ import { AgentService } from '../../core/services/agent.service';
 import { WITHDRAWAL_TTL_MS, WithdrawalService } from '../../core/services/withdrawal.service';
 import { OperationPreview } from '../../shared/schemas/operation.schema';
 import { InviteDialogComponent } from '../../shared/components/invite-dialog/invite-dialog.component';
+import { PhoneFieldComponent } from '../../shared/components/phone-field/phone-field.component';
 import { QrCodeComponent } from '../../shared/components/qr-code/qr-code.component';
-import { formatPhone, phoneDigits } from '../../shared/utils/phone';
 import { formatCountdown } from '../../shared/utils/time';
 
 type KeyState = 'idle' | 'checking' | 'found' | 'missing' | 'error';
@@ -54,8 +53,8 @@ const PREVIEW_DEBOUNCE_MS = 300;
     CurrencyPipe,
     Checkbox,
     InputNumber,
-    InputText,
     InviteDialogComponent,
+    PhoneFieldComponent,
     QrCodeComponent,
   ],
   templateUrl: './withdraw.component.html',
@@ -92,8 +91,9 @@ export class WithdrawComponent {
   protected readonly inviteSent = signal(false);
 
   protected readonly amount = computed(() => this.value().amount ?? 0);
-  protected readonly phoneDigits = computed(() => phoneDigits(this.value().phone ?? ''));
-  protected readonly phoneComplete = computed(() => this.phoneDigits().length === 10);
+  /** E.164, o '' mientras el número está incompleto */
+  protected readonly phone = computed(() => this.value().phone ?? '');
+  protected readonly phoneComplete = computed(() => !!this.phone());
   /** `POST .../operations/preview` al escribir el monto o cambiar "valor redondo" */
   private readonly preview = toSignal(
     this.form.valueChanges.pipe(
@@ -152,16 +152,11 @@ export class WithdrawComponent {
     this.form.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => (this.idempotencyKey = null));
   }
 
-  protected formatPhone(): void {
-    const formatted = formatPhone(this.form.controls.phone.value);
-    if (formatted !== this.form.controls.phone.value) this.form.controls.phone.setValue(formatted);
-  }
-
   protected validateKey(): void {
     if (!this.canValidate()) return;
     this.keyState.set('checking');
     this.agent
-      .validateKey(this.phoneDigits())
+      .validateKey(this.phone())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (key) => {
@@ -181,7 +176,7 @@ export class WithdrawComponent {
     this.idempotencyKey ??= newIdempotencyKey();
     this.withdrawals.start(
       {
-        phone: phoneDigits(phone),
+        phone,
         amount: amount ?? 0,
         roundForUser,
         cashOut: b.cashOut,
@@ -225,7 +220,7 @@ export class WithdrawComponent {
     if (w?.status !== 'error') return;
     const { phone, amount, roundForUser } = w.request;
     this.withdrawals.clear();
-    this.form.setValue({ phone: formatPhone(phone), amount, roundForUser });
+    this.form.setValue({ phone, amount, roundForUser });
     // Después de setValue, que descarta la clave: se reusa solo si no se creó nada
     this.idempotencyKey = w.retryKey;
     this.keyState.set('found');
