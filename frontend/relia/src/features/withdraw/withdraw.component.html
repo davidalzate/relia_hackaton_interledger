@@ -2,16 +2,23 @@
 @if (w && w.status === 'waiting') {
   <!-- B3.2 -->
   <main class="container-ops center">
-    <section class="card waiting" role="status" aria-live="polite">
-      <p-progressspinner strokeWidth="4" ariaLabel="Esperando aprobación" />
-      <h1>Esperando que el usuario apruebe en su billetera</h1>
+    <section class="card waiting" aria-labelledby="qr-title">
+      <h1 id="qr-title">Pide al usuario que escanee el código</h1>
+      <p class="hint">Lo abre con la cámara de su celular y aprueba el pago en su billetera.</p>
+      @if (w.approvalUrl) {
+        <app-qr-code [value]="w.approvalUrl" label="Código QR para aprobar el pago" />
+      }
       <p class="amount">{{ w.request.walletIn | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
-      <p class="countdown" aria-label="Tiempo restante">{{ countdown() }}</p>
-      <p class="warning"><strong>No entregues efectivo todavía</strong></p>
-      <p class="phone-link">
-        <a routerLink="/telefono">Abrir teléfono del usuario</a>
-        <span class="badge-sim">Simulación</span>
+      <p class="countdown" role="status" aria-live="polite" aria-label="Tiempo restante">
+        Esperando aprobación · {{ countdown() }}
       </p>
+      <p class="warning"><strong>No entregues efectivo todavía</strong></p>
+      @if (w.approvalUrl) {
+        <!-- Para el demo en un solo equipo: abrir el mismo enlace sin escanear -->
+        <p class="phone-link">
+          <a [href]="w.approvalUrl" target="_blank" rel="noopener">Abrir enlace de pago</a>
+        </p>
+      }
       <button type="button" class="link-danger" (click)="cancelRequest()">
         Cancelar solicitud
       </button>
@@ -252,7 +259,7 @@
 
       @if (keyState() === 'found') {
         <button class="btn-primary" type="submit" [disabled]="!canSend()">
-          {{ creating() ? 'Enviando…' : 'Enviar solicitud de pago' }}
+          {{ creating() ? 'Generando…' : 'Generar código QR' }}
         </button>
       } @else {
         <button class="btn-primary" type="submit" [disabled]="!canValidate()">Validar llave</button>

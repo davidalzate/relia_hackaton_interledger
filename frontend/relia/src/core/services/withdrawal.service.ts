@@ -29,7 +29,7 @@ export interface WithdrawalRequest {
 export type WithdrawalErrorKind =
   'rejected' | 'expired' | 'cancelled' | 'failed' | 'cash' | 'network';
 
-/** Solicitud de pago en curso: la comparten la vista B3 y el teléfono del usuario (C2) */
+/** Retiro en curso: B3 muestra la `approvalUrl` como QR para que el usuario la escanee */
 interface WithdrawalBase {
   request: WithdrawalRequest;
   operation: Operation;
@@ -88,7 +88,7 @@ export class WithdrawalService {
           this._creating.set(false);
           this.update(request, op);
         }),
-        // El polling vive aquí (no en la vista) para seguir mientras se abre el teléfono C2
+        // El polling vive aquí (no en la vista) para seguir aunque el corresponsal salga de B3
         switchMap((op) => this.operations.watch(op.id)),
       )
       .subscribe({
