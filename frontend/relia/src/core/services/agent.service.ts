@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
-import { Observable, catchError, map, of, tap, throwError, timeout } from 'rxjs';
+import { EMPTY, Observable, catchError, forkJoin, map, of, tap, throwError, timeout } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import { ApiError, IDEMPOTENCY_HEADER, newIdempotencyKey } from '../http/api';
@@ -123,13 +123,7 @@ export class AgentService {
     effect(() => {
       const id = this.auth.agentId();
       if (!id) return;
-      untracked(() => {
-        this.refresh(id).subscribe({ error: () => undefined });
-        this.fetchHistory({ limit: 3 }).subscribe({
-          next: ({ items }) => this._recent.set(items),
-          error: () => undefined,
-        });
-      });
+      untracked(() => this.reload(id).subscribe({ error: () => undefined }));
     });
   }
 
@@ -150,6 +144,15 @@ export class AgentService {
         this._balances.set({ cupo: quota, commission: accruedCommission, cash: cashOnHand });
       }),
     );
+  }
+
+  /** Saldos y últimas 3 operaciones del corresponsal de la sesión (B1 al entrar y mientras está abierta) */
+  reload(agentId = this.auth.agentId()): Observable<unknown> {
+    if (!agentId) return EMPTY;
+    return forkJoin([
+      this.refresh(agentId),
+      this.fetchHistory({ limit: 3 }, agentId).pipe(tap(({ items }) => this._recent.set(items))),
+    ]);
   }
 
   /** B8: primera página de `kind` (null = todas), o la siguiente con `more` */

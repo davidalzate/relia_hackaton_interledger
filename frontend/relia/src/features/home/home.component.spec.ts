@@ -3,10 +3,11 @@ import localeEsCo from '@angular/common/locales/es-CO';
 import { LOCALE_ID, computed, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { of } from 'rxjs';
 
 import { AgentService } from '../../core/services/agent.service';
 import { AgentBalances, Operation } from '../../shared/types/agent';
-import { HomeComponent } from './home.component';
+import { CAJA_REFRESH_MS, HomeComponent } from './home.component';
 
 registerLocaleData(localeEsCo);
 
@@ -17,6 +18,8 @@ const op = (id: string, status: Operation['status']): Operation => ({
   createdAt: '2026-10-16T15:05:00Z',
   status,
 });
+
+const reload = vi.fn(() => of(undefined));
 
 function render(balances: AgentBalances, operations: Operation[] = []): HTMLElement {
   const ops = signal(operations);
@@ -30,6 +33,7 @@ function render(balances: AgentBalances, operations: Operation[] = []): HTMLElem
           balances: signal(balances),
           operations: ops,
           recentOperations: computed(() => ops().slice(0, 3)),
+          reload,
         },
       },
     ],
@@ -55,10 +59,20 @@ describe('HomeComponent', () => {
     ]);
     expect(el.querySelectorAll('.notice').length).toBe(0);
     expect(el.querySelectorAll('.recent li').length).toBe(3);
-    expect([...el.querySelectorAll('.recent li [class^="badge-"]')].map((b) => b.textContent?.trim())).toEqual([
-      'Pendiente',
-      'Fallido',
-    ]);
+    expect(
+      [...el.querySelectorAll('.recent li [class^="badge-"]')].map((b) => b.textContent?.trim()),
+    ).toEqual(['Pendiente', 'Fallido']);
     expect(el.querySelector('.balance .amount')?.textContent).toContain('50.000');
+  });
+
+  it('recarga saldos al entrar y cada CAJA_REFRESH_MS mientras está abierta', () => {
+    vi.useFakeTimers();
+    reload.mockClear();
+    render({ cupo: 0, commission: 0, cash: 0 });
+    vi.advanceTimersByTime(0);
+    expect(reload).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(CAJA_REFRESH_MS);
+    expect(reload).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
   });
 });

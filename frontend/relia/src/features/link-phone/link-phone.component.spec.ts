@@ -95,6 +95,7 @@ describe('LinkPhoneComponent (C1)', () => {
       phone: '+573000000002',
       walletAddress: '$ilp.interledger-test.dev/maria',
       challengeId: 'ch-1',
+      walletAssetCode: 'COP',
     });
     expect(el.textContent).toContain('Escribe el código');
     expect(c['form'].getRawValue()).toMatchObject({
