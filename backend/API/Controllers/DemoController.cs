@@ -6,7 +6,9 @@ using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Options;
 using Relia.Api.Configuration;
 using Relia.Api.Contracts;
+using Relia.Api.Domain;
 using Relia.Api.Errors;
+using Relia.Api.Repositories;
 using Relia.Api.Services;
 
 namespace Relia.Api.Controllers;
@@ -17,8 +19,21 @@ namespace Relia.Api.Controllers;
 [AllowAnonymous]
 [DemoOnly]
 [Tags("demo")]
-public class DemoController(ISimulatedInbox inbox) : ControllerBase
+public class DemoController(ISimulatedInbox inbox, IOperationRepository operations, TimeProvider time)
+    : ControllerBase
 {
+    /// <summary>"Mi billetera": cobros pendientes de aprobación de ese celular (usuario o corresponsal).</summary>
+    [HttpGet("payment-requests")]
+    public async Task<DemoPaymentRequestListDto> ListPaymentRequests(
+        [FromQuery, Required, RegularExpression(Patterns.Phone)] string phone, CancellationToken ct)
+    {
+        var pending = await operations.ListPendingApprovalsAsync(phone, time.GetUtcNow(), ct);
+        return new DemoPaymentRequestListDto(pending.Select(p => new DemoPaymentRequestDto(
+            p.Operation.Id, p.Operation.Reference,
+            p.Operation.Kind == OperationKind.Withdrawal ? DemoPaymentRequestType.Withdrawal : DemoPaymentRequestType.QuotaTopUp,
+            p.AgentName, p.Operation.ChargedAmount, p.ExpiresAt, p.ApprovalUrl)).ToList());
+    }
+
     [HttpGet("messages")]
     public Task<DemoMessagePageDto> ListMessages(
         [FromQuery, RegularExpression(Patterns.Phone)] string? phone,

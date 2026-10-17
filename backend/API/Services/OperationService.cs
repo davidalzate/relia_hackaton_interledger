@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
@@ -12,18 +13,24 @@ using Relia.Api.Repositories;
 namespace Relia.Api.Services;
 
 /// <summary>
-/// Desglose, depósitos y lectura de operaciones. Retiro (ticket 09) y carga de cupo (ticket 10) siguen en
-/// desarrollo. La idempotencia de las creaciones la resuelve el filtro [Idempotent] del controlador, que abre la
+/// Desglose, depósitos, retiros y acciones sobre una operación. La carga de cupo (ticket 10) sigue en desarrollo.
+/// La idempotencia de las creaciones la resuelve el filtro [Idempotent] del controlador, que abre la
 /// transacción: un 4xx o un 503 deshacen todo, incluido lo que se escribió antes de llamar al riel.
 /// </summary>
 public class OperationService(
     IAgentRepository agents, IFeeRepository fees, IWalletKeyRepository keys, IOperationRepository operations,
     IPaymentRepository payments, ILedgerRepository ledgerEntries, ILedger ledger, IRailClient rail,
-    IOperationSync sync, IUnitOfWork unitOfWork, ICurrentUser currentUser, IOptions<ReliaOptions> options,
-    TimeProvider time, ILogger<OperationService> logger) : IOperationService
+    IOperationSync sync, ISimulatedInbox inbox, IUnitOfWork unitOfWork, ICurrentUser currentUser,
+    IOptions<ReliaOptions> options, TimeProvider time, ILogger<OperationService> logger) : IOperationService
 {
     /// <summary>Tope de la descripción que ve el pagador en su billetera (rail-proxy.openapi.yaml).</summary>
     private const int MaxRailDescription = 140;
+
+    /// <summary>Plazo para que el usuario apruebe el cobro de un retiro.</summary>
+    private static readonly TimeSpan WithdrawalApprovalWindow = TimeSpan.FromMinutes(5);
+
+    /// <summary>Formato de pesos en los textos que ve el usuario ("$ 100.000").</summary>
+    private static readonly CultureInfo PesoFormat = CultureInfo.GetCultureInfo("es-CO");
 
     /// <summary>Siempre 200: lo que impide crear la operación va en violations.</summary>
     public async Task<OperationPreviewDto> PreviewAsync(Guid agentId, OperationPreviewRequest request,
@@ -67,30 +74,8 @@ public class OperationService(
             if (amounts.ChargedAmount > available) throw ApiErrors.InsufficientQuota(amounts.ChargedAmount - available);
 
             var now = time.GetUtcNow();
-            var operation = new Operation
-            {
-                Id = Guid.NewGuid(),
-                AgentId = agentId,
-                Kind = OperationKind.Deposit,
-                WalletKeyId = key.Id,
-                WalletKey = key,
-                RequestedAmount = requested,
-                RoundAmount = round,
-                FeeId = fee.Id,
-                FeeTotal = amounts.Total,
-                FeeRelia = amounts.ReliaShare,
-                FeeAgent = amounts.AgentShare,
-                NetAmount = amounts.NetAmount,
-                ChargedAmount = amounts.ChargedAmount,
-                State = OperationState.Pending,
-                IdempotencyKey = idempotencyKey,
-                CreatedAt = now,
-            };
-            operations.Add(operation);
-            operations.AddEvent(new OperationEvent
-            {
-                OperationId = operation.Id, NewState = OperationState.Pending, Origin = EventOrigin.Agent, CreatedAt = now,
-            });
+            var operation = AddCashOperation(OperationKind.Deposit, agentId, key, requested, round, fee, amounts,
+                idempotencyKey, now);
             var payment = new Payment
             {
                 Id = RailPaymentId(agentId, "deposit", idempotencyKey),
@@ -107,20 +92,78 @@ public class OperationService(
             // Se guarda antes de llamar al riel: si la base rechaza algo, no se llega a pedir el pago.
             await unitOfWork.SaveChangesAsync(tx);
 
-            // Sin el OP-xxxxxx: el número cambia en cada reintento y el proxy vería otro cuerpo con la misma clave.
-            var description = $"Depósito en {agent.Name}";
             var reading = await CreateRailPaymentAsync(payment, new RailPaymentRequest(
                 RailDirection.Outgoing, key.WalletAddress, RailAmount.FromCop(amounts.NetAmount),
-                Description: description.Length > MaxRailDescription ? description[..MaxRailDescription] : description),
+                Description: RailDescription($"Depósito en {agent.Name}")),
                 tx);
-            await sync.ApplyAsync(operation, payment, reading, "create", tx);
+            await sync.ApplyAsync(operation, payment, reading, "create", ct: tx);
             return await ToDtoAsync(operation, payment, tx);
         }, ct);
     }
 
-    public Task<OperationDto> CreateWithdrawalAsync(Guid agentId, string idempotencyKey,
-        CreateWithdrawalRequest request, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("createWithdrawal");
+    /// <summary>
+    /// Crea el retiro en pending reservando el neto del efectivo y le cobra al usuario el monto cobrado (incoming,
+    /// 5 min para aprobar). El usuario recibe la approvalUrl por SMS simulado. El efectivo se entrega solo cuando
+    /// la operación está completed.
+    /// </summary>
+    public async Task<OperationDto> CreateWithdrawalAsync(Guid agentId, string idempotencyKey,
+        CreateWithdrawalRequest request, CancellationToken ct = default)
+    {
+        currentUser.EnsureCanOperateAgent(agentId);
+        // [Required] en el DTO garantiza los valores.
+        var requested = request.RequestedAmount!.Value;
+        var round = request.RoundAmount!.Value;
+        var agent = await agents.GetByIdAsync(agentId, ct) ?? throw ApiErrors.NotFound();
+        var key = await keys.GetByPhoneAsync(request.Phone, ct) ?? throw ApiErrors.KeyNotFound();
+
+        return await unitOfWork.InTransactionAsync(async tx =>
+        {
+            var balance = await ledger.LockAsync(agentId, tx);
+            var fee = await fees.GetCurrentAsync(tx);
+            if (requested <= Math.Max(fee.Total, OperationRules.MinimumRequestedAmount))
+                throw ApiErrors.AmountTooLow();
+            var amounts = OperationRules.Calculate(requested, round, fee);
+            var reserved = await operations.GetReservationsAsync(agentId, tx);
+            var available = balance.CashOnHand - reserved.CashReserved;
+            if (amounts.NetAmount > available) throw ApiErrors.InsufficientCash(amounts.NetAmount - available);
+
+            var now = time.GetUtcNow();
+            var expiresAt = ApprovalDeadline(now);
+            var operation = AddCashOperation(OperationKind.Withdrawal, agentId, key, requested, round, fee, amounts,
+                idempotencyKey, now);
+            var payment = new Payment
+            {
+                Id = RailPaymentId(agentId, "withdrawal", idempotencyKey),
+                OperationId = operation.Id,
+                Rail = PaymentRail.OpenPayments,
+                Direction = PaymentDirection.Incoming,
+                State = OperationState.Pending,
+                Amount = amounts.ChargedAmount,
+                SourceWalletAddress = key.WalletAddress,
+                DestinationWalletAddress = options.Value.WalletAddress,
+                ExpiresAt = expiresAt,
+                CreatedAt = now,
+            };
+            payments.Add(payment);
+            await unitOfWork.SaveChangesAsync(tx);
+
+            var reading = await CreateRailPaymentAsync(payment, new RailPaymentRequest(
+                RailDirection.Incoming, key.WalletAddress, RailAmount.FromCop(amounts.ChargedAmount), expiresAt,
+                RailDescription($"Retiro de {amounts.NetAmount.ToString("C0", PesoFormat)} en {agent.Name}")),
+                tx);
+            await sync.ApplyAsync(operation, payment, reading, "create", ct: tx);
+            if (operation.State == OperationState.Pending && payment.ApprovalUrl is { } approvalUrl)
+            {
+                inbox.Send(MessageChannel.Sms, MessageKind.PaymentRequest, key.Phone,
+                    $"Relia: {agent.Name} te pide {amounts.ChargedAmount.ToString("C0", PesoFormat)} para entregarte " +
+                    $"{amounts.NetAmount.ToString("C0", PesoFormat)} en efectivo ({operation.Reference}). " +
+                    $"Aprueba en tu billetera antes de {WithdrawalApprovalWindow.TotalMinutes:0} minutos: {approvalUrl}",
+                    approvalUrl, operation.Id);
+                await unitOfWork.SaveChangesAsync(tx);
+            }
+            return await ToDtoAsync(operation, payment, tx);
+        }, ct);
+    }
 
     public Task<OperationDto> CreateQuotaTopUpAsync(Guid agentId, string idempotencyKey,
         CreateQuotaTopUpRequest request, CancellationToken ct = default) =>
@@ -136,11 +179,158 @@ public class OperationService(
         return await ToDtoAsync(operation, payment, ct);
     }
 
-    public Task<OperationDto> CancelAsync(Guid operationId, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("cancelOperation");
+    /// <summary>
+    /// Retiros y cargas pendientes, antes de que el pagador apruebe: cancela en el riel y deja la operación
+    /// cancelled/request_cancelled, liberando la reserva. Si el riel ya no deja cancelar (payment_not_cancellable),
+    /// o la operación ya no está pendiente, 409 operation_not_cancellable y la operación sigue su curso.
+    /// </summary>
+    public async Task<OperationDto> CancelAsync(Guid operationId, CancellationToken ct = default)
+    {
+        var operation = await operations.GetByIdAsync(operationId, ct) ?? throw ApiErrors.NotFound();
+        currentUser.EnsureCanOperateAgent(operation.AgentId);
+        if (operation.Kind == OperationKind.Deposit || operation.State != OperationState.Pending)
+            throw ApiErrors.OperationNotCancellable();
+        var payment = await payments.GetLatestByOperationAsync(operation.Id, ct)
+                      ?? throw new InvalidOperationException($"La operación {operation.Reference} no tiene pago");
 
-    public Task<OperationDto> ConfirmCashHandoverAsync(Guid operationId, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("confirmCashHandover");
+        // La llamada al riel va fuera de la transacción, como el refresco.
+        RailPayment? reading = null;
+        if (payment.RailPaymentId is { } railPaymentId)
+        {
+            try
+            {
+                reading = await rail.CancelPaymentAsync(railPaymentId, ct);
+            }
+            catch (RailUnavailableException e)
+            {
+                logger.LogWarning(e, "No se pudo cancelar el pago {PaymentId} de {Reference}", payment.Id, operation.Reference);
+                throw ApiErrors.RailUnavailable();
+            }
+            catch (RailException e) when (e.Code == "payment_not_cancellable")
+            {
+                // El usuario ya aprobó: se refresca para que la operación muestre su estado real.
+                await sync.RefreshAsync(operation, ct);
+                throw ApiErrors.OperationNotCancellable();
+            }
+            catch (RailException e)
+            {
+                logger.LogError(e, "Respuesta inesperada del riel al cancelar el pago {PaymentId} ({Code})",
+                    payment.Id, e.Code);
+                throw ApiErrors.RailUnavailable();
+            }
+        }
+        else if (payment.Rail != PaymentRail.BreBSimulated)
+        {
+            // Un pago de Open Payments siempre tiene id del proxy: la creación se deshace si el proxy no responde.
+            throw new InvalidOperationException($"El pago {payment.Id} de {operation.Reference} no tiene id del proxy");
+        }
+
+        var cancelled = await unitOfWork.InTransactionAsync(async tx =>
+        {
+            var locked = await operations.GetForUpdateAsync(operation.Id, tx);
+            var lockedPayment = await payments.GetLatestByOperationForUpdateAsync(operation.Id, tx);
+            if (locked is null || lockedPayment is null) return false;
+            if (reading is not null)
+                await sync.ApplyAsync(locked, lockedPayment, reading, "cancel", EventOrigin.Agent, tx);
+            else if (locked.State == OperationState.Pending)
+                await sync.CloseWithoutMovementAsync(locked, lockedPayment, OperationState.Cancelled,
+                    "request_cancelled", "Cancelada por el corresponsal", EventOrigin.Agent, tx);
+            return locked.State == OperationState.Cancelled;
+        }, ct);
+        // Lo aplicado queda guardado aunque responda 409: p. ej. el riel ya la había completado.
+        if (!cancelled) throw ApiErrors.OperationNotCancellable();
+
+        var current = await operations.GetByIdAsync(operation.Id, ct) ?? throw ApiErrors.NotFound();
+        return await ToDtoAsync(current, await payments.GetLatestByOperationAsync(operation.Id, ct), ct);
+    }
+
+    /// <summary>
+    /// Solo retiros completed: llena cashHandedOverAt y deja un evento de auditoría, sin tocar saldos ni estado.
+    /// Repetirla devuelve la misma operación sin escribir nada.
+    /// </summary>
+    public async Task<OperationDto> ConfirmCashHandoverAsync(Guid operationId, CancellationToken ct = default)
+    {
+        var operation = await operations.GetByIdAsync(operationId, ct) ?? throw ApiErrors.NotFound();
+        currentUser.EnsureCanOperateAgent(operation.AgentId);
+        // ck_op_cash_handover: solo retiros completed. Para el contrato, otro tipo tampoco es "un retiro completado".
+        if (operation.Kind != OperationKind.Withdrawal || operation.State != OperationState.Completed)
+            throw ApiErrors.OperationNotCompleted();
+
+        if (operation.CashHandedOverAt is null)
+        {
+            await unitOfWork.InTransactionAsync(async tx =>
+            {
+                var locked = await operations.GetForUpdateAsync(operation.Id, tx)
+                             ?? throw ApiErrors.NotFound();
+                if (locked.CashHandedOverAt is not null) return false;
+                var now = time.GetUtcNow();
+                locked.CashHandedOverAt = now;
+                operations.AddEvent(new OperationEvent
+                {
+                    OperationId = locked.Id,
+                    PreviousState = OperationState.Completed,
+                    NewState = OperationState.Completed,
+                    Origin = EventOrigin.Agent,
+                    Detail = "Efectivo entregado al usuario",
+                    CreatedAt = now,
+                });
+                await unitOfWork.SaveChangesAsync(tx);
+                return true;
+            }, ct);
+        }
+
+        return await ToDtoAsync(operation, await payments.GetLatestByOperationAsync(operation.Id, ct), ct);
+    }
+
+    /// <summary>
+    /// Plazo de aprobación redondeado hacia arriba al minuto: entre 5 y 6 min. El proxy incluye expiresAt en la
+    /// huella de idempotencia, así que un reintento dentro del mismo minuto manda el mismo cuerpo y recupera el mismo
+    /// pago; cruzando el minuto responde 409 idempotency_conflict.
+    /// </summary>
+    private static DateTimeOffset ApprovalDeadline(DateTimeOffset now)
+    {
+        var minute = TimeSpan.TicksPerMinute;
+        var ceiling = (now.UtcTicks + minute - 1) / minute * minute;
+        return new DateTimeOffset(ceiling, TimeSpan.Zero) + WithdrawalApprovalWindow;
+    }
+
+    /// <summary>Depósito o retiro en pending con los montos del desglose y su evento de creación.</summary>
+    private Operation AddCashOperation(OperationKind kind, Guid agentId, WalletKey key, long requested, bool round,
+        Fee fee, Breakdown amounts, string idempotencyKey, DateTimeOffset now)
+    {
+        var operation = new Operation
+        {
+            Id = Guid.NewGuid(),
+            AgentId = agentId,
+            Kind = kind,
+            WalletKeyId = key.Id,
+            WalletKey = key,
+            RequestedAmount = requested,
+            RoundAmount = round,
+            FeeId = fee.Id,
+            FeeTotal = amounts.Total,
+            FeeRelia = amounts.ReliaShare,
+            FeeAgent = amounts.AgentShare,
+            NetAmount = amounts.NetAmount,
+            ChargedAmount = amounts.ChargedAmount,
+            State = OperationState.Pending,
+            IdempotencyKey = idempotencyKey,
+            CreatedAt = now,
+        };
+        operations.Add(operation);
+        operations.AddEvent(new OperationEvent
+        {
+            OperationId = operation.Id, NewState = OperationState.Pending, Origin = EventOrigin.Agent, CreatedAt = now,
+        });
+        return operation;
+    }
+
+    /// <summary>
+    /// Descripción que ve el pagador, recortada al tope del proxy. Los llamadores no ponen el OP-xxxxxx: el número
+    /// cambia en cada reintento y el proxy vería otro cuerpo con la misma clave.
+    /// </summary>
+    private static string RailDescription(string text) =>
+        text.Length > MaxRailDescription ? text[..MaxRailDescription] : text;
 
     /// <summary>
     /// POST /payments al proxy. Riel caído o sin permiso → 503 rail_unavailable; billetera del usuario que el riel

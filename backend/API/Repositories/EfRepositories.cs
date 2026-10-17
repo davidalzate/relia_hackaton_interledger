@@ -123,6 +123,25 @@ public class EfOperationRepository(ReliaDbContext db) : IOperationRepository
         return operation;
     }
 
+    public async Task<IReadOnlyList<PendingApproval>> ListPendingApprovalsAsync(string phone, DateTimeOffset now,
+        CancellationToken ct = default)
+    {
+        var rows = await (
+            from o in db.Operations
+            join a in db.Agents on o.AgentId equals a.Id
+            from k in db.WalletKeys.Where(k => k.Id == o.WalletKeyId).DefaultIfEmpty()
+            let p = db.Payments.Where(p => p.OperationId == o.Id).OrderByDescending(p => p.CreatedAt).FirstOrDefault()
+            where o.State == OperationState.Pending
+                  && ((o.Kind == OperationKind.Withdrawal && k.Phone == phone)
+                      || (o.Kind == OperationKind.QuotaTopUp && o.TopUpMethod == TopUpMethodKind.Wallet && a.Phone == phone))
+                  && p != null && p.ApprovalUrl != null && p.ExpiresAt > now
+            orderby o.CreatedAt descending
+            select new { Operation = o, AgentName = a.Name, p.ApprovalUrl, p.ExpiresAt })
+            .AsNoTracking().ToListAsync(ct);
+        return rows.Select(r => new PendingApproval(r.Operation, r.AgentName, r.ApprovalUrl!, r.ExpiresAt!.Value))
+            .ToList();
+    }
+
     public async Task<Reservations> GetReservationsAsync(Guid agentId, CancellationToken ct = default)
     {
         var pending = db.Operations.Where(o => o.AgentId == agentId && o.State == OperationState.Pending);

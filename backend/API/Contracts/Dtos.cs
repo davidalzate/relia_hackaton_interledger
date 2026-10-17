@@ -152,8 +152,8 @@ public record CreateDepositRequest(
 
 public record CreateWithdrawalRequest(
     [Required, RegularExpression(Patterns.Phone)] string Phone,
-    [Range(1001, Patterns.MaxCop)] long RequestedAmount,
-    bool RoundAmount);
+    [Required, Range(1001, Patterns.MaxCop)] long? RequestedAmount,
+    [Required] bool? RoundAmount);
 
 public record CreateQuotaTopUpRequest(
     [Required] TopUpMethod Method,
@@ -201,6 +201,16 @@ public record SettlementPageDto(IReadOnlyList<SettlementDto> Items, string? Next
 
 public record SettlementQuery(
     DateOnly? From, DateOnly? To, Guid? AgentId, SettlementStatus? Status, string? Cursor, int Limit);
+
+// ---- Modo demo: "Mi billetera" del teléfono simulado ----
+
+public enum DemoPaymentRequestType { Withdrawal, QuotaTopUp }
+
+public record DemoPaymentRequestDto(
+    Guid OperationId, string Reference, DemoPaymentRequestType Type, string AgentName, long ChargedAmount,
+    DateTimeOffset ExpiresAt, string ApprovalUrl);
+
+public record DemoPaymentRequestListDto(IReadOnlyList<DemoPaymentRequestDto> Items);
 
 // ---- Modo demo: bandeja del teléfono simulado ----
 

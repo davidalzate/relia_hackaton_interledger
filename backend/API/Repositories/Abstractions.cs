@@ -66,6 +66,9 @@ public interface IOtpChallengeRepository
     Task<bool> HasNewerAsync(OtpChallenge challenge, CancellationToken ct = default);
 }
 
+/// <summary>Cobro pendiente de aprobación y quién lo pide.</summary>
+public record PendingApproval(Operation Operation, string AgentName, string ApprovalUrl, DateTimeOffset ExpiresAt);
+
 /// <summary>Cupo y efectivo comprometidos por operaciones pendientes.</summary>
 public record Reservations(long QuotaReserved, long CashReserved);
 
@@ -76,6 +79,14 @@ public interface IOperationRepository
 
     /// <summary>SELECT ... FOR UPDATE de la operación, con los valores de la base. Solo dentro de una transacción.</summary>
     Task<Operation?> GetForUpdateAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Retiros y cargas por Wallet pendientes cuyo pagador es <paramref name="phone"/> (el usuario del retiro o el
+    /// corresponsal de la carga), con la approvalUrl de su último pago y su plazo después de <paramref name="now"/>.
+    /// El más reciente primero.
+    /// </summary>
+    Task<IReadOnlyList<PendingApproval>> ListPendingApprovalsAsync(string phone, DateTimeOffset now,
+        CancellationToken ct = default);
 
     /// <summary>Depósitos pendientes reservan cupo (cobrado); retiros pendientes reservan efectivo (neto).</summary>
     Task<Reservations> GetReservationsAsync(Guid agentId, CancellationToken ct = default);

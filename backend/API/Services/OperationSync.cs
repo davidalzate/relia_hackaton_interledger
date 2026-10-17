@@ -18,7 +18,16 @@ public interface IOperationSync
     /// Aplica una lectura del proxy. Solo dentro de una transacción, con la operación y el pago recién creados o
     /// bloqueados (FOR UPDATE). Descarta lecturas con version ≤ rail_version.
     /// </summary>
-    Task ApplyAsync(Operation operation, Payment payment, RailPayment rail, string action, CancellationToken ct = default);
+    /// <remarks><paramref name="origin"/> queda en el evento de la operación si la lectura la cierra.</remarks>
+    Task ApplyAsync(Operation operation, Payment payment, RailPayment rail, string action,
+        EventOrigin origin = EventOrigin.Rail, CancellationToken ct = default);
+
+    /// <summary>
+    /// Cierra una operación pendiente sin movimiento (cancelada, vencida o fallida) cuando no hay lectura del riel
+    /// que aplicar: pagos que no pasan por el proxy (Bre-B simulado) o el vencimiento del backend (ticket 11). La reserva se libera sola. Solo dentro de una transacción.
+    /// </summary>
+    Task CloseWithoutMovementAsync(Operation operation, Payment payment, OperationState state, string failureCode,
+        string? detail, EventOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Consulta el pago en el proxy y lo aplica, como máximo una vez por segundo por pago. Si el proxy no responde,
@@ -108,14 +117,14 @@ public class OperationSync(
             var locked = await operations.GetForUpdateAsync(operation.Id, tx);
             var lockedPayment = await payments.GetLatestByOperationForUpdateAsync(operation.Id, tx);
             if (locked is null || lockedPayment?.Id != payment.Id) return false;
-            await ApplyAsync(locked, lockedPayment, reading, "refresh", tx);
+            await ApplyAsync(locked, lockedPayment, reading, "refresh", ct: tx);
             return true;
         }, ct);
         if (operation.State != OperationState.Pending) throttle.Forget(payment.Id);
     }
 
     public async Task ApplyAsync(Operation operation, Payment payment, RailPayment reading, string action,
-        CancellationToken ct = default)
+        EventOrigin origin = EventOrigin.Rail, CancellationToken ct = default)
     {
         var previous = payment.State;
         var (state, failureCode) = RailStatusTranslation.ToOperation(reading.Status);
@@ -159,7 +168,7 @@ public class OperationSync(
         if (state == OperationState.Completed)
             await CompleteAsync(operation, payment, reading.CompletedAt ?? time.GetUtcNow(), ct);
         else
-            await FinishWithoutMovementAsync(operation, payment, state, failureCode!, reading.FailureDetail, ct);
+            await CloseWithoutMovementAsync(operation, payment, state, failureCode!, reading.FailureDetail, origin, ct);
     }
 
     /// <summary>
@@ -193,9 +202,9 @@ public class OperationSync(
         await unitOfWork.SaveChangesAsync(ct);
     }
 
-    /// <summary>Fallo, vencimiento o cancelación en el riel: la reserva se libera sola (ya no está pendiente).</summary>
-    private async Task FinishWithoutMovementAsync(Operation operation, Payment payment, OperationState state,
-        string failureCode, string? detail, CancellationToken ct)
+    /// <summary>Fallo, vencimiento o cancelación: la reserva se libera sola (ya no está pendiente).</summary>
+    public async Task CloseWithoutMovementAsync(Operation operation, Payment payment, OperationState state,
+        string failureCode, string? detail, EventOrigin origin, CancellationToken ct = default)
     {
         var previous = operation.State;
         payment.State = state;
@@ -206,7 +215,7 @@ public class OperationSync(
             OperationId = operation.Id,
             PreviousState = previous,
             NewState = state,
-            Origin = EventOrigin.Rail,
+            Origin = origin,
             Detail = detail,
             CreatedAt = time.GetUtcNow(),
         });
@@ -244,7 +253,9 @@ public class OperationSync(
         payment.IncomingPaymentUrl = reading.Rail?.IncomingPaymentUrl ?? payment.IncomingPaymentUrl;
         payment.QuoteUrl = reading.Rail?.QuoteUrl ?? payment.QuoteUrl;
         payment.OutgoingPaymentUrl = reading.Rail?.OutgoingPaymentUrl ?? payment.OutgoingPaymentUrl;
-        payment.ApprovalUrl = reading.Approval?.Url ?? payment.ApprovalUrl;
+        // El proxy solo trae approval mientras espera la aprobación: después ya no se ofrece aprobar (la URL vieja
+        // queda en payment_events).
+        payment.ApprovalUrl = reading.Status == "pending_approval" ? reading.Approval?.Url ?? payment.ApprovalUrl : null;
         payment.ExpiresAt = reading.ExpiresAt ?? payment.ExpiresAt;
         if (reading.DebitAmount is { } debit)
             (payment.DebitValue, payment.DebitAssetCode, payment.DebitAssetScale) =

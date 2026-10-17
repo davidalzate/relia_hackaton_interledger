@@ -88,6 +88,12 @@ public interface IRailClient
 
     /// <summary>GET /payments/{railPaymentId}: último estado conocido por el proxy.</summary>
     Task<RailPayment> GetPaymentAsync(Guid railPaymentId, CancellationToken ct = default);
+
+    /// <summary>
+    /// POST /payments/{railPaymentId}/cancel: solo incoming en pending_approval. Después de la aprobación lanza
+    /// RailException con code payment_not_cancellable. Cancelar uno ya cancelado devuelve el mismo pago.
+    /// </summary>
+    Task<RailPayment> CancelPaymentAsync(Guid railPaymentId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -117,6 +123,9 @@ public class RailClient(HttpClient http, ILogger<RailClient> logger) : IRailClie
 
     public Task<RailPayment> GetPaymentAsync(Guid railPaymentId, CancellationToken ct = default) =>
         SendAsync<RailPayment>(new HttpRequestMessage(HttpMethod.Get, $"payments/{railPaymentId}"), ct);
+
+    public Task<RailPayment> CancelPaymentAsync(Guid railPaymentId, CancellationToken ct = default) =>
+        SendAsync<RailPayment>(new HttpRequestMessage(HttpMethod.Post, $"payments/{railPaymentId}/cancel"), ct);
 
     private async Task<T> SendAsync<T>(HttpRequestMessage request, CancellationToken ct)
     {

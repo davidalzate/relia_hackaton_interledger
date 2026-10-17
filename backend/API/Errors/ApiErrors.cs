@@ -65,6 +65,10 @@ public static class ApiErrors
     public static ApiException OperationNotCompleted() =>
         new(StatusCodes.Status409Conflict, "operation_not_completed", "La operación no está completada");
 
+    /// <summary>Solo retiros y cargas pendientes, antes de que el pagador apruebe.</summary>
+    public static ApiException OperationNotCancellable() =>
+        new(StatusCodes.Status409Conflict, "operation_not_cancellable", "La operación ya no se puede cancelar");
+
     /// <summary>422 insufficient_quota con lo que falta (depósitos).</summary>
     public static ApiException InsufficientQuota(long shortfall) =>
         new(StatusCodes.Status422UnprocessableEntity, "insufficient_quota", "Cupo insuficiente",
