@@ -1,0 +1,52 @@
+import * as z from 'zod/mini';
+
+// `Operation` de contracts/relia-api.openapi.yaml: depósito, retiro o carga de cupo
+const BalancePairSchema = z.object({ before: z.number(), after: z.number() });
+
+export const FailureCodeSchema = z.enum([
+  'customer_rejected',
+  'request_expired',
+  'request_cancelled',
+  'payment_failed',
+  'rail_unavailable',
+]);
+export type FailureCode = z.infer<typeof FailureCodeSchema>;
+
+export const OperationSchema = z.object({
+  id: z.string(),
+  reference: z.string(),
+  agentId: z.string(),
+  type: z.enum(['deposit', 'withdrawal', 'quotaTopUp']),
+  status: z.enum(['pending', 'completed', 'failed', 'expired', 'cancelled']),
+  failureCode: z.optional(z.nullable(FailureCodeSchema)),
+  createdAt: z.string(),
+  completedAt: z.optional(z.nullable(z.string())),
+  expiresAt: z.optional(z.nullable(z.string())),
+  requestedAmount: z.number(),
+  roundAmount: z.boolean(),
+  fee: z.object({ total: z.number(), relia: z.number(), agent: z.number() }),
+  netAmount: z.number(),
+  chargedAmount: z.number(),
+  customer: z.optional(
+    z.nullable(z.object({ phoneMasked: z.string(), walletAddressMasked: z.string() })),
+  ),
+  topUpMethod: z.optional(z.nullable(z.enum(['breB', 'wallet']))),
+  approvalUrl: z.optional(z.nullable(z.string())),
+  qrPayload: z.optional(z.nullable(z.string())),
+  cashHandedOverAt: z.optional(z.nullable(z.string())),
+  balances: z.object({
+    quota: BalancePairSchema,
+    accruedCommission: BalancePairSchema,
+    cashOnHand: BalancePairSchema,
+  }),
+});
+export type ApiOperation = z.infer<typeof OperationSchema>;
+
+/** Texto de pantalla por `failureCode` (FLUJOS.md, anexo de estados) */
+export const FAILURE_TEXT: Record<FailureCode, string> = {
+  customer_rejected: 'El usuario rechazó el pago',
+  request_expired: 'La solicitud venció',
+  request_cancelled: 'Solicitud cancelada',
+  payment_failed: 'El pago falló',
+  rail_unavailable: 'El simulador no respondió. No se movió dinero.',
+};
