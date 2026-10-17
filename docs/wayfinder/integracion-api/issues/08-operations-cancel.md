@@ -1,7 +1,7 @@
 # Integrar POST /operations/{operationId}/cancel
 
 Type: task
-Status: claimed
+Status: resolved
 PR: [#27](https://github.com/davidalzate/relia_hackaton_interledger/pull/27)
 Blocked by: [07](07-operations-get.md)
 Labels: wayfinder:task, frontend, feature:operaciones

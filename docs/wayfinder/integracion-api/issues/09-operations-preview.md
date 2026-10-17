@@ -1,7 +1,7 @@
 # Integrar POST /agents/{agentId}/operations/preview
 
 Type: task
-Status: claimed
+Status: resolved
 PR: [#28](https://github.com/davidalzate/relia_hackaton_interledger/pull/28)
 Blocked by: [03](03-agent-detail.md)
 Labels: wayfinder:task, frontend, feature:depositar
