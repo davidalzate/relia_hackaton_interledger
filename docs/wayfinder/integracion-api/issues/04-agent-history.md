@@ -1,7 +1,7 @@
 # Integrar GET /agents/{agentId}/history
 
 Type: task
-Status: claimed
+Status: resolved
 PR: [#24](https://github.com/davidalzate/relia_hackaton_interledger/pull/24)
 Blocked by: [03](03-agent-detail.md)
 Labels: wayfinder:task, frontend, feature:base

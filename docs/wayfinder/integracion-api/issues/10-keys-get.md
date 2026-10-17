@@ -1,7 +1,7 @@
 # Integrar GET /keys/{phone}
 
 Type: task
-Status: claimed
+Status: resolved
 PR: [#28](https://github.com/davidalzate/relia_hackaton_interledger/pull/28)
 Blocked by: [00](00-base-http.md)
 Labels: wayfinder:task, frontend, feature:depositar

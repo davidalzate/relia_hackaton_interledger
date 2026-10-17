@@ -1,7 +1,7 @@
 # Integrar Base HTTP: cliente, auth, idempotencia, errores y polling
 
 Type: task
-Status: claimed
+Status: resolved
 PR: [#19](https://github.com/davidalzate/relia_hackaton_interledger/pull/19)
 Blocked by: 
 Labels: wayfinder:task, frontend, feature:base
