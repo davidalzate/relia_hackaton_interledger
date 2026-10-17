@@ -52,12 +52,12 @@ PR #28. Vista previa y llave las reusa Retirar.
 
 ### 3. Retirar (B3)
 
-Necesita Depositar (09, 10) y Mi billetera (26) para aprobar en el demo.
+PR #29. En el demo se aprueba desde el enlace de C2; Mi billetera (26) lo reemplaza.
 
 | # | Endpoint | Pantalla | Bloqueado por | Estado |
 |---|---|---|---|---|
-| [12](issues/12-withdrawals.md) | POST /agents/{agentId}/withdrawals | B3.1 → B3.2 → B3.3 / B3.4 | 07, 10, 09 | open |
-| [13](issues/13-cash-handover.md) | POST /operations/{operationId}/cash-handover | B3.3 → B4 "Sí, confirmo" | 12 | open |
+| [12](issues/12-withdrawals.md) | POST /agents/{agentId}/withdrawals | B3.1 → B3.2 → B3.3 / B3.4 | 07, 10, 09 | claimed · [#29](https://github.com/davidalzate/relia_hackaton_interledger/pull/29) |
+| [13](issues/13-cash-handover.md) | POST /operations/{operationId}/cash-handover | B3.3 → B4 "Sí, confirmo" | 12 | claimed · [#29](https://github.com/davidalzate/relia_hackaton_interledger/pull/29) |
 
 ### 4. Cargar cupo (B6)
 
