@@ -33,12 +33,12 @@ Hecho. PRs apilados #19 → #25.
 
 ### 1. Seguimiento de operaciones
 
-Primero: depositar, retirar y cargar cupo dependen de él.
+Servicio listo en #27; depositar, retirar y cargar cupo lo conectan en sus pantallas.
 
 | # | Endpoint | Pantalla | Bloqueado por | Estado |
 |---|---|---|---|---|
-| [07](issues/07-operations-get.md) | GET /operations/{operationId} | B2.4, B3.2, B6, B9 | 00 | open |
-| [08](issues/08-operations-cancel.md) | POST /operations/{operationId}/cancel | B3.2 Cancelar solicitud, B6 Cancelar | 07 | open |
+| [07](issues/07-operations-get.md) | GET /operations/{operationId} | B2.4, B3.2, B6, B9 | 00 | claimed · [#27](https://github.com/davidalzate/relia_hackaton_interledger/pull/27) |
+| [08](issues/08-operations-cancel.md) | POST /operations/{operationId}/cancel | B3.2 Cancelar solicitud, B6 Cancelar | 07 | claimed · [#27](https://github.com/davidalzate/relia_hackaton_interledger/pull/27) |
 
 ### 2. Depositar (B2)
 
