@@ -1,9 +1,11 @@
 # Integrar GET /operations/{operationId}
 
 Type: task
-Status: open
+Status: claimed
+PR: [#27](https://github.com/davidalzate/relia_hackaton_interledger/pull/27)
 Blocked by: [00](00-base-http.md)
-Labels: wayfinder:task, frontend
+Labels: wayfinder:task, frontend, feature:operaciones
+Feature: Seguimiento de operaciones
 
 ## Question
 
@@ -20,3 +22,7 @@ Conectar el frontend (`frontend/relia`) al endpoint real de la Relia API y retir
 - [ ] Mapea `failureCode` a textos (anexo de estados).
 - [ ] Se detiene al salir de la pantalla (sin fugas de suscripción).
 - [ ] Test unitario del servicio con `HttpTestingController` (éxito y error principal).
+
+## Notas
+
+- Servicio listo (`OperationsService.watch`); cada pantalla (B2, B3, B6) lo conecta en su feature.

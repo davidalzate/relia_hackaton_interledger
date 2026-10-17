@@ -3,7 +3,8 @@
 Type: task
 Status: open
 Blocked by: [19](19-settlements-get.md)
-Labels: wayfinder:task, frontend
+Labels: wayfinder:task, frontend, feature:admin
+Feature: Admin (D1–D3)
 
 ## Question
 

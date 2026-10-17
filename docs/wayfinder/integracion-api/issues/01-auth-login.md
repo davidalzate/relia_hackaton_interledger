@@ -1,9 +1,11 @@
 # Integrar POST /auth/login
 
 Type: task
-Status: open
+Status: claimed
+PR: [#20](https://github.com/davidalzate/relia_hackaton_interledger/pull/20)
 Blocked by: [00](00-base-http.md)
-Labels: wayfinder:task, frontend
+Labels: wayfinder:task, frontend, feature:base
+Feature: Base y sesión
 
 ## Question
 

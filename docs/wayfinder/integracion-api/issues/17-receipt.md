@@ -1,9 +1,11 @@
 # Integrar GET /operations/{operationId}/receipt
 
 Type: task
-Status: open
+Status: claimed
+PR: [#33](https://github.com/davidalzate/relia_hackaton_interledger/pull/33)
 Blocked by: [07](07-operations-get.md)
-Labels: wayfinder:task, frontend
+Labels: wayfinder:task, frontend, feature:comprobante
+Feature: Comprobante (B9)
 
 ## Question
 
@@ -21,3 +23,7 @@ Conectar el frontend (`frontend/relia`) al endpoint real de la Relia API y retir
 - [ ] `409 receipt_not_available` / `operation_not_completed` con su texto.
 - [ ] Cargas, ajustes y liquidaciones: el front arma el comprobante con la operación/fila/liquidación.
 - [ ] Test unitario del servicio con `HttpTestingController` (éxito y error principal).
+
+## Notas
+
+- Solo depósitos y retiros completados del API piden recibo oficial; si falla se muestran los datos de la operación.

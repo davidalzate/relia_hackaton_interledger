@@ -3,7 +3,8 @@
 Type: task
 Status: open
 Blocked by: [00](00-base-http.md)
-Labels: wayfinder:task, frontend
+Labels: wayfinder:task, frontend, feature:admin
+Feature: Admin (D1–D3)
 
 ## Question
 

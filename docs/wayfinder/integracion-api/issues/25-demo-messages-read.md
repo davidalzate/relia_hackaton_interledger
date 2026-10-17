@@ -3,7 +3,8 @@
 Type: task
 Status: open
 Blocked by: [24](24-demo-messages.md)
-Labels: wayfinder:task, frontend
+Labels: wayfinder:task, frontend, feature:demo
+Feature: Modo demo (E1, C2)
 
 ## Question
 

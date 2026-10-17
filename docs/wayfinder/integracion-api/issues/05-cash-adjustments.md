@@ -1,9 +1,11 @@
 # Integrar POST /agents/{agentId}/cash-adjustments
 
 Type: task
-Status: open
+Status: claimed
+PR: [#25](https://github.com/davidalzate/relia_hackaton_interledger/pull/25)
 Blocked by: [03](03-agent-detail.md)
-Labels: wayfinder:task, frontend
+Labels: wayfinder:task, frontend, feature:base
+Feature: Base y sesión
 
 ## Question
 
