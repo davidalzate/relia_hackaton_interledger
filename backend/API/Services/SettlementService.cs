@@ -103,7 +103,8 @@ public class SettlementService(
             return settlement.Id;
         }, ct);
 
-        return ToDto(await settlements.GetByIdAsync(settlementId, ct) ?? throw ApiErrors.NotFound());
+        return ToDto(await settlements.GetByIdAsync(settlementId, ct) ?? throw ApiErrors.NotFound(),
+            await payments.GetLatestBySettlementAsync(settlementId, ct));
     }
 
     /// <summary>El agente solo ve las suyas: su agentId reemplaza el filtro. from y to son días en Bogotá, inclusive.</summary>
@@ -128,7 +129,7 @@ public class SettlementService(
 
         var page = rows.Take(query.Limit).ToList();
         var next = rows.Count > query.Limit ? EncodeCursor(page[^1].CreatedAt) : null;
-        return new SettlementPageDto(page.Select(ToDto).ToList(), next);
+        return new SettlementPageDto(page.Select(s => ToDto(s)).ToList(), next);
     }
 
     /// <summary>404 si no existe; 403 si es de otro corresponsal. Si está pendiente, refresca antes su pago.</summary>
@@ -137,7 +138,7 @@ public class SettlementService(
         var settlement = await settlements.GetByIdAsync(settlementId, ct) ?? throw ApiErrors.NotFound();
         currentUser.EnsureCanReadAgent(settlement.AgentId);
         await sync.RefreshAsync(settlement, ct);
-        return ToDto(settlement);
+        return ToDto(settlement, await payments.GetLatestBySettlementAsync(settlement.Id, ct));
     }
 
     /// <summary>
@@ -156,8 +157,11 @@ public class SettlementService(
         return start > today ? today : start;
     }
 
-    /// <summary>Requiere la liquidación con Agent y CreatedByAdmin cargados.</summary>
-    private static SettlementDto ToDto(Settlement s) => new(
+    /// <summary>
+    /// Requiere la liquidación con Agent y CreatedByAdmin cargados. walletAmount sale del último pago; el listado no
+    /// lo carga y lo deja en null.
+    /// </summary>
+    private static SettlementDto ToDto(Settlement s, Payment? payment = null) => new(
         s.Id, s.Reference, s.AgentId, s.Agent?.Name ?? "", s.DestinationWalletAddress, s.Amount,
         s.PeriodFrom, s.PeriodTo,
         s.State switch
@@ -167,7 +171,8 @@ public class SettlementService(
             _ => SettlementStatus.Voided,
         },
         s.VoidReason, s.CreatedAt, s.PaidAt,
-        new SettlementAdminDto(s.CreatedByAdminId, s.CreatedByAdmin?.Name ?? ""));
+        new SettlementAdminDto(s.CreatedByAdminId, s.CreatedByAdmin?.Name ?? ""),
+        payment?.WalletAmount());
 
     /// <summary>Cursor = created_at (ticks UTC) de la última liquidación de la página.</summary>
     private static string EncodeCursor(DateTimeOffset createdAt) =>

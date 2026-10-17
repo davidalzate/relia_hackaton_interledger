@@ -192,6 +192,11 @@ public class Payment
     public string? ReceivedValue { get; set; }
     public string? ReceivedAssetCode { get; set; }
     public short? ReceivedAssetScale { get; set; }
+
+    /// <summary>Lo que el quote prometió entregar al receptor, en su moneda. Null si el riel aún no cotizó.</summary>
+    public string? QuotedReceiveValue { get; set; }
+    public string? QuotedReceiveAssetCode { get; set; }
+    public short? QuotedReceiveAssetScale { get; set; }
     public DateTimeOffset? ExpiresAt { get; set; }
     public string? ErrorCode { get; set; }
     public string? ErrorMessage { get; set; }

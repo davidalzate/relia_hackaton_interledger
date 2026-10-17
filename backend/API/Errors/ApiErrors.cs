@@ -43,6 +43,11 @@ public static class ApiErrors
     public static ApiException WalletNotFound() =>
         new(StatusCodes.Status422UnprocessableEntity, "wallet_not_found", "La billetera no existe");
 
+    /// <summary>La billetera existe, pero el riel no convierte entre COP y su moneda (unsupported_asset del proxy).</summary>
+    public static ApiException WalletCurrencyUnsupported() =>
+        new(StatusCodes.Status422UnprocessableEntity, "wallet_currency_unsupported",
+            "La moneda de la billetera no es compatible");
+
     /// <summary>503: no se creó nada; se puede reintentar.</summary>
     public static ApiException RailUnavailable() =>
         new(StatusCodes.Status503ServiceUnavailable, "rail_unavailable", "El riel de pagos no está disponible");

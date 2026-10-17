@@ -224,6 +224,9 @@ public class ReliaDbContext(DbContextOptions<ReliaDbContext> options) : DbContex
             e.Property(x => x.ReceivedValue).HasColumnName("received_value");
             e.Property(x => x.ReceivedAssetCode).HasColumnName("received_asset_code");
             e.Property(x => x.ReceivedAssetScale).HasColumnName("received_asset_scale");
+            e.Property(x => x.QuotedReceiveValue).HasColumnName("quoted_receive_value");
+            e.Property(x => x.QuotedReceiveAssetCode).HasColumnName("quoted_receive_asset_code");
+            e.Property(x => x.QuotedReceiveAssetScale).HasColumnName("quoted_receive_asset_scale");
             e.Property(x => x.ExpiresAt).HasColumnName("expires_at");
             e.Property(x => x.ErrorCode).HasColumnName("error_code");
             e.Property(x => x.ErrorMessage).HasColumnName("error_message");

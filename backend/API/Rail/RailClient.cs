@@ -52,14 +52,20 @@ public record RailReferences(string? IncomingPaymentUrl, string? QuoteUrl, strin
 
 /// <summary>
 /// Pago de riel según el proxy. <see cref="Status"/>: pending_approval, processing, completed, failed, rejected,
-/// expired o cancelled. <see cref="Version"/> crece con cada cambio.
+/// expired o cancelled. <see cref="Version"/> crece con cada cambio. <see cref="DebitAmount"/> va en la moneda del
+/// que paga y <see cref="ReceivedAmount"/> en la del que recibe; <see cref="QuotedReceiveAmount"/> es lo que el quote
+/// promete entregar al receptor en su moneda (null si aún no hay quote).
 /// </summary>
 public record RailPayment(
     Guid Id, string Direction, string Status, string Sender, string Receiver, RailAmount ReceiveAmount,
     RailAmount? DebitAmount, RailAmount? ReceivedAmount, RailApproval? Approval, DateTimeOffset? ExpiresAt,
-    string? FailureCode, string? FailureDetail, RailReferences? Rail, DateTimeOffset? CompletedAt, int Version);
+    string? FailureCode, string? FailureDetail, RailReferences? Rail, DateTimeOffset? CompletedAt, int Version,
+    RailAmount? QuotedReceiveAmount = null);
 
-/// <summary>Error del proxy con su <c>code</c> (unsupported_asset, same_wallet, idempotency_conflict…).</summary>
+/// <summary>
+/// Error del proxy con su <c>code</c> (unsupported_asset, same_wallet, idempotency_conflict…). unsupported_asset
+/// también significa que el riel no convierte entre COP y la moneda de la contraparte.
+/// </summary>
 public class RailException(string code, string message, Exception? inner = null) : Exception(message, inner)
 {
     public string Code { get; } = code;
