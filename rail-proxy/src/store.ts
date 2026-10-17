@@ -103,6 +103,19 @@ const MIGRATIONS: string[] = [
   DROP TABLE relia_grants;
   ALTER TABLE relia_grants_v4 RENAME TO relia_grants;
   CREATE INDEX ix_relia_grants_state ON relia_grants (state);`,
+
+  // 5. Cobros (incoming): aprobación del pagador y outgoing payment en su billetera.
+  `ALTER TABLE payments ADD COLUMN approval_url TEXT;
+  -- Continuación GNAP del grant interactivo del pagador (secreta).
+  ALTER TABLE payments ADD COLUMN continue_uri TEXT;
+  ALTER TABLE payments ADD COLUMN continue_token TEXT;
+  ALTER TABLE payments ADD COLUMN payer_wallet_url TEXT;
+  ALTER TABLE payments ADD COLUMN payer_auth_server TEXT;
+  ALTER TABLE payments ADD COLUMN payer_resource_server TEXT;
+  -- Access token del grant aprobado por el pagador (secreto): crea y lee el outgoing payment en su billetera.
+  ALTER TABLE payments ADD COLUMN outgoing_access_token TEXT;
+  ALTER TABLE payments ADD COLUMN outgoing_token_manage TEXT;
+  ALTER TABLE payments ADD COLUMN requoted INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 /** Abre (o crea) el archivo SQLite del proxy y lo lleva a la última versión del esquema. */
