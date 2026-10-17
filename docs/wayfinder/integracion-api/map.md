@@ -70,13 +70,13 @@ PR #31. 23 es el botón del simulador Bre-B que completa la carga.
 
 ### 5. Llave inexistente y vinculación (B5, C1)
 
-Paso 6 del guion. Sin 24 no se ve el OTP.
+PR #32. Invitación y OTP simulados en el frontend (decisión de demo); la llave se crea con `POST /key-links` tras el OTP.
 
 | # | Endpoint | Pantalla | Bloqueado por | Estado |
 |---|---|---|---|---|
-| [14](issues/14-key-invitations.md) | POST /keys/{phone}/invitations | B5 Invitación WhatsApp | 10 | open |
-| [15](issues/15-key-links.md) | POST /key-links | C1.1 Vincular billetera (pública) | 00 | open |
-| [16](issues/16-key-links-verify.md) | POST /key-links/{challengeId}/verify | C1.2 Código OTP | 15 | open |
+| [14](issues/14-key-invitations.md) | POST /keys/{phone}/invitations | B5 Invitación WhatsApp | 10 | claimed · [#32](https://github.com/davidalzate/relia_hackaton_interledger/pull/32) |
+| [15](issues/15-key-links.md) | POST /key-links | C1.1 Vincular billetera (pública) | 00 | claimed · [#32](https://github.com/davidalzate/relia_hackaton_interledger/pull/32) |
+| [16](issues/16-key-links-verify.md) | POST /key-links/{challengeId}/verify | C1.2 Código OTP | 15 | claimed · [#32](https://github.com/davidalzate/relia_hackaton_interledger/pull/32) |
 
 ### 6. Comprobante (B9)
 

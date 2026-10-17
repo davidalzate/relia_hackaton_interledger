@@ -1,7 +1,8 @@
 # Integrar POST /key-links/{challengeId}/verify
 
 Type: task
-Status: open
+Status: claimed
+PR: [#32](https://github.com/davidalzate/relia_hackaton_interledger/pull/32)
 Blocked by: [15](15-key-links.md)
 Labels: wayfinder:task, frontend, feature:llaves
 Feature: Llave inexistente y vinculación (B5, C1)
@@ -20,3 +21,7 @@ Conectar el frontend (`frontend/relia`) al endpoint real de la Relia API y retir
 - [ ] Body `{ code }` → 200 con `walletAddress` y `linkedAt`.
 - [ ] `422 invalid_otp` muestra `attemptsRemaining`; `otp_expired`, `otp_attempts_exceeded` con su texto.
 - [ ] Test unitario del servicio con `HttpTestingController` (éxito y error principal).
+
+## Notas
+
+- Simulado por decisión del equipo (demo): el OTP se genera y verifica en el navegador; no se usa `POST /key-links/{challengeId}/verify`.
