@@ -8,8 +8,16 @@
           <strong>{{ l.request.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</strong>
         </p>
         <div class="actions">
-          <button type="button" class="btn-primary" (click)="confirm()">Confirmar pago</button>
-          <button type="button" class="btn-secondary" (click)="reject()">Rechazar pago</button>
+          @if (l.request.method === 'breb') {
+            <button type="button" class="btn-primary" (click)="simulateBreB()">
+              Simular pago recibido
+            </button>
+          } @else if (l.approvalUrl) {
+            <!-- Wallet: se aprueba o rechaza en la wallet de prueba -->
+            <a class="btn-primary" [href]="l.approvalUrl" target="_blank" rel="noopener">
+              Aprobar en la wallet de prueba
+            </a>
+          }
         </div>
       } @else {
         <p class="empty">No hay pagos pendientes.</p>

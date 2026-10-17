@@ -1,5 +1,127 @@
-<main class="container-ops">
-  <section class="card">
-    <h1>Vincula tu celular</h1>
-  </section>
+<main>
+  <header class="top">
+    <span class="wordmark" aria-label="relia">relia<span aria-hidden="true">.</span></span>
+    <span class="badge-sim">Página del usuario · Simulación</span>
+  </header>
+
+  @switch (step()) {
+    @case ('form') {
+      <!-- C1.1 -->
+      <form class="card" [formGroup]="form" (ngSubmit)="sendCode()" novalidate>
+        <p class="step">Paso 1 de 3</p>
+        <h1>Vincula tu billetera a tu celular</h1>
+        <p class="subtitle">
+          Así podrás depositar y retirar efectivo en las tiendas Relia solo con tu número.
+        </p>
+
+        <div class="field">
+          <label for="phone">Celular</label>
+          <input
+            pInputText
+            id="phone"
+            type="tel"
+            inputmode="numeric"
+            maxlength="12"
+            autocomplete="tel-national"
+            placeholder="300 000 0002"
+            formControlName="phone"
+            (input)="formatPhone()"
+            [attr.aria-invalid]="submitted() && phoneInvalid() ? true : null"
+            [attr.aria-describedby]="submitted() && phoneInvalid() ? 'phone-error' : null"
+          />
+          @if (submitted() && phoneInvalid()) {
+            <p id="phone-error" class="error" role="alert">Escribe un celular de 10 dígitos.</p>
+          }
+        </div>
+
+        <div class="field">
+          <label for="pointer">Payment pointer</label>
+          <input
+            pInputText
+            id="pointer"
+            type="text"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            placeholder="$ilp.interledger-test.dev/maria"
+            formControlName="walletAddress"
+            [attr.aria-invalid]="submitted() && pointerInvalid() ? true : null"
+            [attr.aria-describedby]="submitted() && pointerInvalid() ? 'pointer-error' : null"
+          />
+          @if (submitted() && pointerInvalid()) {
+            <p id="pointer-error" class="error" role="alert">
+              El payment pointer empieza por $ y tiene una ruta, por ejemplo
+              $ilp.interledger-test.dev/maria.
+            </p>
+          }
+        </div>
+
+        <button class="btn-primary" type="submit">Enviar código</button>
+      </form>
+    }
+    @case ('code') {
+      <!-- C1.2 -->
+      <form class="card" [formGroup]="form" (ngSubmit)="verify()" novalidate>
+        <p class="step">Paso 2 de 3</p>
+        <h1>Escribe el código</h1>
+        <p class="subtitle">
+          Te enviamos un SMS al {{ formattedPhone() }}.
+          <span class="badge-sim">Simulación</span>
+        </p>
+
+        <div class="field">
+          <label for="code" class="sr-only">Código de 6 dígitos</label>
+          <input
+            pInputText
+            id="code"
+            class="code"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="6"
+            formControlName="code"
+            [attr.aria-invalid]="codeError() ? true : null"
+            [attr.aria-describedby]="codeError() ? 'code-error' : null"
+          />
+          @if (codeError(); as e) {
+            <p id="code-error" class="error" role="alert">{{ e }}</p>
+          }
+          @if (linkError(); as e) {
+            <p class="error" role="alert">{{ e }}</p>
+          }
+        </div>
+
+        <button class="btn-primary" type="submit" [disabled]="linking()">
+          {{ linking() ? 'Vinculando…' : 'Verificar' }}
+        </button>
+        <div class="secondary">
+          <a routerLink="/telefono">Ver SMS</a>
+          <button type="button" class="link-inline" (click)="sendCode()">Reenviar código</button>
+          <button type="button" class="link-inline" (click)="changeData()">Cambiar datos</button>
+        </div>
+      </form>
+    }
+    @case ('done') {
+      <!-- C1.3 -->
+      <section class="card done" aria-labelledby="done-title">
+        <p class="step">Paso 3 de 3</p>
+        <i class="pi pi-check-circle check" aria-hidden="true"></i>
+        <h1 id="done-title">Tu celular quedó vinculado a tu billetera</h1>
+        <p>
+          {{ formattedPhone() }} ahora es tu llave. Ya puedes depositar y retirar en cualquier
+          tienda Relia.
+        </p>
+        <p class="pointer">{{ walletAddress() }}</p>
+        <button type="button" class="btn-primary" (click)="back()">
+          Volver a la app del corresponsal
+        </button>
+      </section>
+    }
+  }
+
+  @if (step() !== 'done') {
+    <button type="button" class="link-inline back" (click)="back()">
+      Volver a la app del corresponsal
+    </button>
+  }
 </main>

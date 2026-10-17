@@ -1,5 +1,5 @@
 <main class="container-ops">
-  <a class="link-back" [routerLink]="backLink()">← Volver a la caja</a>
+  <a class="link-back" [routerLink]="backLink()">{{ backLabel() }}</a>
 
   <header>
     <h1>Teléfono del usuario</h1>
@@ -21,7 +21,9 @@
     <section class="card whatsapp" aria-label="Mensaje de WhatsApp">
       <strong>WhatsApp</strong>
       <p class="bubble">{{ invite.message }}</p>
-      <a class="btn-primary" routerLink="/vincular">Abrir enlace para vincular</a>
+      <a class="btn-primary" routerLink="/vincular" [queryParams]="{ phone: invite.phone }">
+        Abrir enlace para vincular
+      </a>
     </section>
   }
 </main>

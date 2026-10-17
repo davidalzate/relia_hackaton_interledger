@@ -16,12 +16,25 @@
     <article class="receipt card">
       <header>
         <span class="wordmark">relia<span aria-hidden="true">.</span></span>
-        <span [class]="statusBadge[o.status]">{{ statusLabel[o.status] }}</span>
+        <span class="badges">
+          @if (isCopy()) {
+            <span class="copy">COPIA</span>
+          }
+          <span [class]="statusBadge[o.status]">{{ statusLabel[o.status] }}</span>
+        </span>
       </header>
 
       <h2 id="receipt-title">{{ title() }}</h2>
       <p class="amount">{{ mainAmount() }}</p>
       <p class="caption">{{ caption() }}</p>
+
+      @if (loading()) {
+        <p class="note" role="status">Cargando recibo…</p>
+      } @else if (loadError()) {
+        <p class="note" role="alert">
+          No pudimos cargar el recibo oficial; se muestran los datos de la operación.
+        </p>
+      }
 
       <dl>
         @for (row of rows(); track row.label) {
@@ -37,6 +50,9 @@
       </p>
     </article>
 
+    @if (smsError()) {
+      <p class="note" role="alert">No pudimos enviar el SMS. Intenta de nuevo.</p>
+    }
     <div class="actions">
       @if (canSms()) {
         <button type="button" class="btn-secondary" [disabled]="smsSent()" (click)="sendSms()">

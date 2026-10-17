@@ -7,51 +7,50 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { InputNumber } from 'primeng/inputnumber';
-import { InputText } from 'primeng/inputtext';
 import { interval, map } from 'rxjs';
 
-import { AgentService, CUPO_LOAD_TTL_MS, CupoMethod } from '../../core/services/agent.service';
-import { formatPhone, phoneDigits } from '../../shared/utils/phone';
+import { newIdempotencyKey } from '../../core/http/api';
+import { AgentService } from '../../core/services/agent.service';
+import {
+  CUPO_LOAD_TTL_MS,
+  CupoMethod,
+  QuotaTopUpService,
+} from '../../core/services/quota-top-up.service';
 import { formatCountdown } from '../../shared/utils/time';
-
-/** Llave Wallet del corresponsal demo */
-const DEMO_AGENT_KEY = '310 555 0101';
 
 // B6: el corresponsal sube su cupo (saldo operativo) por Bre-B o desde su Wallet
 @Component({
   selector: 'app-load-cupo',
-  imports: [RouterLink, ReactiveFormsModule, CurrencyPipe, InputNumber, InputText],
+  imports: [RouterLink, ReactiveFormsModule, CurrencyPipe, InputNumber],
   templateUrl: './load-cupo.component.html',
   styleUrl: './load-cupo.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class LoadCupoComponent {
   private readonly agent = inject(AgentService);
+  private readonly topUps = inject(QuotaTopUpService);
   private readonly fb = inject(NonNullableFormBuilder);
 
   protected readonly balances = this.agent.balances;
-  protected readonly load = this.agent.cupoLoad;
+  /** Wallet: el API cobra al payment pointer registrado del corresponsal */
+  protected readonly walletAddress = computed(() => this.agent.agent()?.walletAddress ?? null);
+  protected readonly load = this.topUps.load;
+  protected readonly creating = this.topUps.creating;
   /** B6.1 → B6.2: método elegido; null muestra el paso 1 */
   protected readonly method = signal<CupoMethod | null>(null);
   protected readonly methodLabel: Record<CupoMethod, string> = { breb: 'Bre-B', wallet: 'Wallet' };
-  protected readonly phoneText = formatPhone;
 
   protected readonly form = this.fb.group({
     amount: this.fb.control<number | null>(null),
-    key: [DEMO_AGENT_KEY],
   });
   private readonly value = toSignal(this.form.valueChanges, {
     initialValue: this.form.getRawValue(),
   });
-  protected readonly canSubmit = computed(
-    () =>
-      (this.value().amount ?? 0) > 0 &&
-      (this.method() !== 'wallet' || phoneDigits(this.value().key ?? '').length === 10),
-  );
+  protected readonly canSubmit = computed(() => (this.value().amount ?? 0) > 0 && !this.creating());
 
   private readonly now = toSignal(interval(1_000).pipe(map(() => Date.now())), {
     initialValue: Date.now(),
@@ -63,50 +62,45 @@ export class LoadCupoComponent {
       : '';
   });
 
+  // Misma clave al reintentar la misma carga tras 4xx/503; otra si cambia el monto o la carga falló
+  private idempotencyKey: string | null = null;
+
   constructor() {
     // Un resultado (completado o error) no se vuelve a mostrar al salir; una carga en espera sí
     inject(DestroyRef).onDestroy(() => {
-      if (this.load()?.status !== 'waiting') this.agent.clearCupoLoad();
+      if (this.load()?.status !== 'waiting') this.topUps.clear();
     });
-  }
-
-  protected formatKey(): void {
-    const formatted = formatPhone(this.form.controls.key.value);
-    if (formatted !== this.form.controls.key.value) this.form.controls.key.setValue(formatted);
+    this.form.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => (this.idempotencyKey = null));
   }
 
   protected choose(method: CupoMethod): void {
     this.method.set(method);
+    this.idempotencyKey = null;
   }
 
   protected submit(): void {
     const method = this.method();
     if (!method || !this.canSubmit()) return;
-    const { amount, key } = this.form.getRawValue();
-    this.agent.requestCupoLoad({
-      method,
-      amount: amount ?? 0,
-      key: method === 'wallet' ? phoneDigits(key) : undefined,
-    });
+    this.idempotencyKey ??= newIdempotencyKey();
+    this.topUps.start({ method, amount: this.form.getRawValue().amount ?? 0 }, this.idempotencyKey);
   }
 
   protected cancel(): void {
-    this.agent.failCupoLoad('cancelled');
+    this.topUps.cancel();
   }
 
   /** B6.5: vuelve al paso 2 con el mismo método y monto */
   protected retry(): void {
     const l = this.load();
-    if (!l) return;
+    if (l?.status !== 'error') return;
     this.method.set(l.request.method);
-    this.form.patchValue({
-      amount: l.request.amount,
-      key: l.request.key ? formatPhone(l.request.key) : DEMO_AGENT_KEY,
-    });
-    this.agent.clearCupoLoad();
+    this.form.patchValue({ amount: l.request.amount });
+    // Después de patchValue, que descarta la clave: se reusa solo si no se creó nada
+    this.idempotencyKey = l.retryKey;
+    this.topUps.clear();
   }
 
   protected finish(): void {
-    this.agent.clearCupoLoad();
+    this.topUps.clear();
   }
 }

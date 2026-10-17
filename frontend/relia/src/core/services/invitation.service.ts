@@ -14,8 +14,8 @@ export interface Invitation {
 export const whatsappLink = (phone: string): string =>
   `https://wa.me/57${phone}?text=${encodeURIComponent(INVITE_MESSAGE)}`;
 
-// shortcut: no envía nada a WhatsApp; guarda la invitación para mostrarla en el teléfono
-// simulado (C2). Cambiar por POST /api/invitations cuando exista backend
+// Simulado a propósito para el demo (sin POST /keys/{phone}/invitations ni WhatsApp real): guarda
+// la invitación para mostrarla en el teléfono simulado (C2), que abre C1 con el celular precargado
 @Injectable({ providedIn: 'root' })
 export class InvitationService {
   /** Más recientes primero */
