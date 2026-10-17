@@ -26,6 +26,7 @@ const LINK_ERROR: Partial<Record<ErrorCode, string>> = {
   phone_reserved: 'Este celular o esta billetera pertenecen a una tienda o a Relia.',
   wallet_not_found: 'No encontramos ese payment pointer en la red de prueba.',
   rate_limited: 'Demasiados intentos. Espera un momento y vuelve a intentar.',
+  rail_unavailable: 'La red de pagos no responde. Intenta en un momento.',
 };
 
 type Step = 'form' | 'code' | 'done';
@@ -76,50 +77,64 @@ export class LinkPhoneComponent {
     if (formatted !== this.form.controls.phone.value) this.form.controls.phone.setValue(formatted);
   }
 
-  /** C1.1 → C1.2. También "Reenviar código" */
+  /** C1.1 → C1.2. También "Reenviar código": el API crea el desafío y manda el OTP */
   protected sendCode(): void {
     this.submitted.set(true);
-    if (this.phoneInvalid() || this.pointerInvalid()) return;
-    this.keyLinks.sendCode(this.phone(), this.walletAddress());
-    this.form.controls.code.reset();
-    this.codeError.set(null);
-    this.linkError.set(null);
-    this.step.set('code');
-  }
-
-  /** C1.2: OTP simulado; si es correcto crea la llave en el API */
-  protected verify(): void {
-    if (this.linking()) return;
-    const result = this.keyLinks.verify(this.form.controls.code.value.trim());
-    if (!result.ok) {
-      this.codeError.set(
-        result.reason === 'invalid'
-          ? `El código no coincide. Revisa el SMS. Te quedan ${result.attemptsRemaining} intentos.`
-          : result.reason === 'expired'
-            ? 'El código venció. Pide uno nuevo.'
-            : 'Superaste los intentos. Pide un código nuevo.',
-      );
-      return;
-    }
+    if (this.phoneInvalid() || this.pointerInvalid() || this.linking()) return;
     this.codeError.set(null);
     this.linkError.set(null);
     this.linking.set(true);
     this.keyLinks
-      .link(this.phone(), this.walletAddress())
+      .start(this.phone(), this.walletAddress())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.linking.set(false);
+          this.form.controls.code.reset();
+          this.step.set('code');
+        },
+        error: (err: unknown) => this.fail(err),
+      });
+  }
+
+  /** C1.2: el API verifica el OTP y crea la llave */
+  protected verify(): void {
+    if (this.linking()) return;
+    this.codeError.set(null);
+    this.linkError.set(null);
+    this.linking.set(true);
+    this.keyLinks
+      .verify(this.form.controls.code.value.trim())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
           this.linking.set(false);
           this.step.set('done');
         },
-        error: (err: unknown) => {
-          this.linking.set(false);
-          const code = err instanceof ApiError ? err.code : null;
-          this.linkError.set(
-            (code && LINK_ERROR[code]) ?? 'No pudimos vincular. Intenta de nuevo.',
-          );
-        },
+        error: (err: unknown) => this.fail(err),
       });
+  }
+
+  private fail(err: unknown): void {
+    this.linking.set(false);
+    const problem = err instanceof ApiError ? err.problem : null;
+    switch (problem?.code) {
+      case 'invalid_otp':
+        this.codeError.set(
+          `El código no coincide. Revisa el SMS. Te quedan ${problem.attemptsRemaining ?? 0} intentos.`,
+        );
+        return;
+      case 'otp_expired':
+      case 'not_found':
+        this.codeError.set('El código venció. Pide uno nuevo.');
+        return;
+      case 'otp_attempts_exceeded':
+        this.codeError.set('Superaste los intentos. Pide un código nuevo.');
+        return;
+    }
+    this.linkError.set(
+      (problem && LINK_ERROR[problem.code]) ?? 'No pudimos vincular. Intenta de nuevo.',
+    );
   }
 
   protected changeData(): void {

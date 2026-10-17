@@ -1,80 +1,73 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
-import { Observable, map, tap, timeout } from 'rxjs';
+import { Observable, catchError, map, of, switchMap, tap, throwError, timeout } from 'rxjs';
 import * as z from 'zod/mini';
 
 import { environment } from '../../environments/environment';
 import { SmsService } from './sms.service';
 
-export const OTP_TTL_MS = 5 * 60_000;
-export const OTP_MAX_ATTEMPTS = 5;
-
-export type OtpResult =
-  | { ok: true }
-  | { ok: false; reason: 'invalid'; attemptsRemaining: number }
-  | { ok: false; reason: 'expired' | 'exceeded' };
-
 export interface PendingLink {
   phone: string;
   walletAddress: string;
+  challengeId: string;
 }
 
-interface Challenge {
-  phone: string;
-  code: string;
-  expiresAt: number;
-  attempts: number;
-}
-
-const KeyLinkResponseSchema = z.object({ phone: z.string() });
+const ChallengeSchema = z.object({ challengeId: z.string(), phone: z.string() });
+const KeyLinkSchema = z.object({ phone: z.string(), walletAddress: z.string() });
+export type KeyLink = z.infer<typeof KeyLinkSchema>;
+const DemoMessagesSchema = z.object({ items: z.array(z.object({ content: z.string() })) });
 
 /**
- * C1: el OTP se simula en el navegador para el demo (no hay endpoint de verificación ni SMS real);
- * el SMS llega al teléfono simulado (C2). La llave se crea en el API con `POST /key-links`
- * solo después de verificar el código.
+ * C1 (pública, sin token): `POST /key-links` crea el desafío y el API manda el OTP por SMS simulado;
+ * `POST /key-links/{challengeId}/verify` crea la llave.
  */
 @Injectable({ providedIn: 'root' })
 export class KeyLinkService {
   private readonly http = inject(HttpClient);
   private readonly sms = inject(SmsService);
-  private challenge: Challenge | null = null;
   private readonly _pending = signal<PendingLink | null>(null);
   /** Datos del paso 2 en curso: C1 los retoma al volver de "Ver SMS" (C2) */
   readonly pending = this._pending.asReadonly();
 
-  /** "Enviar código" y "Reenviar código": invalida el anterior */
-  sendCode(phone: string, walletAddress: string): void {
-    this._pending.set({ phone, walletAddress });
-    const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, '0');
-    this.challenge = { phone, code, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 };
-    this.sms.send(phone, `Tu código Relia es ${code}. Vence en 5 minutos. No lo compartas.`);
-  }
-
-  verify(code: string): OtpResult {
-    const c = this.challenge;
-    if (!c || Date.now() > c.expiresAt) return { ok: false, reason: 'expired' };
-    if (c.attempts >= OTP_MAX_ATTEMPTS) return { ok: false, reason: 'exceeded' };
-    // El código sigue válido hasta que `link()` termine: si el API falla, "Verificar" reintenta
-    if (code === c.code) return { ok: true };
-    c.attempts++;
-    const attemptsRemaining = OTP_MAX_ATTEMPTS - c.attempts;
-    return attemptsRemaining
-      ? { ok: false, reason: 'invalid', attemptsRemaining }
-      : { ok: false, reason: 'exceeded' };
-  }
-
-  /** `POST /key-links` (público). Errores: 409 `key_already_linked`, `wallet_already_linked`, `phone_reserved`; 422 `wallet_not_found`; 429 */
-  link(phone: string, walletAddress: string): Observable<{ phone: string }> {
+  /** "Enviar código" y "Reenviar código" (el API invalida el anterior). Errores: 409 `key_already_linked`, `wallet_already_linked`, `phone_reserved`; 422 `wallet_not_found`; 429; 503 */
+  start(phone: string, walletAddress: string): Observable<void> {
     return this.http.post(`${environment.apiUrl}/key-links`, { phone, walletAddress }).pipe(
       timeout(environment.httpTimeoutMs),
-      map((res) => KeyLinkResponseSchema.parse(res)),
-      tap(() => this.reset()),
+      map((res) => ChallengeSchema.parse(res)),
+      tap(({ challengeId }) => this._pending.set({ phone, walletAddress, challengeId })),
+      switchMap(() => this.copyOtpToPhone(phone)),
     );
+  }
+
+  /** Errores: 422 `invalid_otp` (con `attemptsRemaining`), `otp_expired`, `otp_attempts_exceeded`; 404; 409 */
+  verify(code: string): Observable<KeyLink> {
+    const pending = this._pending();
+    if (!pending) return throwError(() => new Error('Sin desafío de vinculación en curso'));
+    return this.http
+      .post(`${environment.apiUrl}/key-links/${pending.challengeId}/verify`, { code })
+      .pipe(
+        timeout(environment.httpTimeoutMs),
+        map((res) => KeyLinkSchema.parse(res)),
+        tap(() => this.reset()),
+      );
   }
 
   /** "Cambiar datos" o vinculación terminada */
   reset(): void {
-    this.challenge = null;
     this._pending.set(null);
+  }
+
+  // shortcut: el OTP queda en la bandeja simulada del API (`GET /demo/messages`, solo con DEMO_MODE);
+  // se copia al teléfono simulado del front (C2). Sin modo demo el código no llega a C2.
+  private copyOtpToPhone(phone: string): Observable<void> {
+    return this.http
+      .get(`${environment.apiUrl}/demo/messages`, { params: { phone, limit: 1 } })
+      .pipe(
+        timeout(environment.httpTimeoutMs),
+        map((res) => DemoMessagesSchema.parse(res).items[0]),
+        tap((msg) => msg && this.sms.send(phone, msg.content)),
+        map(() => undefined),
+        catchError(() => of(undefined)),
+      );
   }
 }
