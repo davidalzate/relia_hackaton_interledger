@@ -10,6 +10,9 @@ internal static class Patterns
 {
     public const string Phone = "^3[0-9]{9}$";
 
+    /// <summary>Payment pointer ($dominio/ruta).</summary>
+    public const string WalletAddress = @"^\$[^\s/]+(/\S*)?$";
+
     /// <summary>Tope de cualquier monto de entrada ($1 billón): evita desbordar long al sumar tarifa o saldos.</summary>
     public const long MaxCop = 1_000_000_000_000;
 }
@@ -123,6 +126,19 @@ public record OperationPreviewDto(
 public record KeyLookupDto(string Phone, string WalletAddressMasked);
 
 public record KeyInvitationDto(string Phone, string WaLink, string Message, DateTimeOffset SentAt);
+
+// ---- Vinculación pública con OTP ----
+
+public record CreateKeyLinkRequest(
+    [Required, RegularExpression(Patterns.Phone)] string Phone,
+    [Required, RegularExpression(Patterns.WalletAddress)] string WalletAddress);
+
+public record KeyLinkChallengeDto(Guid ChallengeId, string Phone, DateTimeOffset ExpiresAt, int MaxAttempts);
+
+public record VerifyKeyLinkRequest([Required, RegularExpression("^[0-9]{6}$")] string Code);
+
+/// <summary>walletAddress completo: es el eco de lo que escribió el usuario.</summary>
+public record KeyLinkDto(string Phone, string WalletAddress, DateTimeOffset LinkedAt);
 
 // ---- Operaciones ----
 

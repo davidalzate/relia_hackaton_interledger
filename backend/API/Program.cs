@@ -1,16 +1,20 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Relia.Api.Auth;
 using Relia.Api.Configuration;
+using Relia.Api.Controllers;
 using Relia.Api.Errors;
 using Relia.Api.Persistence;
+using Relia.Api.Rail;
 using Relia.Api.Repositories;
 using Relia.Api.Services;
 
@@ -78,6 +82,16 @@ builder.Services.AddScoped<IHistoryRepository, EfHistoryRepository>();
 builder.Services.AddScoped<IReceiptRepository, EfReceiptRepository>();
 builder.Services.AddScoped<ISettlementRepository, EfSettlementRepository>();
 builder.Services.AddScoped<ISimulatedMessageRepository, EfSimulatedMessageRepository>();
+builder.Services.AddScoped<IOtpChallengeRepository, EfOtpChallengeRepository>();
+
+// ---- Riel: cliente HTTP del proxy (contracts/rail-proxy.openapi.yaml) ----
+builder.Services.AddHttpClient<IRailClient, RailClient>((sp, http) =>
+{
+    var rail = sp.GetRequiredService<IOptions<RailProxyOptions>>().Value;
+    http.BaseAddress = new Uri(rail.BaseUrl.TrimEnd('/') + "/");
+    http.DefaultRequestHeaders.TryAddWithoutValidation("X-Api-Key", rail.ApiKey);
+    http.Timeout = TimeSpan.FromSeconds(rail.TimeoutSeconds);
+});
 
 // ---- Servicios ----
 builder.Services.AddSingleton(TimeProvider.System);
@@ -91,6 +105,7 @@ builder.Services.AddScoped<ICashAdjustmentService, CashAdjustmentService>();
 builder.Services.AddScoped<IOperationService, OperationService>();
 builder.Services.AddScoped<ISimulatedInbox, SimulatedInbox>();
 builder.Services.AddScoped<IKeyService, KeyService>();
+builder.Services.AddScoped<IKeyLinkService, KeyLinkService>();
 builder.Services.AddScoped<IReceiptService, ReceiptService>();
 builder.Services.AddScoped<ISettlementService, SettlementService>();
 
@@ -115,6 +130,28 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, ProblemAuthorizationResultHandler>();
 
+// ---- Rate limit en memoria de la vinculación pública: Relia:KeyLinkRateLimitPerMinute por IP ----
+builder.Services.AddRateLimiter(o =>
+{
+    o.AddPolicy(KeyLinksController.RateLimitPolicy, http => RateLimitPartition.GetFixedWindowLimiter(
+        http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = http.RequestServices.GetRequiredService<IOptions<ReliaOptions>>().Value.KeyLinkRateLimitPerMinute,
+            Window = TimeSpan.FromMinutes(1),
+        }));
+    o.OnRejected = async (context, ct) =>
+    {
+        var response = context.HttpContext.Response;
+        response.StatusCode = StatusCodes.Status429TooManyRequests;
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+            response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString();
+        await response.WriteAsJsonAsync(
+            new { type = "about:blank", title = "Demasiados intentos", status = 429, code = "rate_limited" },
+            (JsonSerializerOptions?)null, "application/problem+json", ct);
+    };
+});
+
 var app = builder.Build();
 
 // Base recién creada (docker compose up sobre un volumen nuevo): sembrar los datos de la demo.
@@ -132,6 +169,7 @@ if (app.Environment.IsDevelopment())
 app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
 
 await app.RunAsync();

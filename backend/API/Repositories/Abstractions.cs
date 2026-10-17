@@ -24,6 +24,12 @@ public interface IAgentRepository
     /// tuviera en memoria. Solo dentro de una transacción. Null si el corresponsal no existe.
     /// </summary>
     Task<AgentBalance?> GetBalanceForUpdateAsync(Guid agentId, CancellationToken ct = default);
+
+    /// <summary>
+    /// ¿Algún corresponsal tiene este celular o esta billetera? La billetera se compara en forma de payment
+    /// pointer ($dominio/ruta), sin mayúsculas ni "/" final de ningún lado.
+    /// </summary>
+    Task<bool> UsesPhoneOrWalletAsync(string phone, string walletAddress, CancellationToken ct = default);
 }
 
 public interface IAdminRepository
@@ -41,7 +47,22 @@ public interface IFeeRepository
 public interface IWalletKeyRepository
 {
     Task<WalletKey?> GetByPhoneAsync(string phone, CancellationToken ct = default);
+
+    /// <summary>¿Hay una llave con esta billetera? Payment pointer sin mayúsculas ni "/" final de ningún lado.</summary>
+    Task<bool> IsWalletLinkedAsync(string walletAddress, CancellationToken ct = default);
+
     void Add(WalletKey key);
+}
+
+public interface IOtpChallengeRepository
+{
+    void Add(OtpChallenge challenge);
+
+    /// <summary>SELECT ... FOR UPDATE del desafío, con los valores de la base. Solo dentro de una transacción.</summary>
+    Task<OtpChallenge?> GetForUpdateAsync(Guid id, OtpPurpose purpose, CancellationToken ct = default);
+
+    /// <summary>¿Se pidió otro código para el mismo celular y propósito después de este? ("Reenviar código").</summary>
+    Task<bool> HasNewerAsync(OtpChallenge challenge, CancellationToken ct = default);
 }
 
 /// <summary>Cupo y efectivo comprometidos por operaciones pendientes.</summary>

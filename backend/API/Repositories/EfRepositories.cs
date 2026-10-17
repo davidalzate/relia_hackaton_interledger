@@ -46,6 +46,12 @@ public class EfAgentRepository(ReliaDbContext db) : IAgentRepository
         if (balance is not null) await db.Entry(balance).ReloadAsync(ct);
         return balance;
     }
+
+    public Task<bool> UsesPhoneOrWalletAsync(string phone, string walletAddress, CancellationToken ct = default)
+    {
+        var wallet = walletAddress.TrimEnd('/').ToLowerInvariant();
+        return db.Agents.AnyAsync(a => a.Phone == phone || a.WalletAddress.ToLower().TrimEnd('/') == wallet, ct);
+    }
 }
 
 public class EfAdminRepository(ReliaDbContext db) : IAdminRepository
@@ -68,7 +74,32 @@ public class EfWalletKeyRepository(ReliaDbContext db) : IWalletKeyRepository
     public Task<WalletKey?> GetByPhoneAsync(string phone, CancellationToken ct = default) =>
         db.WalletKeys.FirstOrDefaultAsync(k => k.Phone == phone, ct);
 
+    public Task<bool> IsWalletLinkedAsync(string walletAddress, CancellationToken ct = default)
+    {
+        var wallet = walletAddress.TrimEnd('/').ToLowerInvariant();
+        return db.WalletKeys.AnyAsync(k => k.WalletAddress.ToLower().TrimEnd('/') == wallet, ct);
+    }
+
     public void Add(WalletKey key) => db.WalletKeys.Add(key);
+}
+
+public class EfOtpChallengeRepository(ReliaDbContext db) : IOtpChallengeRepository
+{
+    public void Add(OtpChallenge challenge) => db.OtpChallenges.Add(challenge);
+
+    public async Task<OtpChallenge?> GetForUpdateAsync(Guid id, OtpPurpose purpose, CancellationToken ct = default)
+    {
+        var challenge = await db.OtpChallenges
+            .FromSqlInterpolated($"SELECT * FROM otp_challenges WHERE id = {id} FOR UPDATE")
+            .SingleOrDefaultAsync(ct);
+        if (challenge is null || challenge.Purpose != purpose) return null;
+        await db.Entry(challenge).ReloadAsync(ct);
+        return challenge;
+    }
+
+    public Task<bool> HasNewerAsync(OtpChallenge challenge, CancellationToken ct = default) =>
+        db.OtpChallenges.AnyAsync(c => c.Phone == challenge.Phone && c.Purpose == challenge.Purpose
+                                       && c.CreatedAt > challenge.CreatedAt, ct);
 }
 
 public class EfOperationRepository(ReliaDbContext db) : IOperationRepository

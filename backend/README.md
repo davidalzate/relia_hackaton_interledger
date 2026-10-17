@@ -36,8 +36,10 @@ El DDL solo corre cuando el volumen es nuevo. Si cambias `db/db_ddl.sql`, borra 
 | `Jwt:SigningKey` | solo en `appsettings.Development.json` | Firma de los tokens. En Azure: variable `Jwt__SigningKey` (≥ 32 bytes) |
 | `RailProxy:BaseUrl` | `http://localhost:4000` | Proxy de riel |
 | `RailProxy:ApiKey` | vacío | Misma `RAIL_PROXY_API_KEY` del proxy. Secreto: `dotnet user-secrets set "RailProxy:ApiKey" "..."` |
+| `RailProxy:TimeoutSeconds` | `10` | Pasado este plazo, el riel cuenta como no disponible (503) |
 | `Relia:WalletAddress` | `$ilp.interledger-test.dev/relia-test1` | Billetera de Relia; la misma `RELIA_WALLET_ADDRESS` del proxy |
 | `Relia:PublicBaseUrl` | `http://localhost:4200` | Página pública del enlace de invitación |
+| `Relia:KeyLinkRateLimitPerMinute` | `20` | Peticiones por minuto y por IP a `/key-links` (luego `429`) |
 | `DEMO_MODE` | `true` en Development | Habilita `/demo/*` |
 
 Si 5433 también está ocupado: `RELIA_DB_PORT=5434 docker compose up -d` y ajusta `ConnectionStrings__Relia`.

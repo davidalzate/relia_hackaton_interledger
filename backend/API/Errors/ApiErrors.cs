@@ -33,6 +33,30 @@ public static class ApiErrors
     public static ApiException KeyAlreadyLinked() =>
         new(StatusCodes.Status409Conflict, "key_already_linked", "El celular ya tiene llave");
 
+    public static ApiException PhoneReserved() =>
+        new(StatusCodes.Status409Conflict, "phone_reserved", "El celular o la billetera son de Relia o de un corresponsal");
+
+    /// <summary>Sin revelar a qué celular está vinculada.</summary>
+    public static ApiException WalletAlreadyLinked() =>
+        new(StatusCodes.Status409Conflict, "wallet_already_linked", "La billetera ya está vinculada a otro celular");
+
+    public static ApiException WalletNotFound() =>
+        new(StatusCodes.Status422UnprocessableEntity, "wallet_not_found", "La billetera no existe");
+
+    /// <summary>503: no se creó nada; se puede reintentar.</summary>
+    public static ApiException RailUnavailable() =>
+        new(StatusCodes.Status503ServiceUnavailable, "rail_unavailable", "El riel de pagos no está disponible");
+
+    public static ApiException InvalidOtp(int attemptsRemaining) =>
+        new(StatusCodes.Status422UnprocessableEntity, "invalid_otp", "Código incorrecto",
+            new Dictionary<string, object?> { ["attemptsRemaining"] = attemptsRemaining });
+
+    public static ApiException OtpExpired() =>
+        new(StatusCodes.Status422UnprocessableEntity, "otp_expired", "El código venció");
+
+    public static ApiException OtpAttemptsExceeded() =>
+        new(StatusCodes.Status422UnprocessableEntity, "otp_attempts_exceeded", "Se agotaron los intentos");
+
     /// <summary>422 insufficient_cash con lo que falta (ajustes por debajo de lo reservado, retiros).</summary>
     public static ApiException InsufficientCash(long shortfall) =>
         new(StatusCodes.Status422UnprocessableEntity, "insufficient_cash", "Efectivo insuficiente",

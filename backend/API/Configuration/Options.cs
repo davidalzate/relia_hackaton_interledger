@@ -20,6 +20,9 @@ public class RailProxyOptions
 
     /// <summary>Secreto compartido con el proxy (X-Api-Key). Por user-secrets o variable de entorno.</summary>
     public string ApiKey { get; set; } = "";
+
+    /// <summary>Tiempo máximo de cada llamada; pasado este plazo el riel se trata como no disponible.</summary>
+    public int TimeoutSeconds { get; set; } = 10;
 }
 
 /// <summary>Sección "Relia" más el flag DEMO_MODE.</summary>
@@ -32,6 +35,9 @@ public class ReliaOptions
 
     /// <summary>URL base de la página pública (enlace de la invitación por WhatsApp).</summary>
     public string PublicBaseUrl { get; set; } = "";
+
+    /// <summary>Peticiones por minuto y por IP a /key-links (rate limit en memoria).</summary>
+    public int KeyLinkRateLimitPerMinute { get; set; } = 20;
 
     /// <summary>Variable DEMO_MODE: sin ella las rutas /demo/* responden 404.</summary>
     public bool DemoMode { get; set; }

@@ -72,6 +72,19 @@ public interface IKeyService
     Task<KeyInvitationDto> InviteAsync(string phone, string idempotencyKey, CancellationToken ct = default);
 }
 
+/// <summary>POST /key-links y POST /key-links/{challengeId}/verify, sin login.</summary>
+public interface IKeyLinkService
+{
+    /// <summary>
+    /// Valida en el orden del contrato (409 key_already_linked, phone_reserved, wallet_already_linked;
+    /// 422 wallet_not_found; 503 rail_unavailable) y deja el OTP por SMS simulado.
+    /// </summary>
+    Task<KeyLinkChallengeDto> StartAsync(CreateKeyLinkRequest request, CancellationToken ct = default);
+
+    /// <summary>Crea la llave con el código correcto; 422 invalid_otp, otp_expired u otp_attempts_exceeded.</summary>
+    Task<KeyLinkDto> VerifyAsync(Guid challengeId, VerifyKeyLinkRequest request, CancellationToken ct = default);
+}
+
 /// <summary>Recibos congelados de depósitos y retiros.</summary>
 public interface IReceiptService
 {
