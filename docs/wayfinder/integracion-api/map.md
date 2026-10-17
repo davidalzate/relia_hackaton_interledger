@@ -18,7 +18,7 @@ Una feature = una rama y un PR. Orden sugerido de arriba abajo; dentro de cada f
 
 Estados: `claimed` = PR abierto o fusionado en una rama intermedia (aún no está en `main`); `resolved` = en `main`.
 
-**Estado al 2026-10-17:** 20 de 24 tickets en `main`. Faltan los 4 de Admin (19–22): #37 se fusionó en `feat/receipt-api` después de que esa rama entrara a `main` con #38, así que falta un PR de `feat/receipt-api` a `main`. Modo demo (24–29) quedó fuera de alcance.
+**Estado al 2026-10-17:** 24 de 24 tickets en `main`. Admin (19–22) entró con [#41](https://github.com/davidalzate/relia_hackaton_interledger/pull/41). Modo demo (24–29) quedó fuera de alcance.
 
 ### 0. Base y sesión
 
@@ -91,14 +91,14 @@ En `main` (#33 y #38). Abre filas de B8 y D2.
 
 ### 7. Admin (D1–D3)
 
-**No está en `main`.** #37 se fusionó en `feat/receipt-api`; falta llevar esa rama a `main`. D2 y D3 construidas contra el API.
+En `main` (#37 vía #41). D2 y D3 construidas contra el API.
 
 | # | Endpoint | Pantalla | Bloqueado por | Estado |
 |---|---|---|---|---|
-| [20](issues/20-agents-list.md) | GET /agents | D1 Inicio admin | 00 | claimed · [#37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37) |
-| [21](issues/21-settlements-list.md) | GET /settlements | D1 Pagos de comisión de hoy | 00 | claimed · [#37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37) |
-| [19](issues/19-settlements-get.md) | GET /settlements/{settlementId} | D3 Enviando, B8/D2 abrir fila | 00 | claimed · [#37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37) |
-| [22](issues/22-settlements-create.md) | POST /agents/{agentId}/settlements | D3 Confirmar pago | 19 | claimed · [#37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37) |
+| [20](issues/20-agents-list.md) | GET /agents | D1 Inicio admin | 00 | resolved · [#41](https://github.com/davidalzate/relia_hackaton_interledger/pull/41) |
+| [21](issues/21-settlements-list.md) | GET /settlements | D1 Pagos de comisión de hoy | 00 | resolved · [#41](https://github.com/davidalzate/relia_hackaton_interledger/pull/41) |
+| [19](issues/19-settlements-get.md) | GET /settlements/{settlementId} | D3 Enviando, B8/D2 abrir fila | 00 | resolved · [#41](https://github.com/davidalzate/relia_hackaton_interledger/pull/41) |
+| [22](issues/22-settlements-create.md) | POST /agents/{agentId}/settlements | D3 Confirmar pago | 19 | resolved · [#41](https://github.com/davidalzate/relia_hackaton_interledger/pull/41) |
 
 ## Out of scope
 

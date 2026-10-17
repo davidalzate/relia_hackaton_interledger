@@ -2,7 +2,7 @@
 
 Registro de los prompts usados con **Claude Code** (app de escritorio, modelo Claude Opus) para construir el frontend de Relia en `frontend/relia`. Complementa [AI_USAGE.md](../../AI_USAGE.md).
 
-- **Fecha:** 16 y 17 de octubre de 2026, en dos sesiones: pantallas con datos simulados (prompts 1–22) e integración con la Relia API (prompts 23–48).
+- **Fecha:** 16 y 17 de octubre de 2026, en dos sesiones: pantallas con datos simulados (prompts 1–22) e integración con la Relia API (prompts 23–53).
 - **Stack resultante:** Angular 21 standalone, zone.js, signals, PrimeNG 21 (Aura), Zod (`zod/mini`) y SCSS con tokens en `:root`.
 - **Flujo de trabajo:** cada pantalla se pidió pegando su especificación (A1, B0–B9, D0–D1). Claude implementó la pantalla, corrió typecheck, build y tests y la probó en el navegador. Luego, con un segundo prompt, hizo el commit y abrió el PR hacia `main`.
 - **Integración con la API:** a partir de [contracts/FLUJOS.md](../../contracts/FLUJOS.md) Claude creó un ticket por endpoint en [docs/wayfinder/integracion-api](../wayfinder/integracion-api/map.md) y luego se pidió cada ticket por número; desde el prompt 33, una feature completa (varios tickets) por rama y PR. Cada uno reemplaza un mock por la llamada real, con schema Zod, tests con `HttpTestingController` y su PR. Los PRs van apilados: cada uno parte del anterior, y al final se llevaron a `main` con PRs de cierre (#34, #38).
@@ -60,6 +60,11 @@ Registro de los prompts usados con **Claude Code** (app de escritorio, modelo Cl
 | 46 | Fetch para ver el estado real del repo | Sin cambios |
 | 47 | Omitir cambios locales innecesarios y hacer pull | Sin cambios |
 | 48 | Actualizar este registro | Este archivo |
+| 49 | Revisar los MD de backend y front y planear la conexión | Plan (sin cambios) |
+| 50 | Fase 1: proxy a 5080 y Admin en `resolved` | `proxy.conf.json` y tracker (sin commit) |
+| 51 | Parar los puertos que estén corriendo | Procesos detenidos (sin cambios) |
+| 52 | Link del front en el README raíz y README del front | `README.md` y `frontend/relia/README.md` (sin commit) |
+| 53 | Actualizar este registro | Este archivo |
 
 Después de cada pantalla venía un prompt corto para hacer el commit y abrir el PR. Esos no se listan uno por uno; su forma era siempre la misma:
 
@@ -707,3 +712,31 @@ Modo demo (tickets 24–29) salió del tracker como fuera de alcance ([PR #36](h
 ### 48. Actualizar este registro
 
 > actualiza el archivo /Users/oscarcorrea/development/projects/relia_hackaton_interledger/docs/oscar_claude/frontend-prompts.md
+
+### 49. Plan de conexión
+
+> revisa los archivos md de backend y front, y realiza un plan para la conexion
+
+Claude leyó el mapa de integración, los README de backend y front y la configuración. Las 24 features ya consumían el API, pero la conexión local no funcionaba: `proxy.conf.json` apuntaba a `127.0.0.1:3000` y mandaba `/api/...`, mientras que el backend escucha en `5080` y no usa el prefijo `/api`. Además, el tracker seguía con Admin en `claimed` aunque ya estaba en `main` con #41.
+
+### 50. Fase 1: proxy y tracker
+
+> Sí, aplica la Fase 1 (proxy a 5080 con pathRewrite) y actualiza el tracker de Admin a resolved.
+
+`proxy.conf.json` ahora apunta a `http://localhost:5080` con `pathRewrite` `^/api` → `""`. Los tickets 19–22 y el mapa pasaron a `resolved` con [PR #41](https://github.com/davidalzate/relia_hackaton_interledger/pull/41) (24 de 24 en `main`). No se probó de punta a punta porque Docker estaba apagado.
+
+### 51. Liberar puertos
+
+> para los puertos que esten corriendo
+
+Ningún proceso de Relia estaba corriendo. En 4200 (`ng serve`) y 3000 (`next dev`) corría otro proyecto. Claude preguntó antes de detenerlos y, con el visto bueno, los paró para liberar el 4200.
+
+### 52. README raíz y del front
+
+> actualiza relia_hackaton_interledger/README.md con el link de front y actualiza tambien el readme de front
+
+El README raíz enlaza el README del front y tiene una tabla de puertos locales (proxy 4000, backend 5080, front 4200). El README del front cambió el texto genérico de Angular CLI por uno propio en español: requisitos, proxy, usuarios de la demo, rutas, comandos y estructura.
+
+### 53. Actualizar este registro
+
+> actualiza tambien el archivo docs/oscar_claude/frontend-prompts.md

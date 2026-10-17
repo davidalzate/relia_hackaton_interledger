@@ -1,8 +1,8 @@
 # Integrar POST /agents/{agentId}/settlements
 
 Type: task
-Status: claimed
-PR: [#37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37)
+Status: resolved
+PR: [#37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37) · [#41](https://github.com/davidalzate/relia_hackaton_interledger/pull/41)
 Blocked by: [19](19-settlements-get.md)
 Labels: wayfinder:task, frontend, feature:admin
 Feature: Admin (D1–D3)
