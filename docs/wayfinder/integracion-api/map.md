@@ -80,12 +80,12 @@ PR #32. Invitación y OTP simulados en el frontend (decisión de demo); la llave
 
 ### 6. Comprobante (B9)
 
-Abre filas de B8 y D2.
+PR #33. Abre filas de B8 y D2.
 
 | # | Endpoint | Pantalla | Bloqueado por | Estado |
 |---|---|---|---|---|
-| [17](issues/17-receipt.md) | GET /operations/{operationId}/receipt | B9 Comprobante | 07 | open |
-| [18](issues/18-receipt-send.md) | POST /operations/{operationId}/receipt/send | B9 Enviar SMS | 17 | open |
+| [17](issues/17-receipt.md) | GET /operations/{operationId}/receipt | B9 Comprobante | 07 | claimed · [#33](https://github.com/davidalzate/relia_hackaton_interledger/pull/33) |
+| [18](issues/18-receipt-send.md) | POST /operations/{operationId}/receipt/send | B9 Enviar SMS | 17 | claimed · [#33](https://github.com/davidalzate/relia_hackaton_interledger/pull/33) |
 
 ### 7. Admin (D1–D3)
 
