@@ -231,11 +231,11 @@ public class OperationService(
         RailPayment? railPayment = null;
         if (!forcedFailure && payment.Rail == Db.PaymentRail.OpenPayments)
         {
-            railPayment = await rail.CreatePaymentAsync(new CreateRailPayment(payment.Id,
+            railPayment = await rail.CreateOrUnavailableAsync(new CreateRailPayment(payment.Id,
                 direction == Db.PaymentDirection.Outgoing ? RailDirection.Outgoing : RailDirection.Incoming,
                 direction == Db.PaymentDirection.Outgoing ? destination : source, railAmount,
                 payment.ExpiresAt is null ? null : Clock.Utc(payment.ExpiresAt.Value),
-                Description(type, op)), ct);
+                await DescriptionAsync(type, agentId, ct)), log, ct);
             OperationTracker.Record(payment, railPayment, now);
             PaymentLog.RailResponse(payment, "created", railPayment, now);
         }
@@ -273,7 +273,7 @@ public class OperationService(
             // El pagador recibe la solicitud por SMS simulado y aprueba en su billetera.
             messenger.Sms(notifyPhone, Db.MessageType.PaymentRequest,
                 $"Relia: {created.Agent?.Name} te pide ${breakdown.Charged.ToString("N0", Co)} " +
-                $"({Description(type, created)}). Aprueba en tu billetera antes de 5 minutos.",
+                $"({Label(type)} {created.Reference()}). Aprueba en tu billetera antes de 5 minutos.",
                 payment.ApprovalUrl, created.Id);
             await unitOfWork.SaveChangesAsync(ct);
         }
@@ -316,10 +316,18 @@ public class OperationService(
                 breakdown.Net - (balance.ExpectedCash - reserved.CashReserved));
     }
 
-    private static string Description(Db.OperationType type, Db.Operation op) => type switch
+    /// <summary>Texto que ve el pagador en su billetera (máx. 140). El número OP-… aún no existe: lo asigna la base al guardar.</summary>
+    private async Task<string> DescriptionAsync(Db.OperationType type, Guid agentId, CancellationToken ct)
     {
-        Db.OperationType.Deposit => $"Depósito {op.Reference()}",
-        Db.OperationType.Withdrawal => $"Retiro {op.Reference()}",
-        _ => $"Carga de cupo {op.Reference()}",
+        var agent = await agents.GetByIdAsync(agentId, ct);
+        var text = $"{Label(type)} · {agent?.Name}";
+        return text.Length <= 140 ? text : text[..140];
+    }
+
+    private static string Label(Db.OperationType type) => type switch
+    {
+        Db.OperationType.Deposit => "Depósito",
+        Db.OperationType.Withdrawal => "Retiro",
+        _ => "Carga de cupo",
     };
 }

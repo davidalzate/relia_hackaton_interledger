@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
@@ -35,6 +36,8 @@ public class ReliaApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("DEMO_MODE", DemoMode ? "true" : "false");
         builder.UseSetting("Sweep:Enabled", "false");
         builder.UseSetting("ConnectionStrings:Relia", "Host=unused");
+        builder.ConfigureAppConfiguration(config =>
+            config.AddJsonFile(Path.Combine(AppContext.BaseDirectory, "demo-seed.json"), optional: false));
 
         builder.ConfigureServices(services =>
         {
@@ -82,7 +85,7 @@ public class ReliaApiFactory : WebApplicationFactory<Program>
     private record LoginBody(string AccessToken);
 }
 
-/// <summary>Datos que siembra POST /demo/reset.</summary>
+/// <summary>Datos que siembra POST /demo/reset con demo-seed.json.</summary>
 public static class Seed
 {
     public const string Password = "demo1234";

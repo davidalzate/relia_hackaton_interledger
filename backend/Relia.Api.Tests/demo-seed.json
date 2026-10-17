@@ -1,0 +1,85 @@
+{
+  "Demo": {
+    "Seed": {
+      "Fee": {
+        "Total": 1000,
+        "Relia": 500,
+        "Agent": 500
+      },
+      "Admins": [
+        {
+          "Email": "admin@relia.dev",
+          "Name": "Admin Relia",
+          "Password": "demo1234"
+        }
+      ],
+      "Agents": [
+        {
+          "Email": "rosa@relia.dev",
+          "Name": "Tienda Doña Rosa",
+          "ContactPerson": "Rosa Gómez",
+          "City": "Medellín",
+          "Address": "Cra 45 #10-20",
+          "Phone": "3100000001",
+          "Password": "demo1234",
+          "PaymentPointer": "$ilp.interledger-test.dev/rosa-test",
+          "Quota": 0,
+          "Cash": 0,
+          "AccruedCommission": 0,
+          "SettledCommissionTotal": 0
+        },
+        {
+          "Email": "miscelanea@relia.dev",
+          "Name": "Miscelánea El Progreso",
+          "ContactPerson": "Jorge Pérez",
+          "City": "Bogotá",
+          "Address": "Cl 80 #20-15",
+          "Phone": "3100000002",
+          "Password": "demo1234",
+          "PaymentPointer": "$demo.relia.local/el-progreso",
+          "Quota": 800000,
+          "Cash": 350000,
+          "AccruedCommission": 12500,
+          "SettledCommissionTotal": 40000
+        },
+        {
+          "Email": "drogueria@relia.dev",
+          "Name": "Droguería San José",
+          "ContactPerson": "Marta Ruiz",
+          "City": "Cali",
+          "Address": "Av 6N #23-40",
+          "Phone": "3100000003",
+          "Password": "demo1234",
+          "PaymentPointer": "$demo.relia.local/san-jose",
+          "Quota": 1200000,
+          "Cash": 500000,
+          "AccruedCommission": 21000,
+          "SettledCommissionTotal": 15000,
+          "SampleHistory": true
+        },
+        {
+          "Email": "panaderia@relia.dev",
+          "Name": "Panadería La Espiga",
+          "ContactPerson": "Luis Torres",
+          "City": "Barranquilla",
+          "Address": "Cl 72 #43-10",
+          "Phone": "3100000004",
+          "Password": "demo1234",
+          "PaymentPointer": "$demo.relia.local/la-espiga",
+          "Quota": 450000,
+          "Cash": 180000,
+          "AccruedCommission": 6500,
+          "SettledCommissionTotal": 0,
+          "SampleHistory": true
+        }
+      ],
+      "WalletKeys": [
+        {
+          "Mobile": "3000000001",
+          "PaymentPointer": "$ilp.interledger-test.dev/jeffdev",
+          "WalletAddressUrl": "https://ilp.interledger-test.dev/jeffdev"
+        }
+      ]
+    }
+  }
+}

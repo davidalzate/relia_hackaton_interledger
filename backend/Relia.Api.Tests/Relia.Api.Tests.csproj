@@ -27,4 +27,8 @@
     <ProjectReference Include="..\API\Relia.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="demo-seed.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

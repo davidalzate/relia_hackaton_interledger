@@ -25,6 +25,9 @@ public class FakeRailClient : IRailClient
     /// <summary>true: toda llamada lanza RailUnavailableException.</summary>
     public bool Unavailable { get; set; }
 
+    /// <summary>Si tiene valor, crear un pago lanza RailRejectedException con ese code (p. ej. wallet_not_found).</summary>
+    public string? RejectCreateWith { get; set; }
+
     public List<CreateRailPayment> Created { get; } = [];
     public List<Guid> Cancelled { get; } = [];
     public int GetCalls { get; private set; }
@@ -42,6 +45,7 @@ public class FakeRailClient : IRailClient
     public Task<RailPayment> CreatePaymentAsync(CreateRailPayment request, CancellationToken ct = default)
     {
         ThrowIfUnavailable();
+        if (RejectCreateWith is { } code) throw new RailRejectedException(422, code, "rechazado en la prueba");
         if (_payments.Values.FirstOrDefault(p => p.IdempotencyKey == request.IdempotencyKey) is { } existing)
             return Task.FromResult(existing);
 

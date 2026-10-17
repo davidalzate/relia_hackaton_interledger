@@ -67,8 +67,8 @@ public class SettlementService(
             payment.RailReference = "simulated";
         else if (!forcedFailure)
         {
-            railPayment = await rail.CreatePaymentAsync(new CreateRailPayment(payment.Id, RailDirection.Outgoing,
-                agent.PaymentPointer, settlement.Amount, Description: $"Pago de comisión · {agent.Name}"), ct);
+            railPayment = await rail.CreateOrUnavailableAsync(new CreateRailPayment(payment.Id, RailDirection.Outgoing,
+                agent.PaymentPointer, settlement.Amount, Description: $"Pago de comisión · {agent.Name}"), log, ct);
             OperationTracker.Record(payment, railPayment, now);
             PaymentLog.RailResponse(payment, "created", railPayment, now);
         }

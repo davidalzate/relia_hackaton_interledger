@@ -75,3 +75,25 @@ public class RailProxyOptions
     public string ApiKey { get; set; } = "";
     public int TimeoutSeconds { get; set; } = 10;
 }
+
+public static class RailClientExtensions
+{
+    /// <summary>
+    /// Crea el pago y trata cualquier rechazo del proxy (billetera inexistente, moneda distinta, conflicto de
+    /// idempotencia...) como lo que el contrato de la Relia API llama 503 rail_unavailable: "el riel no aceptó
+    /// el pago; no se crea nada". El motivo real queda en el log.
+    /// </summary>
+    public static async Task<RailPayment> CreateOrUnavailableAsync(this IRailClient rail, CreateRailPayment request,
+        ILogger log, CancellationToken ct = default)
+    {
+        try
+        {
+            return await rail.CreatePaymentAsync(request, ct);
+        }
+        catch (RailRejectedException e)
+        {
+            log.LogWarning(e, "El riel rechazó el pago {PaymentId}: {Status} {Code}", request.IdempotencyKey, e.Status, e.Code);
+            throw new RailUnavailableException($"El riel rechazó el pago: {e.Code}", e);
+        }
+    }
+}

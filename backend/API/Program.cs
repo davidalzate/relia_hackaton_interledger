@@ -83,6 +83,7 @@ builder.Services.AddHttpClient<IRailClient, HttpRailClient>((sp, http) =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.Configure<ReliaOptions>(builder.Configuration.GetSection(ReliaOptions.Section));
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.Section));
+builder.Services.Configure<Relia.Api.Services.Demo.DemoSeedOptions>(builder.Configuration.GetSection(Relia.Api.Services.Demo.DemoSeedOptions.Section));
 builder.Services.AddSingleton<DemoState>();
 builder.Services.AddSingleton<IdempotencyStore>();
 builder.Services.AddScoped<BalanceLedger>();

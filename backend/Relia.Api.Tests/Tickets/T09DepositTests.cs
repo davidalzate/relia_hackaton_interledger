@@ -230,4 +230,26 @@ public class T09DepositTests
             .OrderBy(e => e.Id).Select(e => e.Action).ToListAsync();
         Assert.Equal(["created", "polled", "polled"], actions);
     }
+
+    [Fact]
+    public async Task Si_el_proxy_rechaza_el_pago_responde_503_sin_crear_nada()
+    {
+        var s = await Scenario.ProgresoAsync();
+        s.Rail.RejectCreateWith = "same_wallet";
+
+        await (await s.DepositAsync(50_000)).Problem(HttpStatusCode.ServiceUnavailable, "rail_unavailable");
+
+        var history = await (await s.Client.GetAsync(s.Url("history"))).Json(HttpStatusCode.OK);
+        Assert.Empty(history.At("items").EnumerateArray());
+        Assert.Equal(0, (await s.AgentAsync()).Long("balances.quotaReserved"));
+    }
+
+    [Fact]
+    public async Task La_descripcion_que_ve_el_pagador_lleva_el_tipo_y_el_corresponsal_sin_referencia_inventada()
+    {
+        var s = await Scenario.ProgresoAsync();
+        await (await s.DepositAsync(50_000)).Json(HttpStatusCode.Accepted);
+
+        Assert.Equal("Depósito · Miscelánea El Progreso", Assert.Single(s.Rail.Created).Description);
+    }
 }

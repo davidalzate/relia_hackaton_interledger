@@ -1,10 +1,13 @@
 @host = http://localhost:5080
+# Credenciales de un corresponsal de Demo:Seed (appsettings.Development.json)
+@email =
+@password =
 
-### Login (en desarrollo: 501)
+### Login
 POST {{host}}/auth/login
 Content-Type: application/json
 
-{ "email": "rosa@relia.dev", "password": "demo1234" }
+{ "email": "{{email}}", "password": "{{password}}" }
 
 ### Sin token: 401 problem+json
 GET {{host}}/me
