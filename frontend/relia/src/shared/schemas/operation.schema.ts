@@ -72,3 +72,27 @@ export type OperationPreview = z.infer<typeof OperationPreviewSchema>;
 
 export const KeyLookupSchema = z.object({ phone: z.string(), walletAddressMasked: z.string() });
 export type KeyLookup = z.infer<typeof KeyLookupSchema>;
+
+/** `Receipt`: contenido congelado al completarse un depósito o retiro */
+export const ReceiptSchema = z.object({
+  code: z.string(),
+  operationId: z.string(),
+  isCopy: z.boolean(),
+  issuedAt: z.string(),
+  data: z.object({
+    reference: z.string(),
+    type: z.enum(['deposit', 'withdrawal']),
+    date: z.string(),
+    merchant: z.object({ name: z.string(), address: z.string(), phone: z.string() }),
+    customer: z.object({ phoneMasked: z.string(), walletAddressMasked: z.string() }),
+    amounts: z.object({
+      requestedAmount: z.number(),
+      roundAmount: z.boolean(),
+      fee: z.number(),
+      netAmount: z.number(),
+      chargedAmount: z.number(),
+    }),
+    payment: z.object({ rail: z.string(), reference: z.string() }),
+  }),
+});
+export type Receipt = z.infer<typeof ReceiptSchema>;

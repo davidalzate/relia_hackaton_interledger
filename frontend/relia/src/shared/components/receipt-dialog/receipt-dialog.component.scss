@@ -75,3 +75,24 @@ dl {
     gap: 6px;
   }
 }
+
+.badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.copy {
+  padding: 2px 8px;
+  border: 1px solid var(--relia-text);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.note {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--relia-muted-text);
+}
