@@ -13,7 +13,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { InputText } from 'primeng/inputtext';
 
 import { ApiError } from '../../core/http/api';
-import { KeyLinkService } from '../../core/services/key-link.service';
+import { KeyLinkService, PendingLink } from '../../core/services/key-link.service';
 import { ErrorCode } from '../../shared/schemas/problem.schema';
 import { formatPhone, phoneDigits } from '../../shared/utils/phone';
 
@@ -25,11 +25,15 @@ const LINK_ERROR: Partial<Record<ErrorCode, string>> = {
   wallet_already_linked: 'Esta billetera ya está vinculada a otro celular.',
   phone_reserved: 'Este celular o esta billetera pertenecen a una tienda o a Relia.',
   wallet_not_found: 'No encontramos ese payment pointer en la red de prueba.',
+  wallet_currency_unsupported: 'La red de pagos no convierte pesos a la moneda de esta billetera.',
   rate_limited: 'Demasiados intentos. Espera un momento y vuelve a intentar.',
   rail_unavailable: 'La red de pagos no responde. Intenta en un momento.',
 };
 
 type Step = 'form' | 'code' | 'done';
+
+const foreignCurrency = (link: PendingLink | null): string | null =>
+  link && link.walletAssetCode !== 'COP' ? link.walletAssetCode : null;
 
 // C1: página pública para que el usuario asocie su celular (llave) a su payment pointer
 @Component({
@@ -71,6 +75,8 @@ export class LinkPhoneComponent {
   protected readonly walletAddress = computed(() => (this.value().walletAddress ?? '').trim());
   protected readonly phoneInvalid = computed(() => this.phone().length !== 10);
   protected readonly pointerInvalid = computed(() => !POINTER.test(this.walletAddress()));
+  /** "Billetera en USD": solo si la billetera no es COP (`walletAssetCode` de `POST /key-links`) */
+  protected readonly walletCurrency = signal<string | null>(foreignCurrency(this.pending));
 
   protected formatPhone(): void {
     const formatted = formatPhone(this.form.controls.phone.value);
@@ -90,6 +96,7 @@ export class LinkPhoneComponent {
       .subscribe({
         next: () => {
           this.linking.set(false);
+          this.walletCurrency.set(foreignCurrency(this.keyLinks.pending()));
           this.form.controls.code.reset();
           this.step.set('code');
         },

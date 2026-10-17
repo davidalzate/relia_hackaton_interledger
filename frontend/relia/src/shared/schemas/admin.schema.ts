@@ -1,5 +1,7 @@
 import * as z from 'zod/mini';
 
+import { WalletAmountSchema } from './operation.schema';
+
 // `AgentList`, `Settlement` y `SettlementPage` de contracts/relia-api.openapi.yaml
 const CountAmountSchema = z.object({ count: z.number(), amount: z.number() });
 
@@ -41,6 +43,7 @@ export const SettlementSchema = z.object({
   voidReason: z.optional(z.nullable(z.string())),
   createdAt: z.string(),
   paidAt: z.optional(z.nullable(z.string())),
+  walletAmount: z.optional(z.nullable(WalletAmountSchema)),
 });
 export type Settlement = z.infer<typeof SettlementSchema>;
 

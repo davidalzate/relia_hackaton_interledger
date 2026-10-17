@@ -15,7 +15,7 @@ import { catchError, map, of, startWith, switchMap } from 'rxjs';
 import { AgentService } from '../../../core/services/agent.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ReceiptService } from '../../../core/services/receipt.service';
-import { Receipt } from '../../schemas/operation.schema';
+import { Receipt, WalletAmount } from '../../schemas/operation.schema';
 import {
   OPERATION_LABEL,
   Operation,
@@ -23,6 +23,7 @@ import {
   STATUS_BADGE,
   STATUS_LABEL,
 } from '../../types/agent';
+import { formatWalletAmount } from '../../utils/wallet-amount';
 
 const CAPTION: Record<OperationType, string> = {
   deposit: 'enviados a la billetera del usuario',
@@ -192,6 +193,7 @@ export class ReceiptDialogComponent {
         label: deposit ? 'Enviado a la billetera' : 'Pagado desde la billetera',
         value: this.money(deposit ? amounts.netAmount : amounts.chargedAmount),
       },
+      ...this.walletAmountRow(data.payment.walletAmount),
       { label: 'Comisión Relia', value: this.money(amounts.fee) },
       {
         label: 'Modalidad',
@@ -225,6 +227,7 @@ export class ReceiptDialogComponent {
           label: deposit ? 'Enviado a la billetera' : 'Pagado desde la billetera',
           value: this.money(d.wallet ?? op.amount),
         },
+        ...this.walletAmountRow(d.walletAmount),
         ...(d.cash != null && d.wallet != null
           ? [{ label: 'Comisión Relia', value: this.money(Math.abs(d.wallet - d.cash)) }]
           : []),
@@ -236,6 +239,7 @@ export class ReceiptDialogComponent {
     } else if (op.type === 'cupo') {
       rows.push(
         { label: 'Método', value: d.method === 'wallet' ? 'Wallet' : 'Bre-B' },
+        ...this.walletAmountRow(d.walletAmount),
         ...balance('cupo', 'Cupo'),
       );
     } else if (op.type === 'cash' || op.type === 'cash-set') {
@@ -250,6 +254,13 @@ export class ReceiptDialogComponent {
     rows.push({ label: 'Estado', value: STATUS_LABEL[op.status] });
     if (d.reason) rows.push({ label: 'Motivo', value: d.reason });
     return rows;
+  }
+
+  /** "En tu billetera: US$ 12,34" solo si la billetera del usuario no es COP */
+  private walletAmountRow(amount: WalletAmount | null | undefined): Row[] {
+    return amount
+      ? [{ label: 'En tu billetera', value: formatWalletAmount(amount, this.locale) }]
+      : [];
   }
 
   private money(value: number): string {

@@ -1,3 +1,5 @@
+import { WalletAmount } from '../schemas/operation.schema';
+
 export interface AgentBalances {
   cupo: number;
   commission: number;
@@ -23,6 +25,8 @@ export interface OperationDetails {
   destination?: string;
   /** Motivo si falló, venció o se canceló */
   reason?: string;
+  /** Monto en la moneda de la billetera del usuario si no es COP (`walletAmount` del API) */
+  walletAmount?: WalletAmount;
 }
 
 export interface Operation {

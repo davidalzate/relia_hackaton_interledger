@@ -26,6 +26,7 @@ import { InviteDialogComponent } from '../../shared/components/invite-dialog/inv
 import { QrCodeComponent } from '../../shared/components/qr-code/qr-code.component';
 import { formatPhone, phoneDigits } from '../../shared/utils/phone';
 import { formatCountdown } from '../../shared/utils/time';
+import { WalletAmountPipe } from '../../shared/utils/wallet-amount';
 
 type KeyState = 'idle' | 'checking' | 'found' | 'missing' | 'error';
 
@@ -57,6 +58,7 @@ const PREVIEW_DEBOUNCE_MS = 300;
     InputText,
     InviteDialogComponent,
     QrCodeComponent,
+    WalletAmountPipe,
   ],
   templateUrl: './withdraw.component.html',
   styleUrl: './withdraw.component.scss',

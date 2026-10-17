@@ -52,6 +52,12 @@
           <dt>Cupo después</dt>
           <dd>{{ l.after.cupo | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
         </div>
+        @if (l.operation.details?.walletAmount; as wa) {
+          <div>
+            <dt>Debitado de tu billetera</dt>
+            <dd>{{ wa | walletAmount }}</dd>
+          </div>
+        }
         <div>
           <dt>Operación</dt>
           <dd>{{ l.operation.reference ?? l.operation.id }}</dd>
@@ -76,6 +82,10 @@
         @case ('failed') {
           <h2 id="error-title">El pago falló</h2>
           <p>La billetera no completó el pago. Tu cupo no cambió.</p>
+        }
+        @case ('currency') {
+          <h2 id="error-title">Moneda no soportada</h2>
+          <p>La red no convierte la moneda de tu billetera a pesos. No se movió dinero.</p>
         }
         @case ('network') {
           <h2 id="error-title">No se pudo crear la solicitud</h2>

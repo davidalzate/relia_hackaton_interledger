@@ -5,7 +5,7 @@ import { Subscription, map, switchMap, tap, timeout } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { ApiOperation, FailureCode, OperationSchema } from '../../shared/schemas/operation.schema';
 import { AgentBalances, Operation } from '../../shared/types/agent';
-import { IDEMPOTENCY_HEADER } from '../http/api';
+import { ApiError, IDEMPOTENCY_HEADER } from '../http/api';
 import { AgentService } from './agent.service';
 import { AuthService } from './auth.service';
 import { OperationsService } from './operations.service';
@@ -23,8 +23,12 @@ export interface CupoLoadRequest {
   amount: number;
 }
 
-/** network: no se pudo crear (riel caído, sin respuesta) */
-export type CupoLoadErrorKind = 'rejected' | 'expired' | 'cancelled' | 'failed' | 'network';
+/**
+ * network: no se pudo crear (riel caído, sin respuesta); currency: Wallet con
+ * `422 wallet_currency_unsupported`
+ */
+export type CupoLoadErrorKind =
+  'rejected' | 'expired' | 'cancelled' | 'failed' | 'currency' | 'network';
 
 interface CupoLoadBase {
   request: CupoLoadRequest;
@@ -93,13 +97,16 @@ export class QuotaTopUpService {
       )
       .subscribe({
         next: (op) => this.update(request, op),
-        error: () => {
+        error: (err: unknown) => {
           this._creating.set(false);
           this._load.set({
             status: 'error',
             request,
             operation: null,
-            error: 'network',
+            error:
+              err instanceof ApiError && err.code === 'wallet_currency_unsupported'
+                ? 'currency'
+                : 'network',
             retryKey: idempotencyKey,
           });
         },

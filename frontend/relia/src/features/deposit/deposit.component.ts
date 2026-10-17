@@ -24,11 +24,21 @@ import { OperationsService } from '../../core/services/operations.service';
 import { ReceiptService } from '../../core/services/receipt.service';
 import { InviteDialogComponent } from '../../shared/components/invite-dialog/invite-dialog.component';
 import { OperationPreview } from '../../shared/schemas/operation.schema';
+import { ErrorCode } from '../../shared/schemas/problem.schema';
 import { formatPhone, phoneDigits } from '../../shared/utils/phone';
+import { WalletAmountPipe } from '../../shared/utils/wallet-amount';
 
 type KeyState = 'idle' | 'checking' | 'found' | 'missing' | 'error';
-/** cupo: `422 insufficient_quota`; network: riel caído o sin respuesta; failed: `payment_failed` */
-type DepositErrorKind = 'cupo' | 'network' | 'failed';
+/**
+ * cupo: `422 insufficient_quota`; currency: `422 wallet_currency_unsupported`;
+ * network: riel caído o sin respuesta; failed: `payment_failed`
+ */
+type DepositErrorKind = 'cupo' | 'currency' | 'network' | 'failed';
+
+const CREATE_ERROR: Partial<Record<ErrorCode, DepositErrorKind>> = {
+  insufficient_quota: 'cupo',
+  wallet_currency_unsupported: 'currency',
+};
 
 /** B2.1 formulario → B2.4 enviando → B2.5 completado | B2.6 error */
 type Step =
@@ -64,6 +74,7 @@ const PREVIEW_DEBOUNCE_MS = 300;
     InputText,
     ProgressSpinner,
     InviteDialogComponent,
+    WalletAmountPipe,
   ],
   templateUrl: './deposit.component.html',
   styleUrl: './deposit.component.scss',
@@ -222,8 +233,7 @@ export class DepositComponent {
         error: (err: unknown) =>
           this.step.set({
             kind: 'error',
-            error:
-              err instanceof ApiError && err.code === 'insufficient_quota' ? 'cupo' : 'network',
+            error: (err instanceof ApiError && err.code && CREATE_ERROR[err.code]) || 'network',
             reference: null,
             amount: cashIn,
           }),

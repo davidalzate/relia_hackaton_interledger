@@ -22,6 +22,7 @@ export const ErrorCodeSchema = z.enum([
   'wallet_already_linked',
   'phone_reserved',
   'wallet_not_found',
+  'wallet_currency_unsupported',
   'invalid_otp',
   'otp_expired',
   'otp_attempts_exceeded',

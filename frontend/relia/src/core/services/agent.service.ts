@@ -249,6 +249,7 @@ export class AgentService {
       details: {
         ...details,
         ...(op.failureCode && { reason: FAILURE_TEXT[op.failureCode] }),
+        ...(op.walletAmount && { walletAmount: op.walletAmount }),
       },
     };
     this._recent.update((ops) => [operation, ...ops.filter((o) => o.id !== op.id)]);

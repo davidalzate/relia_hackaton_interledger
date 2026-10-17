@@ -11,11 +11,15 @@ import { AgentService } from '../../core/services/agent.service';
 import { Settlement } from '../../shared/schemas/admin.schema';
 import { Agent } from '../../shared/schemas/agent.schema';
 import { ErrorCode } from '../../shared/schemas/problem.schema';
+import { WalletAmountPipe } from '../../shared/utils/wallet-amount';
 
 const FAILED = 'El pago falló. No se movió dinero.';
 const ERROR_TEXT: Partial<Record<ErrorCode, string>> = {
   settlement_in_progress: 'Ya hay un pago de comisión en camino para este corresponsal.',
   no_commission: 'Sin comisión: este corresponsal no tiene comisión por pagar.',
+  wallet_not_found: 'La billetera del corresponsal no existe en la red de pagos.',
+  wallet_currency_unsupported:
+    'La red no convierte pesos a la moneda de la billetera del corresponsal. No se movió dinero.',
   rail_unavailable: FAILED,
 };
 
@@ -28,7 +32,7 @@ type Step =
 // D3: pagar al corresponsal toda su comisión acumulada en su billetera
 @Component({
   selector: 'app-pay-commission',
-  imports: [RouterLink, CurrencyPipe, ProgressSpinner],
+  imports: [RouterLink, CurrencyPipe, ProgressSpinner, WalletAmountPipe],
   templateUrl: './pay-commission.component.html',
   styleUrl: './pay-commission.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

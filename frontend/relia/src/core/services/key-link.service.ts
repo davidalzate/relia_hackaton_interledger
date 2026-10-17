@@ -10,9 +10,15 @@ export interface PendingLink {
   phone: string;
   walletAddress: string;
   challengeId: string;
+  /** Moneda de la billetera según el riel (COP, USD…) */
+  walletAssetCode: string;
 }
 
-const ChallengeSchema = z.object({ challengeId: z.string(), phone: z.string() });
+const ChallengeSchema = z.object({
+  challengeId: z.string(),
+  phone: z.string(),
+  walletAssetCode: z.string(),
+});
 const KeyLinkSchema = z.object({ phone: z.string(), walletAddress: z.string() });
 export type KeyLink = z.infer<typeof KeyLinkSchema>;
 const DemoMessagesSchema = z.object({ items: z.array(z.object({ content: z.string() })) });
@@ -29,12 +35,14 @@ export class KeyLinkService {
   /** Datos del paso 2 en curso: C1 los retoma al volver de "Ver SMS" (C2) */
   readonly pending = this._pending.asReadonly();
 
-  /** "Enviar código" y "Reenviar código" (el API invalida el anterior). Errores: 409 `key_already_linked`, `wallet_already_linked`, `phone_reserved`; 422 `wallet_not_found`; 429; 503 */
+  /** "Enviar código" y "Reenviar código" (el API invalida el anterior). Errores: 409 `key_already_linked`, `wallet_already_linked`, `phone_reserved`; 422 `wallet_not_found`; 429; 503. No se rechaza por moneda: trae `walletAssetCode` */
   start(phone: string, walletAddress: string): Observable<void> {
     return this.http.post(`${environment.apiUrl}/key-links`, { phone, walletAddress }).pipe(
       timeout(environment.httpTimeoutMs),
       map((res) => ChallengeSchema.parse(res)),
-      tap(({ challengeId }) => this._pending.set({ phone, walletAddress, challengeId })),
+      tap(({ challengeId, walletAssetCode }) =>
+        this._pending.set({ phone, walletAddress, challengeId, walletAssetCode }),
+      ),
       switchMap(() => this.copyOtpToPhone(phone)),
     );
   }
