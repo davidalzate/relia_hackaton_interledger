@@ -16,6 +16,7 @@ import { AgentService } from '../../../core/services/agent.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ReceiptService } from '../../../core/services/receipt.service';
 import { Receipt } from '../../schemas/operation.schema';
+import { maskPhone } from '../../utils/phone';
 import {
   OPERATION_LABEL,
   Operation,
@@ -39,7 +40,6 @@ interface Row {
 }
 
 /** 300 *** 0001 */
-const maskPhone = (digits: string): string => `${digits.slice(0, 3)} *** ${digits.slice(6)}`;
 
 /** Recibo oficial del API: depósitos y retiros completados creados en el servidor (tienen `reference`) */
 const hasOfficialReceipt = (op: Operation): boolean =>

@@ -55,7 +55,9 @@ function setup(previewResult: OperationPreview = preview(), keyExists = true) {
   const agent = {
     balances: signal({ cupo: 100_000, commission: 0, cash: 0 }),
     validateKey: vi.fn(() =>
-      of(keyExists ? { phone: '3000000001', walletAddressMasked: '$ilp...test.dev/je***' } : null),
+      of(
+        keyExists ? { phone: '+573000000001', walletAddressMasked: '$ilp...test.dev/je***' } : null,
+      ),
     ),
     previewOperation: vi.fn(() => of(previewResult)),
     createDeposit: vi.fn((): Observable<ApiOperation> => of(apiOp('pending'))),
@@ -94,14 +96,14 @@ describe('DepositComponent', () => {
 
   it('pide el desglose al API, valida la llave y crea el depósito', () => {
     const { fixture, c, el, agent, operations, button, fill, confirm } = setup();
-    fill('300 000 0001', 50_000, true);
+    fill('+573000000001', 50_000, true);
     expect(agent.previewOperation).toHaveBeenCalledWith('deposit', 50_000, true);
     expect(el.querySelector('.tell')?.textContent).toContain('51.000');
     expect(button().textContent).toContain('Validar llave');
 
     c['submit']();
     fixture.detectChanges();
-    expect(agent.validateKey).toHaveBeenCalledWith('3000000001');
+    expect(agent.validateKey).toHaveBeenCalledWith('+573000000001');
     expect(el.textContent).toContain('$ilp...test.dev/je***');
     expect(button().textContent).toContain('Confirmar depósito');
 
@@ -110,7 +112,7 @@ describe('DepositComponent', () => {
       /^¿Confirmas que recibiste en efectivo un total de \$\s51\.000 por parte del usuario\?$/,
     );
     expect(agent.createDeposit).toHaveBeenCalledWith(
-      { phone: '3000000001', requestedAmount: 50_000, roundAmount: true },
+      { phone: '+573000000001', requestedAmount: 50_000, roundAmount: true },
       expect.any(String),
     );
     expect(operations.watch).toHaveBeenCalledWith('op-1');
@@ -118,7 +120,7 @@ describe('DepositComponent', () => {
 
   it('muestra Enviando mientras está pending y luego Completado', () => {
     const { fixture, c, el, watch, fill } = setup();
-    fill('300 000 0001', 50_000, true);
+    fill('+573000000001', 50_000, true);
     c['submit']();
     c['submit']();
     watch.next(apiOp('pending'));
@@ -140,7 +142,7 @@ describe('DepositComponent', () => {
         () => new ApiError(422, { title: 'Cupo', status: 422, code: 'insufficient_quota' }),
       ),
     );
-    fill('300 000 0001', 50_000, true);
+    fill('+573000000001', 50_000, true);
     c['submit']();
     c['submit']();
     fixture.detectChanges();
@@ -148,7 +150,7 @@ describe('DepositComponent', () => {
 
     c['retry']();
     fixture.detectChanges();
-    expect(c['form'].getRawValue()).toMatchObject({ phone: '300 000 0001', amount: 50_000 });
+    expect(c['form'].getRawValue()).toMatchObject({ phone: '+573000000001', amount: 50_000 });
     c['submit']();
     const keys = agent.createDeposit.mock.calls.map((call) => (call as unknown[])[1]);
     expect(keys[1]).toBe(keys[0]);
@@ -156,7 +158,7 @@ describe('DepositComponent', () => {
 
   it('pago fallido → B2.6 y el reintento usa una clave nueva', () => {
     const { fixture, c, el, agent, watch, fill } = setup();
-    fill('300 000 0001', 50_000, true);
+    fill('+573000000001', 50_000, true);
     c['submit']();
     c['submit']();
     watch.next(apiOp('failed', 'payment_failed'));
@@ -173,7 +175,7 @@ describe('DepositComponent', () => {
   it('503 rail_unavailable → El simulador no respondió', () => {
     const { fixture, c, el, agent, fill } = setup();
     agent.createDeposit.mockReturnValue(throwError(() => new ApiError(503, null)));
-    fill('300 000 0001', 50_000, true);
+    fill('+573000000001', 50_000, true);
     c['submit']();
     c['submit']();
     fixture.detectChanges();
@@ -182,15 +184,15 @@ describe('DepositComponent', () => {
 
   it('cambiar el celular borra la validación', () => {
     const { c, fill, button } = setup();
-    fill('300 000 0001', 50_000);
+    fill('+573000000001', 50_000);
     c['submit']();
-    fill('300 000 0002', 50_000);
+    fill('+573000000002', 50_000);
     expect(button().textContent).toContain('Validar llave');
   });
 
   it('si la llave no existe abre B5 y al enviar marca la invitación', () => {
     const { fixture, c, el, fill } = setup(preview(), false);
-    fill('300 000 0002', 50_000);
+    fill('+573000000002', 50_000);
     c['submit']();
     fixture.detectChanges();
     expect(c['inviteOpen']()).toBe(true);
@@ -201,25 +203,18 @@ describe('DepositComponent', () => {
     expect(el.textContent).toContain('Invitación enviada por WhatsApp.');
   });
 
-  it('formatea el celular a 300 000 0001 con máximo 10 dígitos', () => {
-    const { c } = setup();
-    c['form'].controls.phone.setValue('300-000a00019999');
-    c['formatPhone']();
-    expect(c['form'].controls.phone.value).toBe('300 000 0001');
-  });
-
   it('violaciones del preview bloquean el botón', () => {
     const { el, fill, button } = setup(
       preview([{ code: 'insufficient_quota', shortfall: 10_000 }]),
     );
-    fill('300 000 0001', 50_000);
+    fill('+573000000001', 50_000);
     expect(el.textContent).toContain('Cupo insuficiente, faltan');
     expect(button().disabled).toBe(true);
   });
 
   it('amount_too_low muestra el aviso sin desglose', () => {
     const { el, fill } = setup(preview([{ code: 'amount_too_low' }]));
-    fill('300 000 0001', 900);
+    fill('+573000000001', 900);
     expect(el.textContent).toContain('El monto debe ser mayor a $1.000.');
     expect(el.querySelector('.tell')).toBeNull();
   });

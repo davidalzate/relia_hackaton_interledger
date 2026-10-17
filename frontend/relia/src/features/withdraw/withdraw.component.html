@@ -133,18 +133,7 @@
     <form class="card" [formGroup]="form" (ngSubmit)="submit()" novalidate>
       <div class="field">
         <label for="phone">Celular del usuario</label>
-        <input
-          pInputText
-          maxlength="12"
-          (input)="formatPhone()"
-          id="phone"
-          type="tel"
-          inputmode="numeric"
-          autocomplete="off"
-          placeholder="300 000 0001"
-          formControlName="phone"
-          aria-describedby="key-status"
-        />
+        <app-phone-field inputId="phone" formControlName="phone" describedBy="key-status" />
       </div>
 
       <div id="key-status" aria-live="polite">
@@ -266,9 +255,5 @@
       }
     </form>
   </main>
-  <app-invite-dialog
-    [phone]="phoneDigits()"
-    [(visible)]="inviteOpen"
-    (sent)="inviteSent.set(true)"
-  />
+  <app-invite-dialog [phone]="phone()" [(visible)]="inviteOpen" (sent)="inviteSent.set(true)" />
 }

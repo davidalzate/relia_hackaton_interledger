@@ -14,7 +14,7 @@ import {
   InvitationService,
   whatsappLink,
 } from '../../../core/services/invitation.service';
-import { formatPhone } from '../../utils/phone';
+import { displayPhone } from '../../utils/phone';
 
 // B5: la llave no existe; ofrece invitar al usuario por WhatsApp a vincular su billetera
 @Component({
@@ -27,13 +27,13 @@ import { formatPhone } from '../../utils/phone';
 export class InviteDialogComponent {
   private readonly invitations = inject(InvitationService);
 
-  /** Celular del usuario, 10 dígitos */
+  /** Celular del usuario en E.164 */
   readonly phone = input.required<string>();
   readonly visible = model(false);
   readonly sent = output<void>();
 
   protected readonly message = INVITE_MESSAGE;
-  protected readonly formattedPhone = computed(() => formatPhone(this.phone()));
+  protected readonly formattedPhone = computed(() => displayPhone(this.phone()));
   protected readonly link = computed(() => whatsappLink(this.phone()));
 
   protected send(): void {

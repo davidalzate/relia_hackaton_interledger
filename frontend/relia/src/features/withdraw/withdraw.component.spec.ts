@@ -28,7 +28,7 @@ const preview = (violations: OperationPreview['violations'] = []): OperationPrev
 });
 
 const request = {
-  phone: '3000000001',
+  phone: '+573000000001',
   amount: 50_000,
   roundForUser: true,
   cashOut: 50_000,
@@ -48,7 +48,7 @@ function setup(previewResult = preview()) {
   vi.useFakeTimers();
   const agent = {
     validateKey: vi.fn(() =>
-      of({ phone: '3000000001', walletAddressMasked: '$ilp...test.dev/je***' }),
+      of({ phone: '+573000000001', walletAddressMasked: '$ilp...test.dev/je***' }),
     ),
     previewOperation: vi.fn(() => of(previewResult)),
   };
@@ -80,7 +80,7 @@ function setup(previewResult = preview()) {
   const el = fixture.nativeElement as HTMLElement;
   const render = () => fixture.detectChanges();
   const fill = () => {
-    c['form'].patchValue({ phone: '300 000 0001', amount: 50_000, roundForUser: true });
+    c['form'].patchValue({ phone: '+573000000001', amount: 50_000, roundForUser: true });
     vi.advanceTimersByTime(300);
     render();
   };
@@ -174,7 +174,7 @@ describe('WithdrawComponent', () => {
     c['retry']();
     render();
     expect(c['form'].getRawValue()).toMatchObject({
-      phone: '300 000 0001',
+      phone: '+573000000001',
       amount: 50_000,
       roundForUser: true,
     });

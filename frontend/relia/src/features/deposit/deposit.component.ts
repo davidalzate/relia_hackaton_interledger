@@ -14,7 +14,6 @@ import { RouterLink } from '@angular/router';
 import { ConfirmationService } from 'primeng/api';
 import { Checkbox } from 'primeng/checkbox';
 import { InputNumber } from 'primeng/inputnumber';
-import { InputText } from 'primeng/inputtext';
 import { ProgressSpinner } from 'primeng/progressspinner';
 import { catchError, debounceTime, distinctUntilChanged, filter, map, of, switchMap } from 'rxjs';
 
@@ -23,8 +22,8 @@ import { AgentService, DepositReceipt } from '../../core/services/agent.service'
 import { OperationsService } from '../../core/services/operations.service';
 import { ReceiptService } from '../../core/services/receipt.service';
 import { InviteDialogComponent } from '../../shared/components/invite-dialog/invite-dialog.component';
+import { PhoneFieldComponent } from '../../shared/components/phone-field/phone-field.component';
 import { OperationPreview } from '../../shared/schemas/operation.schema';
-import { formatPhone, phoneDigits } from '../../shared/utils/phone';
 
 type KeyState = 'idle' | 'checking' | 'found' | 'missing' | 'error';
 /** cupo: `422 insufficient_quota`; network: riel caído o sin respuesta; failed: `payment_failed` */
@@ -61,9 +60,9 @@ const PREVIEW_DEBOUNCE_MS = 300;
     CurrencyPipe,
     Checkbox,
     InputNumber,
-    InputText,
     ProgressSpinner,
     InviteDialogComponent,
+    PhoneFieldComponent,
   ],
   templateUrl: './deposit.component.html',
   styleUrl: './deposit.component.scss',
@@ -96,9 +95,9 @@ export class DepositComponent {
   protected readonly step = signal<Step>({ kind: 'form' });
 
   protected readonly amount = computed(() => this.value().amount ?? 0);
-  // El campo guarda el formato "300 000 0001"; se trabaja con los dígitos
-  protected readonly phoneDigits = computed(() => phoneDigits(this.value().phone ?? ''));
-  protected readonly phoneComplete = computed(() => this.phoneDigits().length === 10);
+  /** E.164, o '' mientras el número está incompleto */
+  protected readonly phone = computed(() => this.value().phone ?? '');
+  protected readonly phoneComplete = computed(() => !!this.phone());
   /** `POST .../operations/preview` al escribir el monto o cambiar "valor redondo" */
   private readonly preview = toSignal(
     this.form.valueChanges.pipe(
@@ -141,16 +140,11 @@ export class DepositComponent {
     this.form.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => (this.idempotencyKey = null));
   }
 
-  protected formatPhone(): void {
-    const formatted = formatPhone(this.form.controls.phone.value);
-    if (formatted !== this.form.controls.phone.value) this.form.controls.phone.setValue(formatted);
-  }
-
   protected validateKey(): void {
     if (!this.canValidate()) return;
     this.keyState.set('checking');
     this.agent
-      .validateKey(this.phoneDigits())
+      .validateKey(this.phone())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (key) => {
@@ -174,7 +168,7 @@ export class DepositComponent {
   }
 
   private send(cashIn: number, walletOut: number): void {
-    const phone = this.phoneDigits();
+    const phone = this.phone();
     const { amount, roundForUser } = this.form.getRawValue();
     if (amount == null) return;
     this.idempotencyKey ??= newIdempotencyKey();

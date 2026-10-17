@@ -1,0 +1,31 @@
+<div class="phone-field">
+  <select
+    class="country"
+    [id]="inputId() + '-country'"
+    aria-label="País"
+    [disabled]="disabled()"
+    (change)="selectCountry($any($event.target).value)"
+    (blur)="onTouched()"
+  >
+    @for (c of countries; track c.iso) {
+      <option [value]="c.iso" [selected]="c.iso === country().iso">
+        {{ c.flag }} +{{ c.dial }}
+      </option>
+    }
+  </select>
+  <input
+    #number
+    pInputText
+    type="tel"
+    inputmode="numeric"
+    [id]="inputId()"
+    [value]="local()"
+    [placeholder]="placeholder()"
+    [disabled]="disabled()"
+    [attr.autocomplete]="autocomplete()"
+    [attr.aria-invalid]="invalid() ? true : null"
+    [attr.aria-describedby]="describedBy()"
+    (input)="typeNumber(number)"
+    (blur)="onTouched()"
+  />
+</div>
