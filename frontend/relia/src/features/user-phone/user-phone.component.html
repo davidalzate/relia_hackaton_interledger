@@ -22,12 +22,16 @@
       <p class="amount">{{ w.request.walletIn | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
       <p class="hint">
         Recibirás {{ w.request.cashOut | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} en efectivo.
-        Operación {{ w.operation.id }}.
+        Operación {{ w.operation.reference ?? w.operation.id }}.
       </p>
-      <div class="actions">
-        <button type="button" class="btn-primary" (click)="approve()">Aprobar</button>
-        <button type="button" class="btn-secondary" (click)="reject()">Rechazar</button>
-      </div>
+      @if (w.approvalUrl) {
+        <div class="actions">
+          <!-- Se aprueba o rechaza en la wallet de prueba; B3 lo detecta por polling -->
+          <a class="btn-primary" [href]="w.approvalUrl" target="_blank" rel="noopener">
+            Aprobar o rechazar en la wallet de prueba
+          </a>
+        </div>
+      }
     </section>
   } @else if (!invitations().length && !messages().length) {
     <p class="card">No hay solicitudes pendientes.</p>

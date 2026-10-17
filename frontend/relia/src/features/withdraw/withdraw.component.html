@@ -35,7 +35,11 @@
         </div>
         <div>
           <dt>Comisión Relia</dt>
-          <dd>{{ fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+          <dd>
+            {{
+              w.request.walletIn - w.request.cashOut | currency: 'COP' : 'symbol-narrow' : '1.0-0'
+            }}
+          </dd>
         </div>
         <div>
           <dt>Cupo antes</dt>
@@ -54,9 +58,12 @@
         </div>
         <div>
           <dt>Operación</dt>
-          <dd>{{ w.operation.id }}</dd>
+          <dd>{{ w.operation.reference ?? w.operation.id }}</dd>
         </div>
       </dl>
+      @if (handoverError()) {
+        <p class="error" role="alert">No pudimos registrar la entrega. Intenta de nuevo.</p>
+      }
       <div class="result-actions">
         <button type="button" class="btn-light" (click)="done()">Listo</button>
         <button type="button" class="btn-outline-light" (click)="receipts.open(w.operation.id)">
@@ -86,13 +93,19 @@
           <h1 id="error-title">Efectivo insuficiente</h1>
           <p>No tienes efectivo suficiente para este retiro. Asigna más efectivo.</p>
         }
+        @case ('network') {
+          <h1 id="error-title">No se pudo enviar la solicitud</h1>
+          <p>El simulador no respondió. No se movió dinero.</p>
+        }
         @default {
           <h1 id="error-title">El pago falló</h1>
           <p>La billetera no completó el pago. No se movió dinero.</p>
         }
       }
       <p class="hint">
-        Operación {{ w.operation.id }} ·
+        @if (w.operation) {
+          Operación {{ w.operation.reference ?? w.operation.id }} ·
+        }
         {{ w.request.cashOut | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
       </p>
       <div class="result-actions">
@@ -133,7 +146,11 @@
             <p class="key key-checking">Validando llave…</p>
           }
           @case ('found') {
-            <p class="key key-ok">Llave validada: el celular tiene billetera Relia.</p>
+            <p class="key key-ok">
+              Llave validada: el celular tiene billetera Relia{{
+                walletMasked() ? ' (' + walletMasked() + ')' : ''
+              }}.
+            </p>
           }
           @case ('missing') {
             <div class="key key-error">
@@ -171,9 +188,7 @@
         <p-checkbox inputId="round" formControlName="roundForUser" [binary]="true" />
         <div>
           <label for="round">Que el usuario reciba el valor redondo</label>
-          <p class="hint">
-            La comisión de {{ fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} se cobra aparte.
-          </p>
+          <p class="hint">La comisión se cobra aparte.</p>
         </div>
       </div>
 
@@ -197,7 +212,7 @@
             </div>
             <div>
               <dt>Comisión Relia</dt>
-              <dd>{{ fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+              <dd>{{ b.fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
             </div>
           </dl>
         </section>
@@ -211,7 +226,9 @@
             </div>
             <div>
               <dt>Tu comisión</dt>
-              <dd class="plus">+{{ commission | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+              <dd class="plus">
+                +{{ b.commission | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+              </dd>
             </div>
             <div>
               <dt>Cupo después</dt>
@@ -235,7 +252,7 @@
 
       @if (keyState() === 'found') {
         <button class="btn-primary" type="submit" [disabled]="!canSend()">
-          Enviar solicitud de pago
+          {{ creating() ? 'Enviando…' : 'Enviar solicitud de pago' }}
         </button>
       } @else {
         <button class="btn-primary" type="submit" [disabled]="!canValidate()">Validar llave</button>

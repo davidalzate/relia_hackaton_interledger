@@ -36,16 +36,16 @@ describe('ReceiptDialogComponent (B9)', () => {
     vi.useFakeTimers();
     const { fixture, card, rows } = await open((agent) => {
       agent['_balances'].set({ cupo: 0, commission: 0, cash: 80_000 });
-      agent.requestWithdrawal({
-        phone: '3000000001',
-        amount: 50_000,
-        roundForUser: true,
-        cashOut: 50_000,
-        walletIn: 51_000,
-        commission: 500,
-      });
-      agent.approveWithdrawal();
-      return agent.operations()[0].id;
+      return agent['record'](
+        50_000,
+        'completed',
+        'withdrawal',
+        {
+          before: { cupo: 0, commission: 0, cash: 80_000 },
+          after: { cupo: 50_000, commission: 500, cash: 30_000 },
+        },
+        { phone: '3000000001', cash: 50_000, wallet: 51_000, roundForUser: true },
+      ).id;
     });
     vi.useRealTimers();
 

@@ -54,56 +54,6 @@ describe('AgentService depósito (API)', () => {
   });
 });
 
-describe('AgentService retiros', () => {
-  const request = {
-    phone: '3000000001',
-    amount: 50_000,
-    roundForUser: true,
-    cashOut: 50_000,
-    walletIn: 51_000,
-    commission: 500,
-  };
-  let agent: AgentService;
-  beforeEach(() => {
-    vi.useFakeTimers();
-    agent = TestBed.inject(AgentService);
-  });
-  afterEach(() => vi.useRealTimers());
-
-  it('aprobar con efectivo mueve saldos y completa la operación', () => {
-    agent['_balances'].set({ cupo: 0, cash: 80_000, commission: 0 });
-    agent.requestWithdrawal(request);
-    expect(agent.withdrawal()?.status).toBe('waiting');
-    expect(agent.operations()[0]).toMatchObject({ type: 'withdrawal', status: 'pending' });
-
-    agent.approveWithdrawal();
-    expect(agent.withdrawal()?.status).toBe('approved');
-    expect(agent.balances()).toEqual({ cupo: 50_000, cash: 30_000, commission: 500 });
-    expect(agent.operations()[0].status).toBe('completed');
-  });
-
-  it('aprobar sin efectivo falla con error cash y no mueve saldos', () => {
-    agent.requestWithdrawal(request);
-    agent.approveWithdrawal();
-    expect(agent.withdrawal()).toMatchObject({ status: 'error', error: 'cash' });
-    expect(agent.balances().cash).toBe(0);
-  });
-
-  it('vence a los 5 minutos', () => {
-    agent.requestWithdrawal(request);
-    vi.advanceTimersByTime(5 * 60_000);
-    expect(agent.withdrawal()).toMatchObject({ status: 'error', error: 'expired' });
-    expect(agent.operations()[0].status).toBe('expired');
-  });
-
-  it('cerrar el flujo en espera cancela la operación', () => {
-    agent.requestWithdrawal(request);
-    agent.clearWithdrawal();
-    expect(agent.withdrawal()).toBeNull();
-    expect(agent.operations()[0].status).toBe('cancelled');
-  });
-});
-
 describe('AgentService carga de cupo', () => {
   let agent: AgentService;
   beforeEach(() => {
@@ -183,16 +133,18 @@ describe('AgentService saldos por operación (B8)', () => {
     const agent = TestBed.inject(AgentService);
     agent['_balances'].set({ cupo: 0, commission: 0, cash: 80_000 });
 
-    agent.requestWithdrawal({
-      phone: '3000000001',
-      amount: 50_000,
-      roundForUser: true,
-      cashOut: 50_000,
-      walletIn: 51_000,
-      commission: 500,
-    });
+    agent['record'](50_000, 'pending', 'withdrawal');
     expect(agent.operations()[0].before).toBeUndefined();
-    agent.approveWithdrawal();
+    agent['record'](
+      50_000,
+      'completed',
+      'withdrawal',
+      {
+        before: { cupo: 0, commission: 0, cash: 80_000 },
+        after: { cupo: 50_000, commission: 500, cash: 30_000 },
+      },
+      { phone: '3000000001', cash: 50_000, wallet: 51_000, roundForUser: true },
+    );
     expect(agent.operations()[0]).toMatchObject({
       before: { cupo: 0, cash: 80_000, commission: 0 },
       after: { cupo: 50_000, cash: 30_000, commission: 500 },

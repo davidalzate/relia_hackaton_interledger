@@ -10,15 +10,17 @@ describe('AdminService', () => {
     const before = admin.totals();
 
     agent['_balances'].set({ cupo: 0, commission: 0, cash: 80_000 });
-    agent.requestWithdrawal({
-      phone: '3000000001',
-      amount: 50_000,
-      roundForUser: true,
-      cashOut: 50_000,
-      walletIn: 51_000,
-      commission: 500,
-    });
-    agent.approveWithdrawal();
+    agent['record'](
+      50_000,
+      'completed',
+      'withdrawal',
+      {
+        before: { cupo: 0, commission: 0, cash: 80_000 },
+        after: { cupo: 50_000, commission: 500, cash: 30_000 },
+      },
+      { phone: '3000000001', cash: 50_000, wallet: 51_000, roundForUser: true },
+    );
+    agent['_balances'].set({ cupo: 50_000, commission: 500, cash: 30_000 });
     vi.useRealTimers();
 
     const rosa = admin.agents()[0];
