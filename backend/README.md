@@ -58,7 +58,7 @@ Al arrancar contra una base vacía, el backend siembra la demo ([API/Persistence
 |---|---|
 | Admin | `admin@relia.co` / `admin1234` |
 | Corresponsales (clave `demo1234`) | `rosa@demo.relia` (Tienda Doña Rosa, en ceros, billetera real `rosa-test`), `luis@demo.relia`, `diana@demo.relia`, `jorge@demo.relia` (con historial de ejemplo y billetera simulada) |
-| Llaves | `3000000001` → `$ilp.interledger-test.dev/jeffdev`; `3000000002` sin llave |
+| Llaves | `+573000000001` → `$ilp.interledger-test.dev/jeffdev`; `+573000000002` sin llave |
 | Tarifa | $1.000: 500 Relia y 500 corresponsal |
 
 ## Base de datos
