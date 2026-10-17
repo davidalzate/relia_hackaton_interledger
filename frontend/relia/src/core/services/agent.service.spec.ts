@@ -1,38 +1,56 @@
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { AgentService, DepositError } from './agent.service';
+import { errorInterceptor } from '../interceptors/error.interceptor';
+import { AgentService } from './agent.service';
 import { loginAs } from './auth.testing';
 
-describe('AgentService.deposit', () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
+describe('AgentService depósito (API)', () => {
+  let agent: AgentService;
+  let http: HttpTestingController;
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        provideHttpClient(withInterceptors([errorInterceptor])),
+        provideHttpClientTesting(),
+      ],
+    });
+    agent = TestBed.inject(AgentService);
+    http = TestBed.inject(HttpTestingController);
+  });
 
-  async function run<T>(source: Promise<T>): Promise<T> {
-    await vi.advanceTimersByTimeAsync(2_000);
-    return source;
-  }
+  it('validateKey: 200 devuelve la llave y 404 key_not_found devuelve null', async () => {
+    const found = firstValueFrom(agent.validateKey('3000000001'));
+    http
+      .expectOne('/api/keys/3000000001')
+      .flush({ phone: '3000000001', walletAddressMasked: '$ilp...test.dev/je***' });
+    expect((await found)?.walletAddressMasked).toBe('$ilp...test.dev/je***');
 
-  it('sin cupo falla, registra la operación fallida y no mueve saldos', async () => {
-    const agent = TestBed.inject(AgentService);
-    const result = run(
-      firstValueFrom(
-        agent.deposit({
-          phone: '3000000001',
-          roundForUser: true,
-          cashIn: 51_000,
-          walletOut: 50_000,
-          commission: 500,
-        }),
-      ),
-    ).catch((e: unknown) => e);
-    const error = await result;
-    expect(error).toBeInstanceOf(DepositError);
-    expect((error as DepositError).kind).toBe('cupo');
-    expect((error as DepositError).operation).toMatchObject({ id: 'RL-0001', status: 'failed' });
-    expect(agent.balances()).toEqual({ cupo: 0, commission: 0, cash: 0 });
+    const missing = firstValueFrom(agent.validateKey('3000000002'));
+    http
+      .expectOne('/api/keys/3000000002')
+      .flush(
+        { title: 'No existe', status: 404, code: 'key_not_found' },
+        { status: 404, statusText: 'Not Found' },
+      );
+    expect(await missing).toBeNull();
+  });
+
+  it('createDeposit envía cashReceivedConfirmed e Idempotency-Key', () => {
+    agent
+      .createDeposit({ phone: '3000000001', requestedAmount: 50_000, roundAmount: true }, 'k-1')
+      .subscribe();
+    const req = http.expectOne((r) => r.url.endsWith('/deposits'));
+    expect(req.request.body).toEqual({
+      phone: '3000000001',
+      requestedAmount: 50_000,
+      roundAmount: true,
+      cashReceivedConfirmed: true,
+    });
+    expect(req.request.headers.get('Idempotency-Key')).toBe('k-1');
   });
 });
 
