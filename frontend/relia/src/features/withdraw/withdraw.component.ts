@@ -63,7 +63,6 @@ export class WithdrawComponent {
     phone: [''],
     amount: this.fb.control<number | null>(null),
     roundForUser: [false],
-    simulateMissing: [false],
   });
   private readonly value = toSignal(this.form.valueChanges, {
     initialValue: this.form.getRawValue(),
@@ -116,12 +115,12 @@ export class WithdrawComponent {
     if (!this.canValidate()) return;
     this.keyState.set('checking');
     this.agent
-      .validateKey(this.phoneDigits(), this.form.getRawValue().simulateMissing)
+      .validateKey(this.phoneDigits())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (exists) => {
-          this.keyState.set(exists ? 'found' : 'missing');
-          this.inviteOpen.set(!exists);
+        next: (key) => {
+          this.keyState.set(key ? 'found' : 'missing');
+          this.inviteOpen.set(!key);
         },
         error: () => this.keyState.set('error'),
       });
@@ -166,7 +165,7 @@ export class WithdrawComponent {
     if (!w) return;
     const { phone, amount, roundForUser } = w.request;
     this.agent.clearWithdrawal();
-    this.form.setValue({ phone: formatPhone(phone), amount, roundForUser, simulateMissing: false });
+    this.form.setValue({ phone: formatPhone(phone), amount, roundForUser });
     this.keyState.set('found');
   }
 }

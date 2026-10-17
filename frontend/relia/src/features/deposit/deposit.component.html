@@ -27,7 +27,7 @@
         </div>
         <div>
           <dt>Comisión Relia</dt>
-          <dd>{{ fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+          <dd>{{ s.receipt.fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
         </div>
         <div>
           <dt>Cupo antes</dt>
@@ -46,7 +46,7 @@
         </div>
         <div>
           <dt>Operación</dt>
-          <dd>{{ s.receipt.operation.id }}</dd>
+          <dd>{{ s.receipt.operation.reference ?? s.receipt.operation.id }}</dd>
         </div>
       </dl>
       <div class="result-actions">
@@ -67,7 +67,7 @@
       <span class="badge-sim">Simulación</span>
       <p>
         Recibiste {{ s.receipt.walletOut | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} en tu
-        billetera Relia. Operación {{ s.receipt.operation.id }}.
+        billetera Relia. Operación {{ s.receipt.operation.reference ?? s.receipt.operation.id }}.
       </p>
     </aside>
   </main>
@@ -78,12 +78,18 @@
       @if (s.error === 'cupo') {
         <h1 id="error-title">Cupo insuficiente</h1>
         <p>No hay cupo para este depósito. Carga cupo y vuelve a intentar.</p>
+      } @else if (s.error === 'failed') {
+        <h1 id="error-title">El pago falló</h1>
+        <p>La billetera del usuario no recibió el dinero. Intenta de nuevo.</p>
       } @else {
         <h1 id="error-title">Error de red</h1>
         <p>El simulador no respondió. No se movió dinero. Intenta de nuevo.</p>
       }
       <p class="hint">
-        Operación {{ s.operationId }} · {{ s.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+        @if (s.reference) {
+          Operación {{ s.reference }} ·
+        }
+        {{ s.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
       </p>
       <div class="result-actions">
         <button type="button" class="btn-primary" (click)="retry()">Intentar de nuevo</button>
@@ -123,7 +129,11 @@
             <p class="key key-checking">Validando llave…</p>
           }
           @case ('found') {
-            <p class="key key-ok">Llave validada: el celular tiene billetera Relia.</p>
+            <p class="key key-ok">
+              Llave validada: el celular tiene billetera Relia{{
+                walletMasked() ? ' (' + walletMasked() + ')' : ''
+              }}.
+            </p>
           }
           @case ('missing') {
             <div class="key key-error">
@@ -161,9 +171,7 @@
         <p-checkbox inputId="round" formControlName="roundForUser" [binary]="true" />
         <div>
           <label for="round">Que el usuario reciba el valor redondo</label>
-          <p class="hint">
-            La comisión de {{ fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} se cobra aparte.
-          </p>
+          <p class="hint">La comisión se cobra aparte.</p>
         </div>
       </div>
 
@@ -187,7 +195,7 @@
             </div>
             <div>
               <dt>Comisión Relia</dt>
-              <dd>{{ fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+              <dd>{{ b.fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
             </div>
           </dl>
         </section>
@@ -201,7 +209,9 @@
             </div>
             <div>
               <dt>Tu comisión</dt>
-              <dd class="plus">+{{ commission | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
+              <dd class="plus">
+                +{{ b.commission | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
+              </dd>
             </div>
             <div>
               <dt>Cupo después</dt>
@@ -229,12 +239,6 @@
         </button>
       } @else {
         <button class="btn-primary" type="submit" [disabled]="!canValidate()">Validar llave</button>
-
-        <div class="check">
-          <p-checkbox inputId="simulate" formControlName="simulateMissing" [binary]="true" />
-          <label for="simulate">Simular que la llave no existe</label>
-          <span class="badge-sim">Simulación</span>
-        </div>
       }
     </form>
   </main>

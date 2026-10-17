@@ -4,7 +4,6 @@ import {
   Observable,
   Subscription,
   catchError,
-  delay,
   map,
   of,
   tap,
@@ -14,7 +13,7 @@ import {
 } from 'rxjs';
 
 import { environment } from '../../environments/environment';
-import { IDEMPOTENCY_HEADER, newIdempotencyKey } from '../http/api';
+import { ApiError, IDEMPOTENCY_HEADER, newIdempotencyKey } from '../http/api';
 import {
   Agent,
   AgentSchema,
@@ -23,6 +22,15 @@ import {
   HistoryKind,
   HistoryPageSchema,
 } from '../../shared/schemas/agent.schema';
+import {
+  ApiOperation,
+  FAILURE_TEXT,
+  KeyLookup,
+  KeyLookupSchema,
+  OperationPreview,
+  OperationPreviewSchema,
+  OperationSchema,
+} from '../../shared/schemas/operation.schema';
 import {
   AgentBalances,
   Operation,
@@ -33,8 +41,6 @@ import { AuthService } from './auth.service';
 
 /** Por debajo de este valor (COP) la Caja muestra avisos de cupo/efectivo bajo */
 export const LOW_BALANCE_THRESHOLD = 50_000;
-/** Lo que tarda el simulador en acreditar la billetera (B2.4) */
-export const DEPOSIT_SEND_MS = 2_000;
 /** Tiempo que tiene el usuario para aprobar un retiro en su billetera (B3.2) */
 export const WITHDRAWAL_TTL_MS = 5 * 60_000;
 
@@ -47,29 +53,16 @@ export const CUPO_LOAD_TTL_MS: Record<CupoMethod, number> = {
 
 export interface DepositRequest {
   phone: string;
-  roundForUser: boolean;
-  cashIn: number;
-  walletOut: number;
-  commission: number;
+  requestedAmount: number;
+  roundAmount: boolean;
 }
 
 export interface DepositReceipt {
   operation: Operation;
   walletOut: number;
+  fee: number;
   before: AgentBalances;
   after: AgentBalances;
-}
-
-export type DepositErrorKind = 'network' | 'cupo';
-
-/** El depósito falló sin mover dinero; `operation` queda registrada como fallida */
-export class DepositError extends Error {
-  constructor(
-    readonly kind: DepositErrorKind,
-    readonly operation: Operation,
-  ) {
-    super(kind);
-  }
 }
 
 /** Datos del formulario B3.1 con el desglose ya calculado */
@@ -147,10 +140,6 @@ const CUPO_ERROR_REASON: Record<CupoLoadErrorKind, string> = {
   expired: 'La solicitud venció',
   cancelled: 'Solicitud cancelada',
 };
-const DEPOSIT_ERROR_REASON: Record<DepositErrorKind, string> = {
-  network: 'El simulador no respondió',
-  cupo: 'Cupo insuficiente',
-};
 
 const WITHDRAWAL_ERROR_STATUS: Record<WithdrawalErrorKind, Operation['status']> = {
   rejected: 'failed',
@@ -158,6 +147,12 @@ const WITHDRAWAL_ERROR_STATUS: Record<WithdrawalErrorKind, Operation['status']> 
   cancelled: 'cancelled',
   failed: 'failed',
   cash: 'failed',
+};
+
+const API_TYPE: Record<ApiOperation['type'], OperationType> = {
+  deposit: 'deposit',
+  withdrawal: 'withdrawal',
+  quotaTopUp: 'cupo',
 };
 
 const KIND_TYPE: Record<HistoryKind, OperationType> = {
@@ -308,28 +303,78 @@ export class AgentService {
       );
   }
 
-  /** Verifica que el celular tenga billetera. `simulateMissing` fuerza "no existe" (demo) */
-  validateKey(_phone: string, simulateMissing: boolean): Observable<boolean> {
-    return of(!simulateMissing).pipe(delay(600), timeout(environment.httpTimeoutMs));
+  /** `GET /keys/{phone}`: null si el celular no tiene billetera (`404 key_not_found`) */
+  validateKey(phone: string): Observable<KeyLookup | null> {
+    return this.http.get(`${environment.apiUrl}/keys/${phone}`).pipe(
+      timeout(environment.httpTimeoutMs),
+      map((res) => KeyLookupSchema.parse(res)),
+      catchError((err: unknown) =>
+        err instanceof ApiError && err.code === 'key_not_found' ? of(null) : throwError(() => err),
+      ),
+    );
+  }
+
+  /** Desglose en vivo (B2.1, B3.1). Responde 200 aunque haya `violations` */
+  previewOperation(
+    type: 'deposit' | 'withdrawal',
+    requestedAmount: number,
+    roundAmount: boolean,
+  ): Observable<OperationPreview> {
+    return this.http
+      .post(`${environment.apiUrl}/agents/${this.auth.agentId()}/operations/preview`, {
+        type,
+        requestedAmount,
+        roundAmount,
+      })
+      .pipe(
+        timeout(environment.httpTimeoutMs),
+        map((res) => OperationPreviewSchema.parse(res)),
+      );
+  }
+
+  /** `POST /agents/{agentId}/deposits` → 202 `pending`; seguir con `OperationsService.watch` */
+  createDeposit(request: DepositRequest, idempotencyKey: string): Observable<ApiOperation> {
+    return this.http
+      .post(
+        `${environment.apiUrl}/agents/${this.auth.agentId()}/deposits`,
+        { ...request, cashReceivedConfirmed: true },
+        { headers: { [IDEMPOTENCY_HEADER]: idempotencyKey } },
+      )
+      .pipe(
+        timeout(environment.httpTimeoutMs),
+        map((res) => OperationSchema.parse(res)),
+      );
+  }
+
+  /** Guarda una operación del API en las recientes (B1, comprobante) y la devuelve mapeada */
+  recordApiOperation(op: ApiOperation, details?: OperationDetails): Operation {
+    const { quota, accruedCommission, cashOnHand } = op.balances;
+    const done = op.status !== 'pending';
+    const operation: Operation = {
+      id: op.id,
+      reference: op.reference,
+      type: API_TYPE[op.type],
+      amount: op.chargedAmount,
+      status: op.status,
+      createdAt: op.createdAt,
+      before: done
+        ? { cupo: quota.before, commission: accruedCommission.before, cash: cashOnHand.before }
+        : undefined,
+      after: done
+        ? { cupo: quota.after, commission: accruedCommission.after, cash: cashOnHand.after }
+        : undefined,
+      details: {
+        ...details,
+        ...(op.failureCode && { reason: FAILURE_TEXT[op.failureCode] }),
+      },
+    };
+    this._recent.update((ops) => [operation, ...ops.filter((o) => o.id !== op.id)]);
+    return operation;
   }
 
   operation(id: string): Operation | undefined {
     const all = [...this._operations(), ...this._recent(), ...this._history().items];
     return all.find((op) => op.id === id);
-  }
-
-  deposit(request: DepositRequest): Observable<DepositReceipt> {
-    return timer(DEPOSIT_SEND_MS).pipe(
-      map(() => this.applyDeposit(request)),
-      timeout(environment.httpTimeoutMs),
-      catchError((err: unknown) =>
-        throwError(() =>
-          err instanceof DepositError
-            ? err
-            : new DepositError('network', this.recordDeposit(request, 'failed', 'network')),
-        ),
-      ),
-    );
   }
 
   /** B3.2: crea la solicitud de pago; vence sola a los 5 min si el usuario no responde */
@@ -487,42 +532,6 @@ export class AgentService {
   clearCupoLoad(): void {
     this.failCupoLoad('cancelled');
     this._cupoLoad.set(null);
-  }
-
-  private applyDeposit(request: DepositRequest): DepositReceipt {
-    const { cashIn, walletOut, commission } = request;
-    const before = this._balances();
-    // El cupo pudo cambiar desde que se armó el formulario
-    if (before.cupo < cashIn) {
-      throw new DepositError('cupo', this.recordDeposit(request, 'failed', 'cupo'));
-    }
-    const after: AgentBalances = {
-      cupo: before.cupo - cashIn,
-      cash: before.cash + cashIn,
-      commission: before.commission + commission,
-    };
-    this._balances.set(after);
-    return {
-      operation: this.recordDeposit(request, 'completed', undefined, { before, after }),
-      walletOut,
-      before,
-      after,
-    };
-  }
-
-  private recordDeposit(
-    request: DepositRequest,
-    status: Operation['status'],
-    error?: DepositErrorKind,
-    balances?: BalanceChange,
-  ): Operation {
-    return this.record(request.cashIn, status, 'deposit', balances, {
-      phone: request.phone,
-      cash: request.cashIn,
-      wallet: request.walletOut,
-      roundForUser: request.roundForUser,
-      ...(error && { reason: DEPOSIT_ERROR_REASON[error] }),
-    });
   }
 
   private record(
