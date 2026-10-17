@@ -97,6 +97,15 @@ Qué endpoints usar en cada flujo (depositar, retirar, cargar cupo, vincular, ad
 3. `POST /payments` con `direction: incoming` → abre `approval.url` y aprueba en la wallet de prueba.
 4. `GET /payments/{paymentId}` hasta un estado final (`completed`, `failed`, `rejected`, `expired`, `cancelled`), o `POST /payments/{paymentId}/cancel` mientras siga en `pending_approval`.
 
+**Pagos entre monedas:** en `payments / Crear un pago de riel`, pestaña **Examples**, están los cuerpos de cada caso
+(`outgoingCop`, `outgoingOtraMoneda`, `incomingCop`, `incomingOtraMoneda`, `sinRutaDeConversion`). Cambia los payment
+pointers por billeteras de prueba en COP, en USD/EUR y en una moneda sin ruta. Qué revisar:
+- `outgoing` a otra moneda: `completed`, `debitAmount` en COP igual a `receiveAmount`, `quotedReceiveAmount` y
+  `receivedAmount` en la moneda del receptor, y su incoming payment cerrado.
+- `incoming` desde otra moneda: `pending_approval`, aprobar en la billetera, `completed`, `receivedAmount` en COP igual
+  a `receiveAmount` y `debitAmount` en la moneda del pagador.
+- Sin ruta: 422 `unsupported_asset` y ningún incoming payment abierto.
+
 ## Regenerar las colecciones
 
 Después de cambiar un YAML, valida y regenera desde la raíz del repo:
@@ -107,7 +116,11 @@ npx @redocly/cli@1.25.11 lint --config contracts/redocly.yaml
 
 # 2. Regenerar las colecciones (carpetas por ruta)
 npx openapi-to-postmanv2@6.4.0 -s contracts/relia-api.openapi.yaml  -o contracts/relia-api.collection.json  -p
-npx openapi-to-postmanv2@6.4.0 -s contracts/rail-proxy.openapi.yaml -o contracts/rail-proxy.collection.json -p
+npx openapi-to-postmanv2@6.4.0 -s contracts/rail-proxy.openapi.yaml -o contracts/rail-proxy.collection.json -p -O parametersResolution=Example
 ```
+
+La colección del proxy usa `parametersResolution=Example`: toma los `examples` del YAML en vez de datos falsos y empareja
+por nombre los ejemplos de la petición con los de la respuesta. Así cada caso de `POST /payments` (misma moneda, entre
+monedas, sin ruta de conversión) queda como un ejemplo con su propio cuerpo.
 
 Haz commit del YAML y de la colección juntos. En Postman, reimporta y elige **Replace** para no duplicar la colección.

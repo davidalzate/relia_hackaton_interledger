@@ -70,6 +70,9 @@
           Te enviamos un SMS al {{ formattedPhone() }}.
           <span class="badge-sim">Simulación</span>
         </p>
+        @if (walletCurrency(); as currency) {
+          <p class="hint">Billetera en {{ currency }}: los pesos se convierten al pagar.</p>
+        }
 
         <div class="field">
           <label for="code" class="sr-only">Código de 6 dígitos</label>
@@ -114,6 +117,9 @@
           tienda Relia.
         </p>
         <p class="pointer">{{ walletAddress() }}</p>
+        @if (walletCurrency(); as currency) {
+          <p class="hint">Billetera en {{ currency }}</p>
+        }
         <button type="button" class="btn-primary" (click)="back()">
           Volver a la app del corresponsal
         </button>

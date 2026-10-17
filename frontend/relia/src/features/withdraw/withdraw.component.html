@@ -40,6 +40,12 @@
           <dt>Pagó desde su billetera</dt>
           <dd>{{ w.request.walletIn | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
         </div>
+        @if (w.operation.details?.walletAmount; as wa) {
+          <div>
+            <dt>Debitado de su billetera</dt>
+            <dd>{{ wa | walletAmount }}</dd>
+          </div>
+        }
         <div>
           <dt>Comisión Relia</dt>
           <dd>
@@ -99,6 +105,12 @@
         @case ('cash') {
           <h1 id="error-title">Efectivo insuficiente</h1>
           <p>No tienes efectivo suficiente para este retiro. Asigna más efectivo.</p>
+        }
+        @case ('currency') {
+          <h1 id="error-title">Moneda no soportada</h1>
+          <p>
+            El riel de pagos no convierte la moneda de la billetera del usuario a pesos. No se movió dinero.
+          </p>
         }
         @case ('network') {
           <h1 id="error-title">No se pudo enviar la solicitud</h1>

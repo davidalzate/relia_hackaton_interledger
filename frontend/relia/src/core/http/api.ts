@@ -17,6 +17,17 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Tipo de error al crear una operación: el que `kinds` asigna al `code` del ApiError o, si no hay (riel caído,
+ * sin respuesta, código sin entrada), `network`.
+ */
+export function createErrorKind<K extends string>(
+  err: unknown,
+  kinds: Partial<Record<ErrorCode, K>>,
+): K | 'network' {
+  return (err instanceof ApiError && err.code && kinds[err.code]) || 'network';
+}
+
 export function toApiError(error: unknown): unknown {
   if (!(error instanceof HttpErrorResponse)) return error;
   const parsed = ProblemSchema.safeParse(error.error);

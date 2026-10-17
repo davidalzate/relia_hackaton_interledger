@@ -17,17 +17,27 @@ import { InputNumber } from 'primeng/inputnumber';
 import { ProgressSpinner } from 'primeng/progressspinner';
 import { catchError, debounceTime, distinctUntilChanged, filter, map, of, switchMap } from 'rxjs';
 
-import { ApiError, newIdempotencyKey } from '../../core/http/api';
+import { createErrorKind, newIdempotencyKey } from '../../core/http/api';
 import { AgentService, DepositReceipt } from '../../core/services/agent.service';
 import { OperationsService } from '../../core/services/operations.service';
 import { ReceiptService } from '../../core/services/receipt.service';
 import { InviteDialogComponent } from '../../shared/components/invite-dialog/invite-dialog.component';
 import { PhoneFieldComponent } from '../../shared/components/phone-field/phone-field.component';
 import { OperationPreview } from '../../shared/schemas/operation.schema';
+import { ErrorCode } from '../../shared/schemas/problem.schema';
+import { WalletAmountPipe } from '../../shared/utils/wallet-amount';
 
 type KeyState = 'idle' | 'checking' | 'found' | 'missing' | 'error';
-/** cupo: `422 insufficient_quota`; network: riel caído o sin respuesta; failed: `payment_failed` */
-type DepositErrorKind = 'cupo' | 'network' | 'failed';
+/**
+ * cupo: `422 insufficient_quota`; currency: `422 wallet_currency_unsupported`;
+ * network: riel caído o sin respuesta; failed: `payment_failed`
+ */
+type DepositErrorKind = 'cupo' | 'currency' | 'network' | 'failed';
+
+const CREATE_ERROR: Partial<Record<ErrorCode, DepositErrorKind>> = {
+  insufficient_quota: 'cupo',
+  wallet_currency_unsupported: 'currency',
+};
 
 /** B2.1 formulario → B2.4 enviando → B2.5 completado | B2.6 error */
 type Step =
@@ -63,6 +73,7 @@ const PREVIEW_DEBOUNCE_MS = 300;
     ProgressSpinner,
     InviteDialogComponent,
     PhoneFieldComponent,
+    WalletAmountPipe,
   ],
   templateUrl: './deposit.component.html',
   styleUrl: './deposit.component.scss',
@@ -216,8 +227,7 @@ export class DepositComponent {
         error: (err: unknown) =>
           this.step.set({
             kind: 'error',
-            error:
-              err instanceof ApiError && err.code === 'insufficient_quota' ? 'cupo' : 'network',
+            error: createErrorKind(err, CREATE_ERROR),
             reference: null,
             amount: cashIn,
           }),

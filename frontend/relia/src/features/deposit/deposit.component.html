@@ -25,6 +25,12 @@
           <dt>Efectivo recibido</dt>
           <dd>{{ s.receipt.operation.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
         </div>
+        @if (s.receipt.operation.details?.walletAmount; as wa) {
+          <div>
+            <dt>En la billetera del usuario</dt>
+            <dd>{{ wa | walletAmount }}</dd>
+          </div>
+        }
         <div>
           <dt>Comisión Relia</dt>
           <dd>{{ s.receipt.fee | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</dd>
@@ -78,6 +84,11 @@
       @if (s.error === 'cupo') {
         <h1 id="error-title">Cupo insuficiente</h1>
         <p>No hay cupo para este depósito. Carga cupo y vuelve a intentar.</p>
+      } @else if (s.error === 'currency') {
+        <h1 id="error-title">Moneda no soportada</h1>
+        <p>
+          El riel de pagos no convierte pesos a la moneda de la billetera del usuario. No se movió dinero.
+        </p>
       } @else if (s.error === 'failed') {
         <h1 id="error-title">El pago falló</h1>
         <p>La billetera del usuario no recibió el dinero. Intenta de nuevo.</p>

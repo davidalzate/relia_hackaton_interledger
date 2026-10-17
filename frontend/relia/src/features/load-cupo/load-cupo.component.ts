@@ -21,11 +21,12 @@ import {
   QuotaTopUpService,
 } from '../../core/services/quota-top-up.service';
 import { formatCountdown } from '../../shared/utils/time';
+import { WalletAmountPipe } from '../../shared/utils/wallet-amount';
 
 // B6: el corresponsal sube su cupo (saldo operativo) por Bre-B o desde su Wallet
 @Component({
   selector: 'app-load-cupo',
-  imports: [RouterLink, ReactiveFormsModule, CurrencyPipe, InputNumber],
+  imports: [RouterLink, ReactiveFormsModule, CurrencyPipe, InputNumber, WalletAmountPipe],
   templateUrl: './load-cupo.component.html',
   styleUrl: './load-cupo.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

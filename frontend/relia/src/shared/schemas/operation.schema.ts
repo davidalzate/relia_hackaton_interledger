@@ -3,6 +3,10 @@ import * as z from 'zod/mini';
 // `Operation` de contracts/relia-api.openapi.yaml: depósito, retiro o carga de cupo
 const BalancePairSchema = z.object({ before: z.number(), after: z.number() });
 
+/** `WalletAmount`: monto en la moneda de la billetera de la contraparte; null si es COP */
+export const WalletAmountSchema = z.object({ value: z.string(), currency: z.string() });
+export type WalletAmount = z.infer<typeof WalletAmountSchema>;
+
 export const FailureCodeSchema = z.enum([
   'customer_rejected',
   'request_expired',
@@ -39,6 +43,7 @@ export const OperationSchema = z.object({
     accruedCommission: BalancePairSchema,
     cashOnHand: BalancePairSchema,
   }),
+  walletAmount: z.optional(z.nullable(WalletAmountSchema)),
 });
 export type ApiOperation = z.infer<typeof OperationSchema>;
 
@@ -92,7 +97,11 @@ export const ReceiptSchema = z.object({
       netAmount: z.number(),
       chargedAmount: z.number(),
     }),
-    payment: z.object({ rail: z.string(), reference: z.string() }),
+    payment: z.object({
+      rail: z.string(),
+      reference: z.string(),
+      walletAmount: z.optional(z.nullable(WalletAmountSchema)),
+    }),
   }),
 });
 export type Receipt = z.infer<typeof ReceiptSchema>;

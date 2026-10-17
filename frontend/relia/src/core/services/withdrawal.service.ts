@@ -4,8 +4,9 @@ import { Observable, Subscription, map, switchMap, tap, timeout } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import { ApiOperation, FailureCode, OperationSchema } from '../../shared/schemas/operation.schema';
+import { ErrorCode } from '../../shared/schemas/problem.schema';
 import { AgentBalances, Operation } from '../../shared/types/agent';
-import { ApiError, IDEMPOTENCY_HEADER } from '../http/api';
+import { IDEMPOTENCY_HEADER, createErrorKind } from '../http/api';
 import { AgentService } from './agent.service';
 import { AuthService } from './auth.service';
 import { OperationsService } from './operations.service';
@@ -25,9 +26,14 @@ export interface WithdrawalRequest {
   commission: number;
 }
 
-/** network: no se pudo crear (riel caído, sin respuesta) */
+/** network: no se pudo crear (riel caído, sin respuesta); currency: `422 wallet_currency_unsupported` */
 export type WithdrawalErrorKind =
-  'rejected' | 'expired' | 'cancelled' | 'failed' | 'cash' | 'network';
+  'rejected' | 'expired' | 'cancelled' | 'failed' | 'cash' | 'currency' | 'network';
+
+const CREATE_ERROR: Partial<Record<ErrorCode, WithdrawalErrorKind>> = {
+  insufficient_cash: 'cash',
+  wallet_currency_unsupported: 'currency',
+};
 
 /** Retiro en curso: B3 muestra la `approvalUrl` como QR para que el usuario la escanee */
 interface WithdrawalBase {
@@ -95,13 +101,12 @@ export class WithdrawalService {
         next: (op) => this.update(request, op),
         error: (err: unknown) => {
           this._creating.set(false);
-          const cash = err instanceof ApiError && err.code === 'insufficient_cash';
           // Sin operación terminada: reintentar con la misma clave recupera la ya creada, si la hay
           this._withdrawal.set({
             status: 'error',
             request,
             operation: null,
-            error: cash ? 'cash' : 'network',
+            error: createErrorKind(err, CREATE_ERROR),
             retryKey: idempotencyKey,
           });
         },

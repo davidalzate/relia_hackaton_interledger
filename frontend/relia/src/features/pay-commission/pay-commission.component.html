@@ -46,6 +46,9 @@
           <p class="amount">
             {{ s.settlement.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
           </p>
+          @if (s.settlement.walletAmount; as wa) {
+            <p>En su billetera: {{ wa | walletAmount }}</p>
+          }
           <p>{{ s.settlement.agentName }} · {{ s.settlement.reference }}</p>
           <div class="result-actions">
             <a class="btn-light" routerLink="/admin">Listo</a>

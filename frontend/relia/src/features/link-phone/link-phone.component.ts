@@ -13,7 +13,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { InputText } from 'primeng/inputtext';
 
 import { ApiError } from '../../core/http/api';
-import { KeyLinkService } from '../../core/services/key-link.service';
+import { KeyLinkService, PendingLink } from '../../core/services/key-link.service';
 import { ErrorCode } from '../../shared/schemas/problem.schema';
 import { PhoneFieldComponent } from '../../shared/components/phone-field/phone-field.component';
 import { displayPhone } from '../../shared/utils/phone';
@@ -31,6 +31,9 @@ const LINK_ERROR: Partial<Record<ErrorCode, string>> = {
 };
 
 type Step = 'form' | 'code' | 'done';
+
+const foreignCurrency = (link: PendingLink | null): string | null =>
+  link && link.walletAssetCode !== 'COP' ? link.walletAssetCode : null;
 
 // C1: página pública para que el usuario asocie su celular (llave) a su payment pointer
 @Component({
@@ -71,6 +74,12 @@ export class LinkPhoneComponent {
   protected readonly walletAddress = computed(() => (this.value().walletAddress ?? '').trim());
   protected readonly phoneInvalid = computed(() => !this.phone());
   protected readonly pointerInvalid = computed(() => !POINTER.test(this.walletAddress()));
+  /** Vinculación recién verificada: el servicio limpia `pending()` al verificar y la pantalla final la sigue mostrando */
+  private readonly linked = signal<PendingLink | null>(null);
+  /** "Billetera en USD": solo si la billetera no es COP (`walletAssetCode` de `POST /key-links`) */
+  protected readonly walletCurrency = computed(() =>
+    foreignCurrency(this.keyLinks.pending() ?? this.linked()),
+  );
 
   /** C1.1 → C1.2. También "Reenviar código": el API crea el desafío y manda el OTP */
   protected sendCode(): void {
@@ -98,12 +107,14 @@ export class LinkPhoneComponent {
     this.codeError.set(null);
     this.linkError.set(null);
     this.linking.set(true);
+    const link = this.keyLinks.pending();
     this.keyLinks
       .verify(this.form.controls.code.value.trim())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
           this.linking.set(false);
+          this.linked.set(link);
           this.step.set('done');
         },
         error: (err: unknown) => this.fail(err),
@@ -134,6 +145,7 @@ export class LinkPhoneComponent {
 
   protected changeData(): void {
     this.keyLinks.reset();
+    this.linked.set(null);
     this.step.set('form');
     this.linkError.set(null);
   }

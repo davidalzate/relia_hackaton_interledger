@@ -126,6 +126,9 @@ paths:
         Paga a la billetera registrada del corresponsal por el riel.
         - `409 settlement_in_progress`: ya hay una liquidación pendiente para este corresponsal.
         - `422 no_commission`: la comisión acumulada es $0.
+        - `422 wallet_not_found`: la billetera del corresponsal no existe en el riel.
+        - `422 wallet_currency_unsupported`: la billetera existe, pero el riel no convierte de COP a su moneda.
+          Si la convierte, Relia envía exactamente `amount` en COP y el corresponsal recibe lo que el riel convierta (`walletAmount`).
         - `503 rail_unavailable`: el riel no aceptó el pago (por ejemplo, Relia no tiene permiso activo para pagar). No se crea nada.
 
         En demo, si el corresponsal tiene `walletSimulated`, la liquidación pasa a `paid` sin usar el riel.
@@ -518,6 +521,10 @@ paths:
         - la wallet no está vinculada a otro celular (`409 wallet_already_linked`, sin revelar cuál) ni es de un corresponsal o de Relia (`409 phone_reserved`);
         - el payment pointer existe en el riel (`422 wallet_not_found`).
 
+        No se rechaza por moneda: la respuesta trae `walletAssetCode`, la moneda de la billetera según el riel, para
+        mostrarla ("Billetera en USD"). Si el riel no convierte entre COP y esa moneda, el error llega al depositar o
+        retirar (`422 wallet_currency_unsupported`).
+
         Genera un OTP de 6 dígitos que vence en 5 minutos, con 5 intentos, y lo deja por SMS simulado en la bandeja del teléfono.
         Llamarlo de nuevo para el mismo celular ("Reenviar código") invalida el desafío anterior.
       security: []
@@ -622,6 +629,8 @@ paths:
       description: |
         Crear el depósito es la confirmación de que el corresponsal recibió el efectivo.
         Reserva `chargedAmount` de cupo y paga `netAmount` desde la billetera de Relia a la del usuario.
+        Si la billetera del usuario no es COP, Relia envía exactamente `netAmount` en COP y el usuario recibe lo que el
+        riel convierta (`walletAmount`). `422 wallet_currency_unsupported` si el riel no convierte a su moneda.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -657,6 +666,8 @@ paths:
         Reserva `netAmount` del efectivo en caja y solicita `chargedAmount` a la billetera del usuario.
         La operación trae `approvalUrl` y vence en 5 minutos (`expiresAt`). El backend envía la `approvalUrl` por SMS simulado.
         No se entrega efectivo hasta que la operación esté `completed`.
+        Si la billetera del usuario no es COP, Relia recibe exactamente `chargedAmount` en COP y el riel le debita al
+        usuario el equivalente en su moneda (`walletAmount`). `422 wallet_currency_unsupported` si el riel no convierte.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -691,6 +702,7 @@ paths:
       description: |
         - `breB`: devuelve `qrPayload` simulado y vence en 10 minutos. El pago se marca recibido desde el Modo demo.
         - `wallet`: solicita el pago al payment pointer registrado del corresponsal; devuelve `approvalUrl` y vence en 5 minutos.
+          La billetera puede estar en otra moneda: el riel debita el equivalente. `422 wallet_currency_unsupported` si no convierte.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -990,7 +1002,7 @@ components:
     ValidationError:
       description: |
         Regla de negocio o validación (`validation_error`, `amount_too_low`, `insufficient_quota`,
-        `insufficient_cash`, `no_change`, `wallet_not_found`, `invalid_otp`, `otp_expired`,
+        `insufficient_cash`, `no_change`, `wallet_not_found`, `wallet_currency_unsupported`, `invalid_otp`, `otp_expired`,
         `otp_attempts_exceeded`, `no_commission`).
       content:
         application/problem+json:
@@ -1027,6 +1039,23 @@ components:
       pattern: '^\+[1-9][0-9]{7,14}$'
       examples: ['+573000000001']
 
+    WalletAmount:
+      type: object
+      description: |
+        Monto en la moneda de la billetera de la contraparte (usuario o corresponsal), solo cuando no es COP.
+        Lo convierte el riel; los montos de Relia siguen en COP.
+      required: [value, currency]
+      properties:
+        value:
+          type: string
+          pattern: '^[0-9]+(\.[0-9]+)?$'
+          description: Decimal en unidades de la moneda, con tantos decimales como su escala en el riel.
+          examples: ['12.34']
+        currency:
+          type: string
+          description: Código de la moneda según el riel.
+          examples: [USD]
+
     MaskedPhone:
       type: string
       description: Celular enmascarado para mostrar.
@@ -1061,6 +1090,7 @@ components:
         - wallet_already_linked
         - phone_reserved
         - wallet_not_found
+        - wallet_currency_unsupported
         - invalid_otp
         - otp_expired
         - otp_attempts_exceeded
@@ -1401,6 +1431,13 @@ components:
               format: uuid
             name:
               type: string
+        walletAmount:
+          description: |
+            Lo que recibió el corresponsal en la moneda de su billetera o, mientras se paga, lo cotizado. Null si su
+            billetera es COP. Solo al crear y en el detalle; el listado lo trae en null.
+          oneOf:
+            - $ref: '#/components/schemas/WalletAmount'
+            - type: 'null'
 
     SettlementPage:
       type: object
@@ -1501,7 +1538,7 @@ components:
 
     KeyLinkChallenge:
       type: object
-      required: [challengeId, phone, expiresAt, maxAttempts]
+      required: [challengeId, phone, expiresAt, maxAttempts, walletAssetCode]
       properties:
         challengeId:
           type: string
@@ -1515,6 +1552,10 @@ components:
         maxAttempts:
           type: integer
           examples: [5]
+        walletAssetCode:
+          type: string
+          description: Moneda de la billetera según el riel. Si no es COP, los pesos se convierten al pagar.
+          examples: [COP, USD]
 
     VerifyKeyLinkRequest:
       type: object
@@ -1765,6 +1806,14 @@ components:
           description: Solo retiros. Cuándo el corresponsal confirmó la entrega del efectivo.
         balances:
           $ref: '#/components/schemas/BalanceChange'
+        walletAmount:
+          description: |
+            Monto en la moneda de la billetera de la contraparte, si no es COP. Depósito: lo que recibió el usuario o,
+            mientras procesa, lo cotizado. Retiro y carga por Wallet: lo que se le debitó al pagador. Null si es COP o
+            el riel aún no lo informa.
+          oneOf:
+            - $ref: '#/components/schemas/WalletAmount'
+            - type: 'null'
 
     OperationCustomer:
       type: object
@@ -1955,6 +2004,13 @@ components:
             reference:
               type: string
               description: Identificador del pago en el riel.
+            walletAmount:
+              description: |
+                Lo que entró (depósito) o salió (retiro) de la billetera del usuario en su moneda, solo si no es COP.
+                `currency` del recibo sigue en COP.
+              oneOf:
+                - $ref: '#/components/schemas/WalletAmount'
+                - type: 'null'
 
     ReceiptDelivery:
       type: object

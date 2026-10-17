@@ -1,1 +1,2579 @@
-{"item":[{"name":"wallet-addresses","description":"","item":[{"id":"7f8de72a-a224-456c-9b9b-4ebceb24f93f","name":"Resolver un payment pointer","request":{"name":"Resolver un payment pointer","description":{"content":"Confirma que existe y devuelve su moneda y escala. Lo usa la vinculación de llave.","type":"text/plain"},"url":{"path":["wallet-addresses"],"host":["{{baseUrl}}"],"query":[{"disabled":false,"description":{"content":"(Required) ","type":"text/plain"},"key":"pointer","value":"$1z"}],"variable":[]},"header":[{"key":"Accept","value":"application/json"}],"method":"GET","body":{},"auth":null},"response":[{"id":"6d382ae5-c6b4-4c8d-8b1c-b0078ec6dd5d","name":"Billetera encontrada.","originalRequest":{"url":{"path":["wallet-addresses"],"host":["{{baseUrl}}"],"query":[{"disabled":false,"description":{"content":"(Required) ","type":"text/plain"},"key":"pointer","value":"$1z"}],"variable":[]},"header":[{"key":"Accept","value":"application/json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"GET","body":{}},"status":"OK","code":200,"header":[{"key":"Content-Type","value":"application/json"}],"body":"{\n  \"pointer\": \"$qETQ.u/'jgP<)+I\",\n  \"url\": \"<uri>\",\n  \"assetCode\": \"<string>\",\n  \"assetScale\": \"<integer>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"7165ba65-0191-41ed-adf4-92b4c842e5c0","name":"Falta `X-Api-Key` o es incorrecta (`unauthorized`).","originalRequest":{"url":{"path":["wallet-addresses"],"host":["{{baseUrl}}"],"query":[{"disabled":false,"description":{"content":"(Required) ","type":"text/plain"},"key":"pointer","value":"$1z"}],"variable":[]},"header":[{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"GET","body":{}},"status":"Unauthorized","code":401,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"72e4ee3d-3bda-4227-aa56-0ccb496213e7","name":"Pago o billetera inexistente (`not_found`, `wallet_not_found`).","originalRequest":{"url":{"path":["wallet-addresses"],"host":["{{baseUrl}}"],"query":[{"disabled":false,"description":{"content":"(Required) ","type":"text/plain"},"key":"pointer","value":"$1z"}],"variable":[]},"header":[{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"GET","body":{}},"status":"Not Found","code":404,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"a0a9105c-c044-4922-9d2e-a24c50ae4490","name":"Cuerpo inválido (`validation_error`) o moneda distinta a la del riel (`unsupported_asset`), o\ncontraparte igual a la billetera de Relia (`same_wallet`).","originalRequest":{"url":{"path":["wallet-addresses"],"host":["{{baseUrl}}"],"query":[{"disabled":false,"description":{"content":"(Required) ","type":"text/plain"},"key":"pointer","value":"$1z"}],"variable":[]},"header":[{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"GET","body":{}},"status":"Unprocessable Entity (WebDAV) (RFC 4918)","code":422,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"8016646e-73ae-4c0d-88b5-7b15558443f9","name":"El riel no respondió (`rail_unavailable`) o Relia no tiene permiso activo para pagar\n(`relia_grant_unavailable`). No se creó ni cambió nada; se puede reintentar.","originalRequest":{"url":{"path":["wallet-addresses"],"host":["{{baseUrl}}"],"query":[{"disabled":false,"description":{"content":"(Required) ","type":"text/plain"},"key":"pointer","value":"$1z"}],"variable":[]},"header":[{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"GET","body":{}},"status":"Service Unavailable","code":503,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"}],"event":[],"protocolProfileBehavior":{"disableBodyPruning":true}}]},{"name":"payments","description":"","item":[{"id":"80b97b8f-7a3a-4711-8a3b-e37a8cb0efa2","name":"Crear un pago de riel","request":{"name":"Crear un pago de riel","description":{"content":"- `outgoing`: Relia paga desde su billetera a `counterparty`. Usa el permiso permanente de Relia; si no está\n  activo responde 503 `relia_grant_unavailable`. Arranca en `processing`.\n- `incoming`: Relia cobra a la billetera `counterparty`. Arranca en `pending_approval` con `approval.url`,\n  que el backend entrega al pagador por SMS simulado. El pagador aprueba en su billetera (su app bancaria) y\n  no vuelve a ninguna página de Relia; el proxy detecta la aprobación o el rechazo consultando el riel.\n\nEn ambos casos `receiveAmount` es fijo: el destino recibe exactamente ese monto y el costo del riel, si lo\nhay, lo absorbe el pagador.\n\nEl proxy hace cumplir `expiresAt` con su propio temporizador, porque Open Payments no reporta el\nvencimiento de una aprobación. Al vencer, cancela la aprobación, cierra el cobro y pasa a `expired`.\nRepetir la misma `Idempotency-Key` con el mismo cuerpo devuelve el pago existente con 200.\n","type":"text/plain"},"url":{"path":["payments"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"disabled":false,"description":{"content":"(Required) Id del pago en el backend (`pagos.id`).","type":"text/plain"},"key":"Idempotency-Key","value":"<uuid>"},{"key":"Content-Type","value":"application/json"},{"key":"Accept","value":"application/json"}],"method":"POST","body":{"mode":"raw","raw":"{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ODv/UFp![R\",\n  \"receiveAmount\": {\n    \"value\": \"8146\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"expiresAt\": \"<dateTime>\",\n  \"description\": \"<string>\"\n}","options":{"raw":{"headerFamily":"json","language":"json"}}},"auth":null},"response":[{"id":"a7d31db7-5c7f-481c-a670-32105e307694","name":"Pago ya creado con esta `Idempotency-Key`.","originalRequest":{"url":{"path":["payments"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"disabled":false,"description":{"content":"(Required) Id del pago en el backend (`pagos.id`).","type":"text/plain"},"key":"Idempotency-Key","value":"<uuid>"},{"key":"Content-Type","value":"application/json"},{"key":"Accept","value":"application/json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{"mode":"raw","raw":"{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ODv/UFp![R\",\n  \"receiveAmount\": {\n    \"value\": \"8146\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"expiresAt\": \"<dateTime>\",\n  \"description\": \"<string>\"\n}","options":{"raw":{"headerFamily":"json","language":"json"}}}},"status":"OK","code":200,"header":[{"key":"Content-Type","value":"application/json"}],"body":"{\n  \"id\": \"<uuid>\",\n  \"idempotencyKey\": \"<uuid>\",\n  \"direction\": \"outgoing\",\n  \"status\": \"pending_approval\",\n  \"sender\": \"$zak9L/!x\",\n  \"receiver\": \"$$\",\n  \"receiveAmount\": {\n    \"value\": \"39432493515\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"createdAt\": \"<dateTime>\",\n  \"updatedAt\": \"<dateTime>\",\n  \"version\": \"<integer>\",\n  \"debitAmount\": {\n    \"value\": \"989723\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"receivedAmount\": {\n    \"value\": \"96\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"approval\": {\n    \"method\": \"qr\",\n    \"url\": \"<uri>\",\n    \"payload\": \"<string>\"\n  },\n  \"expiresAt\": \"<string,null-date-time>\",\n  \"failureCode\": \"partial_payment\",\n  \"failureDetail\": \"<string,null>\",\n  \"rail\": {\n    \"incomingPaymentUrl\": \"<string,null-uri>\",\n    \"quoteUrl\": \"<string,null-uri>\",\n    \"outgoingPaymentUrl\": \"<string,null-uri>\"\n  },\n  \"completedAt\": \"<string,null-date-time>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"e618bbc3-409e-46b9-9d71-b724e9fea43e","name":"Pago creado.","originalRequest":{"url":{"path":["payments"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"disabled":false,"description":{"content":"(Required) Id del pago en el backend (`pagos.id`).","type":"text/plain"},"key":"Idempotency-Key","value":"<uuid>"},{"key":"Content-Type","value":"application/json"},{"key":"Accept","value":"application/json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{"mode":"raw","raw":"{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ODv/UFp![R\",\n  \"receiveAmount\": {\n    \"value\": \"8146\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"expiresAt\": \"<dateTime>\",\n  \"description\": \"<string>\"\n}","options":{"raw":{"headerFamily":"json","language":"json"}}}},"status":"Created","code":201,"header":[{"key":"Content-Type","value":"application/json"},{"disabled":false,"description":{"content":"","type":"text/plain"},"key":"Location","value":"<string>"}],"body":"{\n  \"id\": \"<uuid>\",\n  \"idempotencyKey\": \"<uuid>\",\n  \"direction\": \"outgoing\",\n  \"status\": \"pending_approval\",\n  \"sender\": \"$zak9L/!x\",\n  \"receiver\": \"$$\",\n  \"receiveAmount\": {\n    \"value\": \"39432493515\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"createdAt\": \"<dateTime>\",\n  \"updatedAt\": \"<dateTime>\",\n  \"version\": \"<integer>\",\n  \"debitAmount\": {\n    \"value\": \"989723\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"receivedAmount\": {\n    \"value\": \"96\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"approval\": {\n    \"method\": \"qr\",\n    \"url\": \"<uri>\",\n    \"payload\": \"<string>\"\n  },\n  \"expiresAt\": \"<string,null-date-time>\",\n  \"failureCode\": \"partial_payment\",\n  \"failureDetail\": \"<string,null>\",\n  \"rail\": {\n    \"incomingPaymentUrl\": \"<string,null-uri>\",\n    \"quoteUrl\": \"<string,null-uri>\",\n    \"outgoingPaymentUrl\": \"<string,null-uri>\"\n  },\n  \"completedAt\": \"<string,null-date-time>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"16ca485a-a6b2-4770-9d49-9edc8530f89a","name":"Falta `X-Api-Key` o es incorrecta (`unauthorized`).","originalRequest":{"url":{"path":["payments"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"disabled":false,"description":{"content":"(Required) Id del pago en el backend (`pagos.id`).","type":"text/plain"},"key":"Idempotency-Key","value":"<uuid>"},{"key":"Content-Type","value":"application/json"},{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{"mode":"raw","raw":"{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ODv/UFp![R\",\n  \"receiveAmount\": {\n    \"value\": \"8146\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"expiresAt\": \"<dateTime>\",\n  \"description\": \"<string>\"\n}","options":{"raw":{"headerFamily":"json","language":"json"}}}},"status":"Unauthorized","code":401,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"57e69619-707f-4570-bcef-51657218de0a","name":"Pago o billetera inexistente (`not_found`, `wallet_not_found`).","originalRequest":{"url":{"path":["payments"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"disabled":false,"description":{"content":"(Required) Id del pago en el backend (`pagos.id`).","type":"text/plain"},"key":"Idempotency-Key","value":"<uuid>"},{"key":"Content-Type","value":"application/json"},{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{"mode":"raw","raw":"{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ODv/UFp![R\",\n  \"receiveAmount\": {\n    \"value\": \"8146\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"expiresAt\": \"<dateTime>\",\n  \"description\": \"<string>\"\n}","options":{"raw":{"headerFamily":"json","language":"json"}}}},"status":"Not Found","code":404,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"e2a2be96-703b-4d3d-b227-ef36103e87f1","name":"Conflicto de estado o de idempotencia (`idempotency_conflict`, `payment_not_cancellable`).","originalRequest":{"url":{"path":["payments"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"disabled":false,"description":{"content":"(Required) Id del pago en el backend (`pagos.id`).","type":"text/plain"},"key":"Idempotency-Key","value":"<uuid>"},{"key":"Content-Type","value":"application/json"},{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{"mode":"raw","raw":"{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ODv/UFp![R\",\n  \"receiveAmount\": {\n    \"value\": \"8146\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"expiresAt\": \"<dateTime>\",\n  \"description\": \"<string>\"\n}","options":{"raw":{"headerFamily":"json","language":"json"}}}},"status":"Conflict","code":409,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"e996e57d-16cf-4c2e-b089-0255bacb70c9","name":"Cuerpo inválido (`validation_error`) o moneda distinta a la del riel (`unsupported_asset`), o\ncontraparte igual a la billetera de Relia (`same_wallet`).","originalRequest":{"url":{"path":["payments"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"disabled":false,"description":{"content":"(Required) Id del pago en el backend (`pagos.id`).","type":"text/plain"},"key":"Idempotency-Key","value":"<uuid>"},{"key":"Content-Type","value":"application/json"},{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{"mode":"raw","raw":"{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ODv/UFp![R\",\n  \"receiveAmount\": {\n    \"value\": \"8146\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"expiresAt\": \"<dateTime>\",\n  \"description\": \"<string>\"\n}","options":{"raw":{"headerFamily":"json","language":"json"}}}},"status":"Unprocessable Entity (WebDAV) (RFC 4918)","code":422,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"f4c5dd1a-85f0-45eb-bd85-73e41201b1c2","name":"El riel no respondió (`rail_unavailable`) o Relia no tiene permiso activo para pagar\n(`relia_grant_unavailable`). No se creó ni cambió nada; se puede reintentar.","originalRequest":{"url":{"path":["payments"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"disabled":false,"description":{"content":"(Required) Id del pago en el backend (`pagos.id`).","type":"text/plain"},"key":"Idempotency-Key","value":"<uuid>"},{"key":"Content-Type","value":"application/json"},{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{"mode":"raw","raw":"{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ODv/UFp![R\",\n  \"receiveAmount\": {\n    \"value\": \"8146\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"expiresAt\": \"<dateTime>\",\n  \"description\": \"<string>\"\n}","options":{"raw":{"headerFamily":"json","language":"json"}}}},"status":"Service Unavailable","code":503,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"}],"event":[],"protocolProfileBehavior":{"disableBodyPruning":true}},{"name":"{paymentId}","description":"","item":[{"id":"5b068d1d-11b7-44b3-a506-7b81e65a20bc","name":"Consultar un pago de riel","request":{"name":"Consultar un pago de riel","description":{"content":"Devuelve el último estado conocido por el proxy, sin llamar al riel en esta petición.\nEl backend lo consulta al leer una operación pendiente (máximo una vez por segundo por pago) y en un\nbarrido de fondo cada 15 s.\n","type":"text/plain"},"url":{"path":["payments",":paymentId"],"host":["{{baseUrl}}"],"query":[],"variable":[{"type":"any","value":"<uuid>","key":"paymentId","disabled":false,"description":{"content":"(Required) ","type":"text/plain"}}]},"header":[{"key":"Accept","value":"application/json"}],"method":"GET","body":{},"auth":null},"response":[{"id":"0bed8719-609e-458f-a025-15a4535bb20e","name":"Pago.","originalRequest":{"url":{"path":["payments",":paymentId"],"host":["{{baseUrl}}"],"query":[],"variable":[{"disabled":false,"description":{"content":"(Required) ","type":"text/plain"},"type":"any","value":"<uuid>","key":"paymentId"}]},"header":[{"key":"Accept","value":"application/json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"GET","body":{}},"status":"OK","code":200,"header":[{"key":"Content-Type","value":"application/json"}],"body":"{\n  \"id\": \"<uuid>\",\n  \"idempotencyKey\": \"<uuid>\",\n  \"direction\": \"outgoing\",\n  \"status\": \"pending_approval\",\n  \"sender\": \"$zak9L/!x\",\n  \"receiver\": \"$$\",\n  \"receiveAmount\": {\n    \"value\": \"39432493515\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"createdAt\": \"<dateTime>\",\n  \"updatedAt\": \"<dateTime>\",\n  \"version\": \"<integer>\",\n  \"debitAmount\": {\n    \"value\": \"989723\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"receivedAmount\": {\n    \"value\": \"96\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"approval\": {\n    \"method\": \"qr\",\n    \"url\": \"<uri>\",\n    \"payload\": \"<string>\"\n  },\n  \"expiresAt\": \"<string,null-date-time>\",\n  \"failureCode\": \"partial_payment\",\n  \"failureDetail\": \"<string,null>\",\n  \"rail\": {\n    \"incomingPaymentUrl\": \"<string,null-uri>\",\n    \"quoteUrl\": \"<string,null-uri>\",\n    \"outgoingPaymentUrl\": \"<string,null-uri>\"\n  },\n  \"completedAt\": \"<string,null-date-time>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"992a8f6a-6c7a-4051-9e98-7105b5289f25","name":"Falta `X-Api-Key` o es incorrecta (`unauthorized`).","originalRequest":{"url":{"path":["payments",":paymentId"],"host":["{{baseUrl}}"],"query":[],"variable":[{"disabled":false,"description":{"content":"(Required) ","type":"text/plain"},"type":"any","value":"<uuid>","key":"paymentId"}]},"header":[{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"GET","body":{}},"status":"Unauthorized","code":401,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"12bdee37-af8f-4fc6-8f5d-f98111aacd9b","name":"Pago o billetera inexistente (`not_found`, `wallet_not_found`).","originalRequest":{"url":{"path":["payments",":paymentId"],"host":["{{baseUrl}}"],"query":[],"variable":[{"disabled":false,"description":{"content":"(Required) ","type":"text/plain"},"type":"any","value":"<uuid>","key":"paymentId"}]},"header":[{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"GET","body":{}},"status":"Not Found","code":404,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"}],"event":[],"protocolProfileBehavior":{"disableBodyPruning":true}},{"name":"cancel","description":"","item":[{"id":"2f9640b5-9184-4e1a-b7f1-57f89a9e6d29","name":"Cancelar un cobro pendiente de aprobación","request":{"name":"Cancelar un cobro pendiente de aprobación","description":{"content":"Solo `incoming` en `pending_approval`. Cancela la aprobación en el riel y cierra el cobro.\nDespués de la aprobación ya no se puede cancelar: responde 409 `payment_not_cancellable` y el pago sigue su\ncurso. Cancelar un pago ya cancelado devuelve 200 con el mismo pago.\n","type":"text/plain"},"url":{"path":["payments",":paymentId","cancel"],"host":["{{baseUrl}}"],"query":[],"variable":[{"type":"any","value":"<uuid>","key":"paymentId","disabled":false,"description":{"content":"(Required) ","type":"text/plain"}}]},"header":[{"key":"Accept","value":"application/json"}],"method":"POST","body":{},"auth":null},"response":[{"id":"c8a3f858-e1af-4ad0-bf8d-fc356854ae0d","name":"Pago cancelado.","originalRequest":{"url":{"path":["payments",":paymentId","cancel"],"host":["{{baseUrl}}"],"query":[],"variable":[{"disabled":false,"description":{"content":"(Required) ","type":"text/plain"},"type":"any","value":"<uuid>","key":"paymentId"}]},"header":[{"key":"Accept","value":"application/json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{}},"status":"OK","code":200,"header":[{"key":"Content-Type","value":"application/json"}],"body":"{\n  \"id\": \"<uuid>\",\n  \"idempotencyKey\": \"<uuid>\",\n  \"direction\": \"outgoing\",\n  \"status\": \"pending_approval\",\n  \"sender\": \"$zak9L/!x\",\n  \"receiver\": \"$$\",\n  \"receiveAmount\": {\n    \"value\": \"39432493515\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"createdAt\": \"<dateTime>\",\n  \"updatedAt\": \"<dateTime>\",\n  \"version\": \"<integer>\",\n  \"debitAmount\": {\n    \"value\": \"989723\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"receivedAmount\": {\n    \"value\": \"96\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"approval\": {\n    \"method\": \"qr\",\n    \"url\": \"<uri>\",\n    \"payload\": \"<string>\"\n  },\n  \"expiresAt\": \"<string,null-date-time>\",\n  \"failureCode\": \"partial_payment\",\n  \"failureDetail\": \"<string,null>\",\n  \"rail\": {\n    \"incomingPaymentUrl\": \"<string,null-uri>\",\n    \"quoteUrl\": \"<string,null-uri>\",\n    \"outgoingPaymentUrl\": \"<string,null-uri>\"\n  },\n  \"completedAt\": \"<string,null-date-time>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"429fac5c-84f8-49a7-82fb-6cf6f4a10f95","name":"Falta `X-Api-Key` o es incorrecta (`unauthorized`).","originalRequest":{"url":{"path":["payments",":paymentId","cancel"],"host":["{{baseUrl}}"],"query":[],"variable":[{"disabled":false,"description":{"content":"(Required) ","type":"text/plain"},"type":"any","value":"<uuid>","key":"paymentId"}]},"header":[{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{}},"status":"Unauthorized","code":401,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"9813483a-ffa8-4046-9614-8c088f7ca156","name":"Pago o billetera inexistente (`not_found`, `wallet_not_found`).","originalRequest":{"url":{"path":["payments",":paymentId","cancel"],"host":["{{baseUrl}}"],"query":[],"variable":[{"disabled":false,"description":{"content":"(Required) ","type":"text/plain"},"type":"any","value":"<uuid>","key":"paymentId"}]},"header":[{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{}},"status":"Not Found","code":404,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"4ef7a1e2-26e4-4c59-a0f1-65a454b16c57","name":"Conflicto de estado o de idempotencia (`idempotency_conflict`, `payment_not_cancellable`).","originalRequest":{"url":{"path":["payments",":paymentId","cancel"],"host":["{{baseUrl}}"],"query":[],"variable":[{"disabled":false,"description":{"content":"(Required) ","type":"text/plain"},"type":"any","value":"<uuid>","key":"paymentId"}]},"header":[{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{}},"status":"Conflict","code":409,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"49efe19a-a5b3-47fd-9ebd-6ae8e6c2f277","name":"El riel no respondió (`rail_unavailable`) o Relia no tiene permiso activo para pagar\n(`relia_grant_unavailable`). No se creó ni cambió nada; se puede reintentar.","originalRequest":{"url":{"path":["payments",":paymentId","cancel"],"host":["{{baseUrl}}"],"query":[],"variable":[{"disabled":false,"description":{"content":"(Required) ","type":"text/plain"},"type":"any","value":"<uuid>","key":"paymentId"}]},"header":[{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{}},"status":"Service Unavailable","code":503,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"}],"event":[],"protocolProfileBehavior":{"disableBodyPruning":true}}]}]}]},{"name":"relia-grant","description":"","item":[{"id":"9dfa113c-58d4-43d1-a060-dea40f97ba95","name":"Estado del permiso permanente de Relia","request":{"name":"Estado del permiso permanente de Relia","description":{},"url":{"path":["relia-grant"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"key":"Accept","value":"application/json"}],"method":"GET","body":{},"auth":null},"response":[{"id":"812a0ef6-607a-4fb6-8442-6707efc627a4","name":"Estado del permiso.","originalRequest":{"url":{"path":["relia-grant"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"key":"Accept","value":"application/json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"GET","body":{}},"status":"OK","code":200,"header":[{"key":"Content-Type","value":"application/json"}],"body":"{\n  \"status\": \"awaiting_approval\",\n  \"approvalUrl\": \"<string,null-uri>\",\n  \"debitLimit\": {\n    \"value\": \"216359526\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"interval\": \"<string,null>\",\n  \"approvedAt\": \"<string,null-date-time>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"750b06cc-0b67-4797-9fbc-242d9a524f17","name":"Falta `X-Api-Key` o es incorrecta (`unauthorized`).","originalRequest":{"url":{"path":["relia-grant"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"GET","body":{}},"status":"Unauthorized","code":401,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"}],"event":[],"protocolProfileBehavior":{"disableBodyPruning":true}},{"id":"c21f0c44-f713-4495-8e74-e3f1817f0992","name":"Pedir un nuevo permiso permanente para la billetera de Relia","request":{"name":"Pedir un nuevo permiso permanente para la billetera de Relia","description":{"content":"Pide un permiso de pago con tope por intervalo. Devuelve `approvalUrl`, que el operador abre y aprueba en la\nbilletera de Relia. Mientras no se apruebe, el estado es `awaiting_approval` y los pagos `outgoing`\nresponden 503 `relia_grant_unavailable`. Un permiso nuevo aprobado reemplaza al anterior.\n","type":"text/plain"},"url":{"path":["relia-grant"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"key":"Content-Type","value":"application/json"},{"key":"Accept","value":"application/json"}],"method":"POST","body":{"mode":"raw","raw":"{\n  \"debitLimit\": {\n    \"value\": \"2743914339\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"interval\": \"<string>\"\n}","options":{"raw":{"headerFamily":"json","language":"json"}}},"auth":null},"response":[{"id":"b5c61337-76e7-4980-9cf0-3c4a353248c9","name":"Permiso pedido; falta la aprobación del operador.","originalRequest":{"url":{"path":["relia-grant"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"key":"Content-Type","value":"application/json"},{"key":"Accept","value":"application/json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{"mode":"raw","raw":"{\n  \"debitLimit\": {\n    \"value\": \"2743914339\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"interval\": \"<string>\"\n}","options":{"raw":{"headerFamily":"json","language":"json"}}}},"status":"Accepted","code":202,"header":[{"key":"Content-Type","value":"application/json"}],"body":"{\n  \"status\": \"awaiting_approval\",\n  \"approvalUrl\": \"<string,null-uri>\",\n  \"debitLimit\": {\n    \"value\": \"216359526\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"interval\": \"<string,null>\",\n  \"approvedAt\": \"<string,null-date-time>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"5a2725b1-01a4-4c22-837a-bb06637498d5","name":"Falta `X-Api-Key` o es incorrecta (`unauthorized`).","originalRequest":{"url":{"path":["relia-grant"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"key":"Content-Type","value":"application/json"},{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{"mode":"raw","raw":"{\n  \"debitLimit\": {\n    \"value\": \"2743914339\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"interval\": \"<string>\"\n}","options":{"raw":{"headerFamily":"json","language":"json"}}}},"status":"Unauthorized","code":401,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"df6040a3-3c29-4919-a62a-f4d92837b705","name":"Cuerpo inválido (`validation_error`) o moneda distinta a la del riel (`unsupported_asset`), o\ncontraparte igual a la billetera de Relia (`same_wallet`).","originalRequest":{"url":{"path":["relia-grant"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"key":"Content-Type","value":"application/json"},{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{"mode":"raw","raw":"{\n  \"debitLimit\": {\n    \"value\": \"2743914339\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"interval\": \"<string>\"\n}","options":{"raw":{"headerFamily":"json","language":"json"}}}},"status":"Unprocessable Entity (WebDAV) (RFC 4918)","code":422,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"cb69f8b4-e5a3-49bb-8700-706291a3905f","name":"El riel no respondió (`rail_unavailable`) o Relia no tiene permiso activo para pagar\n(`relia_grant_unavailable`). No se creó ni cambió nada; se puede reintentar.","originalRequest":{"url":{"path":["relia-grant"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"key":"Content-Type","value":"application/json"},{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"POST","body":{"mode":"raw","raw":"{\n  \"debitLimit\": {\n    \"value\": \"2743914339\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  },\n  \"interval\": \"<string>\"\n}","options":{"raw":{"headerFamily":"json","language":"json"}}}},"status":"Service Unavailable","code":503,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"}],"event":[],"protocolProfileBehavior":{"disableBodyPruning":true}}]},{"name":"health","description":"","item":[{"id":"99faf19f-9550-488e-a562-e29a96ba08a9","name":"Estado del proxy, del riel y del permiso de Relia","request":{"name":"Estado del proxy, del riel y del permiso de Relia","description":{},"url":{"path":["health"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"key":"Accept","value":"application/json"}],"method":"GET","body":{},"auth":null},"response":[{"id":"104c3037-fabc-4a9f-aebc-d5e35a423c2a","name":"Estado.","originalRequest":{"url":{"path":["health"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"key":"Accept","value":"application/json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"GET","body":{}},"status":"OK","code":200,"header":[{"key":"Content-Type","value":"application/json"}],"body":"{\n  \"status\": \"degraded\",\n  \"rail\": \"openPayments\",\n  \"reliaGrant\": \"exhausted\",\n  \"reliaWallet\": {\n    \"pointer\": \"$k\",\n    \"url\": \"<uri>\",\n    \"assetCode\": \"<string>\",\n    \"assetScale\": \"<integer>\"\n  }\n}","cookie":[],"_postman_previewlanguage":"json"},{"id":"dfd2a12f-6b1a-456e-9d1f-3495d587f618","name":"Demasiadas consultas (`too_many_requests`).","originalRequest":{"url":{"path":["health"],"host":["{{baseUrl}}"],"query":[],"variable":[]},"header":[{"key":"Accept","value":"application/problem+json"},{"description":{"content":"Added as a part of security scheme: apikey","type":"text/plain"},"key":"X-Api-Key","value":"<API Key>"}],"method":"GET","body":{}},"status":"Too Many Requests","code":429,"header":[{"key":"Content-Type","value":"application/problem+json"}],"body":"{\n  \"type\": \"about:blank\",\n  \"title\": \"<string>\",\n  \"status\": \"<integer>\",\n  \"code\": \"payment_not_cancellable\",\n  \"detail\": \"<string>\"\n}","cookie":[],"_postman_previewlanguage":"json"}],"event":[],"protocolProfileBehavior":{"disableBodyPruning":true}}]}],"auth":{"type":"apikey","apikey":[{"type":"any","value":"X-Api-Key","key":"key"},{"type":"any","value":"{{apiKey}}","key":"value"},{"type":"any","value":"header","key":"in"}]},"event":[],"variable":[{"key":"baseUrl","value":"http://localhost:4000"}],"info":{"_postman_id":"9140ee1e-3c7b-489d-9009-ff6aff5ae97b","name":"Relia Rail Proxy","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json","description":{"content":"Contrato agnóstico al riel (ver ADR 0001). El backend pide \"cobrar a una billetera\" o \"pagar a una billetera\"\ny consulta el estado. Un adaptador Bre-B futuro implementa este mismo contrato.\n\nSolo el proxy conoce Open Payments: grants GNAP, quotes, incoming y outgoing payments, y las llaves de la\nbilletera de Relia (variable de entorno, en base64).\n\nConvenciones:\n- Red privada. Toda llamada lleva `X-Api-Key`.\n- Sin webhooks. El backend consulta `GET /payments/{paymentId}`, que devuelve el último estado que conoce el\n  proxy sin llamar al riel en esa petición. El proxy consulta Open Payments por su cuenta.\n- Montos en unidades mínimas del riel: `{ value, assetCode, assetScale }`. En la red de prueba, COP con escala 2.\n- Toda creación lleva `Idempotency-Key`, que es el id del pago en el backend (`pagos.id`).\n- Errores en `application/problem+json` (RFC 9457) con un `code` estable.\n- Los fallos forzados del Modo demo no pasan por aquí: el backend los simula.\n","type":"text/plain"}}}
+{
+    "item": [
+        {
+            "name": "wallet-addresses",
+            "description": "",
+            "item": [
+                {
+                    "id": "82163ebb-d9c2-4b8f-8913-937029d0e19e",
+                    "name": "Resolver un payment pointer",
+                    "request": {
+                        "name": "Resolver un payment pointer",
+                        "description": {
+                            "content": "Confirma que existe y devuelve su moneda y escala. Lo usa la vinculación de llave.",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "wallet-addresses"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [
+                                {
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "(Required) ",
+                                        "type": "text/plain"
+                                    },
+                                    "key": "pointer",
+                                    "value": "$ilp.interledger-test.dev/rosa-test"
+                                }
+                            ],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "1fa3b2ae-cdb8-455a-9a19-4ff05f81913c",
+                            "name": "Billetera encontrada.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "wallet-addresses"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "pointer",
+                                            "value": "$ilp.interledger-test.dev/rosa-test"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"pointer\": \"$W4mVQ/bo&o@6;\",\n  \"url\": \"https://ImepffBzGJczXYZjMDvyJNd.zxhmXHncXYH53PINZ5WYS6jBu-48L-ZxAMy\",\n  \"assetCode\": \"string\",\n  \"assetScale\": 3033\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "34f08878-c98e-4c89-b7ee-8836eef6ae17",
+                            "name": "Falta `X-Api-Key` o es incorrecta (`unauthorized`).",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "wallet-addresses"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "pointer",
+                                            "value": "$ilp.interledger-test.dev/rosa-test"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "10394457-8840-4388-9664-569277e13cb9",
+                            "name": "Pago o billetera inexistente (`not_found`, `wallet_not_found`).",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "wallet-addresses"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "pointer",
+                                            "value": "$ilp.interledger-test.dev/rosa-test"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Not Found",
+                            "code": 404,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "7dc0aa14-d193-411c-aeef-5b35a273465d",
+                            "name": "Cuerpo inválido (`validation_error`), contraparte igual a la billetera de Relia (`same_wallet`) o moneda no\nsoportada (`unsupported_asset`): `receiveAmount` no está en la moneda de Relia, o el riel no cotiza entre la\nmoneda de Relia y la de la contraparte. La moneda de la contraparte por sí sola no es motivo de rechazo.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "wallet-addresses"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "pointer",
+                                            "value": "$ilp.interledger-test.dev/rosa-test"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Unprocessable Entity (WebDAV) (RFC 4918)",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "a7b6c998-3707-4cfb-94f9-290a1552ab2d",
+                            "name": "El riel no respondió (`rail_unavailable`) o Relia no tiene permiso activo para pagar\n(`relia_grant_unavailable`). No se creó ni cambió nada; se puede reintentar.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "wallet-addresses"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "pointer",
+                                            "value": "$ilp.interledger-test.dev/rosa-test"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Service Unavailable",
+                            "code": 503,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                }
+            ]
+        },
+        {
+            "name": "payments",
+            "description": "",
+            "item": [
+                {
+                    "id": "264a5e65-bb6a-4024-aaf8-2a6780f8754f",
+                    "name": "Crear un pago de riel",
+                    "request": {
+                        "name": "Crear un pago de riel",
+                        "description": {
+                            "content": "- `outgoing`: Relia paga desde su billetera a `counterparty`. Usa el permiso permanente de Relia; si no está\n  activo responde 503 `relia_grant_unavailable`. Arranca en `processing`.\n- `incoming`: Relia cobra a la billetera `counterparty`. Arranca en `pending_approval` con `approval.url`,\n  que el backend entrega al pagador por SMS simulado. El pagador aprueba en su billetera (su app bancaria) y\n  no vuelve a ninguna página de Relia; el proxy detecta la aprobación o el rechazo consultando el riel.\n\n`receiveAmount` va siempre en la moneda de Relia (la de su billetera en el riel, COP con escala 2) y es el\nlado fijo del pago. La contraparte puede estar en cualquier moneda que el riel sepa convertir:\n- `incoming`: Relia recibe exactamente `receiveAmount`. El riel cotiza en la billetera del pagador cuánto le\n  debita en su moneda (`debitAmount`), y eso es lo que el pagador ve y aprueba.\n- `outgoing` a una contraparte en la moneda de Relia: el receptor recibe exactamente `receiveAmount` (igual\n  que antes de multimoneda).\n- `outgoing` a una contraparte en otra moneda: Relia envía exactamente `receiveAmount` (`debitAmount` igual a\n  `receiveAmount`) y el receptor recibe lo que el riel convierta, en su moneda (`receivedAmount`). El\n  estimado del quote viene en `quotedReceiveAmount`. La conversión y su costo corren por cuenta del receptor.\n\nEn todos los casos `completed` significa que Relia recibió (`incoming`) o envió (`outgoing`) el monto en su\nmoneda. El costo del riel dentro de la misma moneda, si lo hay, lo absorbe el pagador.\n\nSi el riel no cotiza entre la moneda de Relia y la de la contraparte, responde 422 `unsupported_asset`\nsin dejar nada abierto en el riel (se detecta al cotizar, antes de mover dinero o pedir aprobación).\n\nEl proxy hace cumplir `expiresAt` con su propio temporizador, porque Open Payments no reporta el\nvencimiento de una aprobación. Al vencer, cancela la aprobación, cierra el cobro y pasa a `expired`.\nRepetir la misma `Idempotency-Key` con el mismo cuerpo devuelve el pago existente con 200.\n",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "payments"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "disabled": false,
+                                "description": {
+                                    "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                    "type": "text/plain"
+                                },
+                                "key": "Idempotency-Key",
+                                "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "POST",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ilp.interledger-test.dev/usuario-cop\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito OP-000123 · Tienda Doña Rosa\"\n}",
+                            "options": {
+                                "raw": {
+                                    "headerFamily": "json",
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "5124dbe3-bc8c-44e7-9b57-ad4173c84825",
+                            "name": "Pago ya creado con esta `Idempotency-Key`.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ilp.interledger-test.dev/usuario-cop\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito OP-000123 · Tienda Doña Rosa\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"id\": \"a6fddd89-edd6-0ab0-836a-f544f531aa7f\",\n  \"idempotencyKey\": \"d36d6138-1994-dce0-2c1d-314efc6ce077\",\n  \"direction\": \"outgoing\",\n  \"status\": \"processing\",\n  \"sender\": \"$Mf_NO\",\n  \"receiver\": \"$)<%x4_e@IA/5-$8Hf.`\",\n  \"receiveAmount\": {\n    \"value\": \"022948\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 185\n  },\n  \"createdAt\": \"2024-06-05T10:29:50.752Z\",\n  \"updatedAt\": \"1963-04-15T13:13:35.209Z\",\n  \"version\": 4244,\n  \"debitAmount\": {\n    \"value\": \"644879\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 46\n  },\n  \"receivedAmount\": {\n    \"value\": \"3699439\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 91\n  },\n  \"quotedReceiveAmount\": {\n    \"value\": \"13971\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 198\n  },\n  \"approval\": {\n    \"method\": \"qr\",\n    \"url\": \"http://FjPXqepD.kjgdw8L2UwB1i18DbirTP4bhHGeEPhnJPFmi9uNglFGuLP0zSjOKbq\",\n    \"payload\": \"string\"\n  },\n  \"expiresAt\": \"1966-04-17T20:03:35.695Z\",\n  \"failureCode\": \"partial_payment\",\n  \"failureDetail\": \"string\",\n  \"rail\": {\n    \"incomingPaymentUrl\": null,\n    \"quoteUrl\": null,\n    \"outgoingPaymentUrl\": null\n  },\n  \"completedAt\": \"1992-05-21T00:43:29.950Z\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "b3372e14-d1a1-4b45-9966-ffd38a41e58f",
+                            "name": "Pago creado.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ilp.interledger-test.dev/usuario-cop\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito OP-000123 · Tienda Doña Rosa\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Created",
+                            "code": 201,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                },
+                                {
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "",
+                                        "type": "text/plain"
+                                    },
+                                    "key": "Location",
+                                    "value": "string"
+                                }
+                            ],
+                            "body": "{\n  \"id\": \"6f1c2a9e-3b4d-4e5f-8a7b-1c2d3e4f5a6b\",\n  \"idempotencyKey\": \"0b8e7d6c-5a4b-4c3d-9e2f-1a0b9c8d7e6f\",\n  \"direction\": \"outgoing\",\n  \"status\": \"processing\",\n  \"sender\": \"$ilp.interledger-test.dev/relia\",\n  \"receiver\": \"$ilp.interledger-test.dev/usuario-cop\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"debitAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"receivedAmount\": null,\n  \"quotedReceiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"approval\": null,\n  \"expiresAt\": null,\n  \"failureCode\": null,\n  \"failureDetail\": null,\n  \"rail\": {\n    \"incomingPaymentUrl\": null,\n    \"quoteUrl\": null,\n    \"outgoingPaymentUrl\": null\n  },\n  \"createdAt\": \"2026-10-17T15:00:00Z\",\n  \"updatedAt\": \"2026-10-17T15:00:00Z\",\n  \"completedAt\": null,\n  \"version\": 1\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "682ec5fc-3b8e-4952-8f15-cfbbfc01112f",
+                            "name": "Pago creado.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ilp.interledger-test.dev/usuario-usd\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito OP-000124 · Tienda Doña Rosa\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Created",
+                            "code": 201,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                },
+                                {
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "",
+                                        "type": "text/plain"
+                                    },
+                                    "key": "Location",
+                                    "value": "string"
+                                }
+                            ],
+                            "body": "{\n  \"id\": \"6f1c2a9e-3b4d-4e5f-8a7b-1c2d3e4f5a6b\",\n  \"idempotencyKey\": \"0b8e7d6c-5a4b-4c3d-9e2f-1a0b9c8d7e6f\",\n  \"direction\": \"outgoing\",\n  \"status\": \"processing\",\n  \"sender\": \"$ilp.interledger-test.dev/relia\",\n  \"receiver\": \"$ilp.interledger-test.dev/usuario-usd\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"debitAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"receivedAmount\": null,\n  \"quotedReceiveAmount\": {\n    \"value\": \"1190\",\n    \"assetCode\": \"USD\",\n    \"assetScale\": 2\n  },\n  \"approval\": null,\n  \"expiresAt\": null,\n  \"failureCode\": null,\n  \"failureDetail\": null,\n  \"rail\": {\n    \"incomingPaymentUrl\": null,\n    \"quoteUrl\": null,\n    \"outgoingPaymentUrl\": null\n  },\n  \"createdAt\": \"2026-10-17T15:00:00Z\",\n  \"updatedAt\": \"2026-10-17T15:00:00Z\",\n  \"completedAt\": null,\n  \"version\": 1\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "86cac127-b078-4d54-b744-e0970c986224",
+                            "name": "Pago creado.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"incoming\",\n  \"counterparty\": \"$ilp.interledger-test.dev/usuario-cop\",\n  \"receiveAmount\": {\n    \"value\": \"5000000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"expiresAt\": \"2026-10-17T15:05:00Z\",\n  \"description\": \"Retiro OP-000125 · Tienda Doña Rosa\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Created",
+                            "code": 201,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                },
+                                {
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "",
+                                        "type": "text/plain"
+                                    },
+                                    "key": "Location",
+                                    "value": "string"
+                                }
+                            ],
+                            "body": "{\n  \"id\": \"6f1c2a9e-3b4d-4e5f-8a7b-1c2d3e4f5a6b\",\n  \"idempotencyKey\": \"0b8e7d6c-5a4b-4c3d-9e2f-1a0b9c8d7e6f\",\n  \"direction\": \"incoming\",\n  \"status\": \"pending_approval\",\n  \"sender\": \"$ilp.interledger-test.dev/usuario-cop\",\n  \"receiver\": \"$ilp.interledger-test.dev/relia\",\n  \"receiveAmount\": {\n    \"value\": \"5000000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"debitAmount\": {\n    \"value\": \"5000000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"receivedAmount\": null,\n  \"quotedReceiveAmount\": {\n    \"value\": \"5000000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"approval\": {\n    \"method\": \"redirect\",\n    \"url\": \"https://auth.interledger-test.dev/interact/abc\"\n  },\n  \"expiresAt\": \"2026-10-17T15:05:00Z\",\n  \"failureCode\": null,\n  \"failureDetail\": null,\n  \"rail\": {\n    \"incomingPaymentUrl\": null,\n    \"quoteUrl\": null,\n    \"outgoingPaymentUrl\": null\n  },\n  \"createdAt\": \"2026-10-17T15:00:00Z\",\n  \"updatedAt\": \"2026-10-17T15:00:00Z\",\n  \"completedAt\": null,\n  \"version\": 1\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "38da743a-57bb-48fe-b220-b00cab984da1",
+                            "name": "Pago creado.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"incoming\",\n  \"counterparty\": \"$ilp.interledger-test.dev/usuario-usd\",\n  \"receiveAmount\": {\n    \"value\": \"5000000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"expiresAt\": \"2026-10-17T15:05:00Z\",\n  \"description\": \"Retiro OP-000126 · Tienda Doña Rosa\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Created",
+                            "code": 201,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                },
+                                {
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "",
+                                        "type": "text/plain"
+                                    },
+                                    "key": "Location",
+                                    "value": "string"
+                                }
+                            ],
+                            "body": "{\n  \"id\": \"6f1c2a9e-3b4d-4e5f-8a7b-1c2d3e4f5a6b\",\n  \"idempotencyKey\": \"0b8e7d6c-5a4b-4c3d-9e2f-1a0b9c8d7e6f\",\n  \"direction\": \"incoming\",\n  \"status\": \"pending_approval\",\n  \"sender\": \"$ilp.interledger-test.dev/usuario-usd\",\n  \"receiver\": \"$ilp.interledger-test.dev/relia\",\n  \"receiveAmount\": {\n    \"value\": \"5000000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"debitAmount\": {\n    \"value\": \"1225\",\n    \"assetCode\": \"USD\",\n    \"assetScale\": 2\n  },\n  \"receivedAmount\": null,\n  \"quotedReceiveAmount\": {\n    \"value\": \"5000000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"approval\": {\n    \"method\": \"redirect\",\n    \"url\": \"https://auth.interledger-test.dev/interact/abc\"\n  },\n  \"expiresAt\": \"2026-10-17T15:05:00Z\",\n  \"failureCode\": null,\n  \"failureDetail\": null,\n  \"rail\": {\n    \"incomingPaymentUrl\": null,\n    \"quoteUrl\": null,\n    \"outgoingPaymentUrl\": null\n  },\n  \"createdAt\": \"2026-10-17T15:00:00Z\",\n  \"updatedAt\": \"2026-10-17T15:00:00Z\",\n  \"completedAt\": null,\n  \"version\": 1\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "45122b23-e241-4a21-8b23-d21eae0f312b",
+                            "name": "Falta `X-Api-Key` o es incorrecta (`unauthorized`).",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ilp.interledger-test.dev/usuario-cop\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito OP-000123 · Tienda Doña Rosa\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "d8c3ff35-587c-40e3-8745-9b3333529495",
+                            "name": "Pago o billetera inexistente (`not_found`, `wallet_not_found`).",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ilp.interledger-test.dev/usuario-cop\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito OP-000123 · Tienda Doña Rosa\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Not Found",
+                            "code": 404,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "03592408-d670-4b7a-9aed-ef9ec40460fb",
+                            "name": "Conflicto de estado o de idempotencia (`idempotency_conflict`, `payment_not_cancellable`).",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ilp.interledger-test.dev/usuario-cop\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito OP-000123 · Tienda Doña Rosa\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Conflict",
+                            "code": 409,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "93d1d1a0-f1a6-4997-80a8-039e0be05647",
+                            "name": "Cuerpo inválido (`validation_error`), contraparte igual a la billetera de Relia (`same_wallet`) o moneda\nno soportada (`unsupported_asset`). Ver la respuesta `ValidationError`.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ilp.interledger-test.dev/usuario-sin-ruta\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  }\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Unprocessable Entity (WebDAV) (RFC 4918)",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"Moneda no soportada\",\n  \"status\": 422,\n  \"code\": \"unsupported_asset\",\n  \"detail\": \"El riel no cotiza entre COP y XYZ ($ilp.interledger-test.dev/usuario-sin-ruta). Riel: ...\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "bb6c8607-301c-4b6c-b0b9-5407caa93291",
+                            "name": "El riel no respondió (`rail_unavailable`) o Relia no tiene permiso activo para pagar\n(`relia_grant_unavailable`). No se creó ni cambió nada; se puede reintentar.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"$ilp.interledger-test.dev/usuario-cop\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito OP-000123 · Tienda Doña Rosa\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Service Unavailable",
+                            "code": 503,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "id": "7debe830-a799-4c59-b433-ce987d71651a",
+                    "name": "Relia paga a otra moneda (outgoing entre monedas)",
+                    "request": {
+                        "name": "Relia paga a otra moneda (outgoing entre monedas)",
+                        "description": {
+                            "content": "Depósito a un usuario con billetera en otra moneda (`{{counterpartyForeign}}`, p. ej. USD).\n\nEsperado: `201` en `processing` y luego, con `GET /payments/{paymentId}`, `completed` con:\n- `debitAmount` en COP igual a `receiveAmount` (Relia envía exacto).\n- `quotedReceiveAmount` y `receivedAmount` en la moneda del receptor.\n- El incoming payment del receptor cerrado (`rail.incomingPaymentUrl`).\n",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "payments"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "disabled": false,
+                                "description": {
+                                    "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                    "type": "text/plain"
+                                },
+                                "key": "Idempotency-Key",
+                                "value": "{{$guid}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "POST",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"{{counterpartyForeign}}\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito entre monedas · Postman\"\n}",
+                            "options": {
+                                "raw": {
+                                    "headerFamily": "json",
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "0de7cf40-54dc-471c-b4bc-f9df043f7e6b",
+                            "name": "Pago creado.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"{{counterpartyForeign}}\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito entre monedas · Postman\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Created",
+                            "code": 201,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                },
+                                {
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "",
+                                        "type": "text/plain"
+                                    },
+                                    "key": "Location",
+                                    "value": "string"
+                                }
+                            ],
+                            "body": "{\n  \"id\": \"6f1c2a9e-3b4d-4e5f-8a7b-1c2d3e4f5a6b\",\n  \"idempotencyKey\": \"0b8e7d6c-5a4b-4c3d-9e2f-1a0b9c8d7e6f\",\n  \"direction\": \"outgoing\",\n  \"status\": \"processing\",\n  \"sender\": \"$ilp.interledger-test.dev/relia\",\n  \"receiver\": \"$ilp.interledger-test.dev/usuario-usd\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"debitAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"receivedAmount\": null,\n  \"quotedReceiveAmount\": {\n    \"value\": \"1190\",\n    \"assetCode\": \"USD\",\n    \"assetScale\": 2\n  },\n  \"approval\": null,\n  \"expiresAt\": null,\n  \"failureCode\": null,\n  \"failureDetail\": null,\n  \"rail\": {\n    \"incomingPaymentUrl\": null,\n    \"quoteUrl\": null,\n    \"outgoingPaymentUrl\": null\n  },\n  \"createdAt\": \"2026-10-17T15:00:00Z\",\n  \"updatedAt\": \"2026-10-17T15:00:00Z\",\n  \"completedAt\": null,\n  \"version\": 1\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "id": "0747274f-0e21-4d83-8755-65407ff8985c",
+                    "name": "Relia cobra desde otra moneda (incoming entre monedas)",
+                    "request": {
+                        "name": "Relia cobra desde otra moneda (incoming entre monedas)",
+                        "description": {
+                            "content": "Retiro a un usuario con billetera en otra moneda (`{{counterpartyForeign}}`, p. ej. USD).\n\nEsperado: `201` en `pending_approval` con `approval.url` y `debitAmount` en la moneda del pagador. Tras aprobar\nen la billetera, `completed` con `receivedAmount` en COP igual a `receiveAmount`.\n",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "payments"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "disabled": false,
+                                "description": {
+                                    "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                    "type": "text/plain"
+                                },
+                                "key": "Idempotency-Key",
+                                "value": "{{$guid}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "POST",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"direction\": \"incoming\",\n  \"counterparty\": \"{{counterpartyForeign}}\",\n  \"receiveAmount\": {\n    \"value\": \"5000000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"expiresAt\": \"2026-10-17T15:05:00Z\",\n  \"description\": \"Retiro entre monedas · Postman\"\n}",
+                            "options": {
+                                "raw": {
+                                    "headerFamily": "json",
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "7af98bea-eae3-4ceb-82cb-3c649de567b2",
+                            "name": "Pago creado.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"incoming\",\n  \"counterparty\": \"{{counterpartyForeign}}\",\n  \"receiveAmount\": {\n    \"value\": \"5000000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"expiresAt\": \"2026-10-17T15:05:00Z\",\n  \"description\": \"Retiro entre monedas · Postman\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Created",
+                            "code": 201,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                },
+                                {
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "",
+                                        "type": "text/plain"
+                                    },
+                                    "key": "Location",
+                                    "value": "string"
+                                }
+                            ],
+                            "body": "{\n  \"id\": \"6f1c2a9e-3b4d-4e5f-8a7b-1c2d3e4f5a6b\",\n  \"idempotencyKey\": \"0b8e7d6c-5a4b-4c3d-9e2f-1a0b9c8d7e6f\",\n  \"direction\": \"incoming\",\n  \"status\": \"pending_approval\",\n  \"sender\": \"$ilp.interledger-test.dev/usuario-usd\",\n  \"receiver\": \"$ilp.interledger-test.dev/relia\",\n  \"receiveAmount\": {\n    \"value\": \"5000000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"debitAmount\": {\n    \"value\": \"1225\",\n    \"assetCode\": \"USD\",\n    \"assetScale\": 2\n  },\n  \"receivedAmount\": null,\n  \"quotedReceiveAmount\": {\n    \"value\": \"5000000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"approval\": {\n    \"method\": \"redirect\",\n    \"url\": \"https://auth.interledger-test.dev/interact/abc\"\n  },\n  \"expiresAt\": \"2026-10-17T15:05:00Z\",\n  \"failureCode\": null,\n  \"failureDetail\": null,\n  \"rail\": {\n    \"incomingPaymentUrl\": null,\n    \"quoteUrl\": null,\n    \"outgoingPaymentUrl\": null\n  },\n  \"createdAt\": \"2026-10-17T15:00:00Z\",\n  \"updatedAt\": \"2026-10-17T15:00:00Z\",\n  \"completedAt\": null,\n  \"version\": 1\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "id": "94afeb74-225c-4b93-83de-e61b18c05dbd",
+                    "name": "Contraparte sin ruta de conversión (unsupported_asset)",
+                    "request": {
+                        "name": "Contraparte sin ruta de conversión (unsupported_asset)",
+                        "description": {
+                            "content": "Contraparte en una moneda que el riel no cotiza desde o hacia COP (`{{counterpartyNoRoute}}`).\n\nEsperado: `422 unsupported_asset`, sin incoming payment huérfano en la billetera de la contraparte. Un 5xx\ndel riel al cotizar no es este caso: responde `503 rail_unavailable`.\n",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "payments"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "disabled": false,
+                                "description": {
+                                    "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                    "type": "text/plain"
+                                },
+                                "key": "Idempotency-Key",
+                                "value": "{{$guid}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "POST",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"{{counterpartyNoRoute}}\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito sin ruta · Postman\"\n}",
+                            "options": {
+                                "raw": {
+                                    "headerFamily": "json",
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "ea51dcbc-e697-4337-bb9c-8b801e344e3e",
+                            "name": "Cuerpo inválido (`validation_error`), contraparte igual a la billetera de Relia (`same_wallet`) o moneda\nno soportada (`unsupported_asset`). Ver la respuesta `ValidationError`.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"{{counterpartyNoRoute}}\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito sin ruta · Postman\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Unprocessable Entity (WebDAV) (RFC 4918)",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"Moneda no soportada\",\n  \"status\": 422,\n  \"code\": \"unsupported_asset\",\n  \"detail\": \"El riel no cotiza entre COP y XYZ ($ilp.interledger-test.dev/usuario-sin-ruta). Riel: ...\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "name": "{paymentId}",
+                    "description": "",
+                    "item": [
+                        {
+                            "id": "d0d1e895-664c-42ec-9b9b-5f137d601f61",
+                            "name": "Consultar un pago de riel",
+                            "request": {
+                                "name": "Consultar un pago de riel",
+                                "description": {
+                                    "content": "Devuelve el último estado conocido por el proxy, sin llamar al riel en esta petición.\nEl backend lo consulta al leer una operación pendiente (máximo una vez por segundo por pago) y en un\nbarrido de fondo cada 15 s.\n",
+                                    "type": "text/plain"
+                                },
+                                "url": {
+                                    "path": [
+                                        "payments",
+                                        ":paymentId"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": [
+                                        {
+                                            "type": "any",
+                                            "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af",
+                                            "key": "paymentId",
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            }
+                                        }
+                                    ]
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {},
+                                "auth": null
+                            },
+                            "response": [
+                                {
+                                    "id": "f8f2ed65-53ec-4d1a-8326-ecd756d2cf2a",
+                                    "name": "Pago.",
+                                    "originalRequest": {
+                                        "url": {
+                                            "path": [
+                                                "payments",
+                                                ":paymentId"
+                                            ],
+                                            "host": [
+                                                "{{baseUrl}}"
+                                            ],
+                                            "query": [],
+                                            "variable": [
+                                                {
+                                                    "disabled": false,
+                                                    "description": {
+                                                        "content": "(Required) ",
+                                                        "type": "text/plain"
+                                                    },
+                                                    "type": "any",
+                                                    "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af",
+                                                    "key": "paymentId"
+                                                }
+                                            ]
+                                        },
+                                        "header": [
+                                            {
+                                                "key": "Accept",
+                                                "value": "application/json"
+                                            },
+                                            {
+                                                "description": {
+                                                    "content": "Added as a part of security scheme: apikey",
+                                                    "type": "text/plain"
+                                                },
+                                                "key": "X-Api-Key",
+                                                "value": "<API Key>"
+                                            }
+                                        ],
+                                        "method": "GET",
+                                        "body": {}
+                                    },
+                                    "status": "OK",
+                                    "code": 200,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n  \"id\": \"a6fddd89-edd6-0ab0-836a-f544f531aa7f\",\n  \"idempotencyKey\": \"d36d6138-1994-dce0-2c1d-314efc6ce077\",\n  \"direction\": \"outgoing\",\n  \"status\": \"processing\",\n  \"sender\": \"$Mf_NO\",\n  \"receiver\": \"$)<%x4_e@IA/5-$8Hf.`\",\n  \"receiveAmount\": {\n    \"value\": \"022948\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 185\n  },\n  \"createdAt\": \"2024-06-05T10:29:50.752Z\",\n  \"updatedAt\": \"1963-04-15T13:13:35.209Z\",\n  \"version\": 4244,\n  \"debitAmount\": {\n    \"value\": \"644879\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 46\n  },\n  \"receivedAmount\": {\n    \"value\": \"3699439\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 91\n  },\n  \"quotedReceiveAmount\": {\n    \"value\": \"13971\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 198\n  },\n  \"approval\": {\n    \"method\": \"qr\",\n    \"url\": \"http://FjPXqepD.kjgdw8L2UwB1i18DbirTP4bhHGeEPhnJPFmi9uNglFGuLP0zSjOKbq\",\n    \"payload\": \"string\"\n  },\n  \"expiresAt\": \"1966-04-17T20:03:35.695Z\",\n  \"failureCode\": \"partial_payment\",\n  \"failureDetail\": \"string\",\n  \"rail\": {\n    \"incomingPaymentUrl\": null,\n    \"quoteUrl\": null,\n    \"outgoingPaymentUrl\": null\n  },\n  \"completedAt\": \"1992-05-21T00:43:29.950Z\"\n}",
+                                    "cookie": [],
+                                    "_postman_previewlanguage": "json"
+                                },
+                                {
+                                    "id": "9cda2fd6-b335-4837-a5c6-bccea0326fd2",
+                                    "name": "Falta `X-Api-Key` o es incorrecta (`unauthorized`).",
+                                    "originalRequest": {
+                                        "url": {
+                                            "path": [
+                                                "payments",
+                                                ":paymentId"
+                                            ],
+                                            "host": [
+                                                "{{baseUrl}}"
+                                            ],
+                                            "query": [],
+                                            "variable": [
+                                                {
+                                                    "disabled": false,
+                                                    "description": {
+                                                        "content": "(Required) ",
+                                                        "type": "text/plain"
+                                                    },
+                                                    "type": "any",
+                                                    "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af",
+                                                    "key": "paymentId"
+                                                }
+                                            ]
+                                        },
+                                        "header": [
+                                            {
+                                                "key": "Accept",
+                                                "value": "application/problem+json"
+                                            },
+                                            {
+                                                "description": {
+                                                    "content": "Added as a part of security scheme: apikey",
+                                                    "type": "text/plain"
+                                                },
+                                                "key": "X-Api-Key",
+                                                "value": "<API Key>"
+                                            }
+                                        ],
+                                        "method": "GET",
+                                        "body": {}
+                                    },
+                                    "status": "Unauthorized",
+                                    "code": 401,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/problem+json"
+                                        }
+                                    ],
+                                    "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                                    "cookie": [],
+                                    "_postman_previewlanguage": "json"
+                                },
+                                {
+                                    "id": "4af675cd-d74b-4d05-8724-c5e3ff4a47de",
+                                    "name": "Pago o billetera inexistente (`not_found`, `wallet_not_found`).",
+                                    "originalRequest": {
+                                        "url": {
+                                            "path": [
+                                                "payments",
+                                                ":paymentId"
+                                            ],
+                                            "host": [
+                                                "{{baseUrl}}"
+                                            ],
+                                            "query": [],
+                                            "variable": [
+                                                {
+                                                    "disabled": false,
+                                                    "description": {
+                                                        "content": "(Required) ",
+                                                        "type": "text/plain"
+                                                    },
+                                                    "type": "any",
+                                                    "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af",
+                                                    "key": "paymentId"
+                                                }
+                                            ]
+                                        },
+                                        "header": [
+                                            {
+                                                "key": "Accept",
+                                                "value": "application/problem+json"
+                                            },
+                                            {
+                                                "description": {
+                                                    "content": "Added as a part of security scheme: apikey",
+                                                    "type": "text/plain"
+                                                },
+                                                "key": "X-Api-Key",
+                                                "value": "<API Key>"
+                                            }
+                                        ],
+                                        "method": "GET",
+                                        "body": {}
+                                    },
+                                    "status": "Not Found",
+                                    "code": 404,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/problem+json"
+                                        }
+                                    ],
+                                    "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                                    "cookie": [],
+                                    "_postman_previewlanguage": "json"
+                                }
+                            ],
+                            "event": [],
+                            "protocolProfileBehavior": {
+                                "disableBodyPruning": true
+                            }
+                        },
+                        {
+                            "name": "cancel",
+                            "description": "",
+                            "item": [
+                                {
+                                    "id": "d2ff6bcd-39b3-4964-b59b-e115f5b7c85c",
+                                    "name": "Cancelar un cobro pendiente de aprobación",
+                                    "request": {
+                                        "name": "Cancelar un cobro pendiente de aprobación",
+                                        "description": {
+                                            "content": "Solo `incoming` en `pending_approval`. Cancela la aprobación en el riel y cierra el cobro.\nDespués de la aprobación ya no se puede cancelar: responde 409 `payment_not_cancellable` y el pago sigue su\ncurso. Cancelar un pago ya cancelado devuelve 200 con el mismo pago.\n",
+                                            "type": "text/plain"
+                                        },
+                                        "url": {
+                                            "path": [
+                                                "payments",
+                                                ":paymentId",
+                                                "cancel"
+                                            ],
+                                            "host": [
+                                                "{{baseUrl}}"
+                                            ],
+                                            "query": [],
+                                            "variable": [
+                                                {
+                                                    "type": "any",
+                                                    "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af",
+                                                    "key": "paymentId",
+                                                    "disabled": false,
+                                                    "description": {
+                                                        "content": "(Required) ",
+                                                        "type": "text/plain"
+                                                    }
+                                                }
+                                            ]
+                                        },
+                                        "header": [
+                                            {
+                                                "key": "Accept",
+                                                "value": "application/json"
+                                            }
+                                        ],
+                                        "method": "POST",
+                                        "body": {},
+                                        "auth": null
+                                    },
+                                    "response": [
+                                        {
+                                            "id": "7dcef102-2ea4-40a0-a4a5-35098a4dc3e7",
+                                            "name": "Pago cancelado.",
+                                            "originalRequest": {
+                                                "url": {
+                                                    "path": [
+                                                        "payments",
+                                                        ":paymentId",
+                                                        "cancel"
+                                                    ],
+                                                    "host": [
+                                                        "{{baseUrl}}"
+                                                    ],
+                                                    "query": [],
+                                                    "variable": [
+                                                        {
+                                                            "disabled": false,
+                                                            "description": {
+                                                                "content": "(Required) ",
+                                                                "type": "text/plain"
+                                                            },
+                                                            "type": "any",
+                                                            "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af",
+                                                            "key": "paymentId"
+                                                        }
+                                                    ]
+                                                },
+                                                "header": [
+                                                    {
+                                                        "key": "Accept",
+                                                        "value": "application/json"
+                                                    },
+                                                    {
+                                                        "description": {
+                                                            "content": "Added as a part of security scheme: apikey",
+                                                            "type": "text/plain"
+                                                        },
+                                                        "key": "X-Api-Key",
+                                                        "value": "<API Key>"
+                                                    }
+                                                ],
+                                                "method": "POST",
+                                                "body": {}
+                                            },
+                                            "status": "OK",
+                                            "code": 200,
+                                            "header": [
+                                                {
+                                                    "key": "Content-Type",
+                                                    "value": "application/json"
+                                                }
+                                            ],
+                                            "body": "{\n  \"id\": \"a6fddd89-edd6-0ab0-836a-f544f531aa7f\",\n  \"idempotencyKey\": \"d36d6138-1994-dce0-2c1d-314efc6ce077\",\n  \"direction\": \"outgoing\",\n  \"status\": \"processing\",\n  \"sender\": \"$Mf_NO\",\n  \"receiver\": \"$)<%x4_e@IA/5-$8Hf.`\",\n  \"receiveAmount\": {\n    \"value\": \"022948\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 185\n  },\n  \"createdAt\": \"2024-06-05T10:29:50.752Z\",\n  \"updatedAt\": \"1963-04-15T13:13:35.209Z\",\n  \"version\": 4244,\n  \"debitAmount\": {\n    \"value\": \"644879\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 46\n  },\n  \"receivedAmount\": {\n    \"value\": \"3699439\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 91\n  },\n  \"quotedReceiveAmount\": {\n    \"value\": \"13971\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 198\n  },\n  \"approval\": {\n    \"method\": \"qr\",\n    \"url\": \"http://FjPXqepD.kjgdw8L2UwB1i18DbirTP4bhHGeEPhnJPFmi9uNglFGuLP0zSjOKbq\",\n    \"payload\": \"string\"\n  },\n  \"expiresAt\": \"1966-04-17T20:03:35.695Z\",\n  \"failureCode\": \"partial_payment\",\n  \"failureDetail\": \"string\",\n  \"rail\": {\n    \"incomingPaymentUrl\": null,\n    \"quoteUrl\": null,\n    \"outgoingPaymentUrl\": null\n  },\n  \"completedAt\": \"1992-05-21T00:43:29.950Z\"\n}",
+                                            "cookie": [],
+                                            "_postman_previewlanguage": "json"
+                                        },
+                                        {
+                                            "id": "7c0944eb-8352-4fff-9c83-8137ea67945f",
+                                            "name": "Falta `X-Api-Key` o es incorrecta (`unauthorized`).",
+                                            "originalRequest": {
+                                                "url": {
+                                                    "path": [
+                                                        "payments",
+                                                        ":paymentId",
+                                                        "cancel"
+                                                    ],
+                                                    "host": [
+                                                        "{{baseUrl}}"
+                                                    ],
+                                                    "query": [],
+                                                    "variable": [
+                                                        {
+                                                            "disabled": false,
+                                                            "description": {
+                                                                "content": "(Required) ",
+                                                                "type": "text/plain"
+                                                            },
+                                                            "type": "any",
+                                                            "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af",
+                                                            "key": "paymentId"
+                                                        }
+                                                    ]
+                                                },
+                                                "header": [
+                                                    {
+                                                        "key": "Accept",
+                                                        "value": "application/problem+json"
+                                                    },
+                                                    {
+                                                        "description": {
+                                                            "content": "Added as a part of security scheme: apikey",
+                                                            "type": "text/plain"
+                                                        },
+                                                        "key": "X-Api-Key",
+                                                        "value": "<API Key>"
+                                                    }
+                                                ],
+                                                "method": "POST",
+                                                "body": {}
+                                            },
+                                            "status": "Unauthorized",
+                                            "code": 401,
+                                            "header": [
+                                                {
+                                                    "key": "Content-Type",
+                                                    "value": "application/problem+json"
+                                                }
+                                            ],
+                                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                                            "cookie": [],
+                                            "_postman_previewlanguage": "json"
+                                        },
+                                        {
+                                            "id": "e8ae7152-5041-44be-b8d2-7ad5140ff464",
+                                            "name": "Pago o billetera inexistente (`not_found`, `wallet_not_found`).",
+                                            "originalRequest": {
+                                                "url": {
+                                                    "path": [
+                                                        "payments",
+                                                        ":paymentId",
+                                                        "cancel"
+                                                    ],
+                                                    "host": [
+                                                        "{{baseUrl}}"
+                                                    ],
+                                                    "query": [],
+                                                    "variable": [
+                                                        {
+                                                            "disabled": false,
+                                                            "description": {
+                                                                "content": "(Required) ",
+                                                                "type": "text/plain"
+                                                            },
+                                                            "type": "any",
+                                                            "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af",
+                                                            "key": "paymentId"
+                                                        }
+                                                    ]
+                                                },
+                                                "header": [
+                                                    {
+                                                        "key": "Accept",
+                                                        "value": "application/problem+json"
+                                                    },
+                                                    {
+                                                        "description": {
+                                                            "content": "Added as a part of security scheme: apikey",
+                                                            "type": "text/plain"
+                                                        },
+                                                        "key": "X-Api-Key",
+                                                        "value": "<API Key>"
+                                                    }
+                                                ],
+                                                "method": "POST",
+                                                "body": {}
+                                            },
+                                            "status": "Not Found",
+                                            "code": 404,
+                                            "header": [
+                                                {
+                                                    "key": "Content-Type",
+                                                    "value": "application/problem+json"
+                                                }
+                                            ],
+                                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                                            "cookie": [],
+                                            "_postman_previewlanguage": "json"
+                                        },
+                                        {
+                                            "id": "670726ab-8738-4a95-bc13-ffdc3ecaa588",
+                                            "name": "Conflicto de estado o de idempotencia (`idempotency_conflict`, `payment_not_cancellable`).",
+                                            "originalRequest": {
+                                                "url": {
+                                                    "path": [
+                                                        "payments",
+                                                        ":paymentId",
+                                                        "cancel"
+                                                    ],
+                                                    "host": [
+                                                        "{{baseUrl}}"
+                                                    ],
+                                                    "query": [],
+                                                    "variable": [
+                                                        {
+                                                            "disabled": false,
+                                                            "description": {
+                                                                "content": "(Required) ",
+                                                                "type": "text/plain"
+                                                            },
+                                                            "type": "any",
+                                                            "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af",
+                                                            "key": "paymentId"
+                                                        }
+                                                    ]
+                                                },
+                                                "header": [
+                                                    {
+                                                        "key": "Accept",
+                                                        "value": "application/problem+json"
+                                                    },
+                                                    {
+                                                        "description": {
+                                                            "content": "Added as a part of security scheme: apikey",
+                                                            "type": "text/plain"
+                                                        },
+                                                        "key": "X-Api-Key",
+                                                        "value": "<API Key>"
+                                                    }
+                                                ],
+                                                "method": "POST",
+                                                "body": {}
+                                            },
+                                            "status": "Conflict",
+                                            "code": 409,
+                                            "header": [
+                                                {
+                                                    "key": "Content-Type",
+                                                    "value": "application/problem+json"
+                                                }
+                                            ],
+                                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                                            "cookie": [],
+                                            "_postman_previewlanguage": "json"
+                                        },
+                                        {
+                                            "id": "91897b2f-1a63-4667-81a8-fd6a27e4ee04",
+                                            "name": "El riel no respondió (`rail_unavailable`) o Relia no tiene permiso activo para pagar\n(`relia_grant_unavailable`). No se creó ni cambió nada; se puede reintentar.",
+                                            "originalRequest": {
+                                                "url": {
+                                                    "path": [
+                                                        "payments",
+                                                        ":paymentId",
+                                                        "cancel"
+                                                    ],
+                                                    "host": [
+                                                        "{{baseUrl}}"
+                                                    ],
+                                                    "query": [],
+                                                    "variable": [
+                                                        {
+                                                            "disabled": false,
+                                                            "description": {
+                                                                "content": "(Required) ",
+                                                                "type": "text/plain"
+                                                            },
+                                                            "type": "any",
+                                                            "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af",
+                                                            "key": "paymentId"
+                                                        }
+                                                    ]
+                                                },
+                                                "header": [
+                                                    {
+                                                        "key": "Accept",
+                                                        "value": "application/problem+json"
+                                                    },
+                                                    {
+                                                        "description": {
+                                                            "content": "Added as a part of security scheme: apikey",
+                                                            "type": "text/plain"
+                                                        },
+                                                        "key": "X-Api-Key",
+                                                        "value": "<API Key>"
+                                                    }
+                                                ],
+                                                "method": "POST",
+                                                "body": {}
+                                            },
+                                            "status": "Service Unavailable",
+                                            "code": 503,
+                                            "header": [
+                                                {
+                                                    "key": "Content-Type",
+                                                    "value": "application/problem+json"
+                                                }
+                                            ],
+                                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                                            "cookie": [],
+                                            "_postman_previewlanguage": "json"
+                                        }
+                                    ],
+                                    "event": [],
+                                    "protocolProfileBehavior": {
+                                        "disableBodyPruning": true
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "relia-grant",
+            "description": "",
+            "item": [
+                {
+                    "id": "b65ac463-8726-47b7-95f5-a67bbd2d9221",
+                    "name": "Estado del permiso permanente de Relia",
+                    "request": {
+                        "name": "Estado del permiso permanente de Relia",
+                        "description": {},
+                        "url": {
+                            "path": [
+                                "relia-grant"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "8ebaa4b5-3e30-4000-a406-1691d3e20e82",
+                            "name": "Estado del permiso.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "relia-grant"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"status\": \"awaiting_approval\",\n  \"approvalUrl\": \"http://shwQTKAaAHrAONEEhCzwSKdyPwloBXUcC.zlixGtt9GCnaRgOksBUb4btCzvbHThDY\",\n  \"debitLimit\": {\n    \"value\": \"22819\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 17\n  },\n  \"interval\": null,\n  \"approvedAt\": \"1969-10-04T13:40:25.121Z\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "d2bd0fc3-57da-4c4f-9961-585d7fef39f8",
+                            "name": "Falta `X-Api-Key` o es incorrecta (`unauthorized`).",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "relia-grant"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "id": "1bce553f-469c-42ba-9e3c-4ba1c6ddbdd9",
+                    "name": "Pedir un nuevo permiso permanente para la billetera de Relia",
+                    "request": {
+                        "name": "Pedir un nuevo permiso permanente para la billetera de Relia",
+                        "description": {
+                            "content": "Pide un permiso de pago con tope por intervalo. Devuelve `approvalUrl`, que el operador abre y aprueba en la\nbilletera de Relia. Mientras no se apruebe, el estado es `awaiting_approval` y los pagos `outgoing`\nresponden 503 `relia_grant_unavailable`. Un permiso nuevo aprobado reemplaza al anterior.\n",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "relia-grant"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "POST",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"debitLimit\": {\n    \"value\": \"5661\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 97\n  },\n  \"interval\": \"string\"\n}",
+                            "options": {
+                                "raw": {
+                                    "headerFamily": "json",
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "09a5caec-f663-4a99-8b13-8f10a0d70db4",
+                            "name": "Permiso pedido; falta la aprobación del operador.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "relia-grant"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"debitLimit\": {\n    \"value\": \"5661\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 97\n  },\n  \"interval\": \"string\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Accepted",
+                            "code": 202,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"status\": \"awaiting_approval\",\n  \"approvalUrl\": \"http://shwQTKAaAHrAONEEhCzwSKdyPwloBXUcC.zlixGtt9GCnaRgOksBUb4btCzvbHThDY\",\n  \"debitLimit\": {\n    \"value\": \"22819\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 17\n  },\n  \"interval\": null,\n  \"approvedAt\": \"1969-10-04T13:40:25.121Z\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "fe87d0cb-a857-4123-8221-a016ad3cebac",
+                            "name": "Falta `X-Api-Key` o es incorrecta (`unauthorized`).",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "relia-grant"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"debitLimit\": {\n    \"value\": \"5661\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 97\n  },\n  \"interval\": \"string\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "29e3f3af-c816-4707-a7b1-c2aa54979f1c",
+                            "name": "Cuerpo inválido (`validation_error`), contraparte igual a la billetera de Relia (`same_wallet`) o moneda no\nsoportada (`unsupported_asset`): `receiveAmount` no está en la moneda de Relia, o el riel no cotiza entre la\nmoneda de Relia y la de la contraparte. La moneda de la contraparte por sí sola no es motivo de rechazo.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "relia-grant"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"debitLimit\": {\n    \"value\": \"5661\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 97\n  },\n  \"interval\": \"string\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Unprocessable Entity (WebDAV) (RFC 4918)",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "17f11bb4-ea27-4df9-99ad-21a7e1a5df4d",
+                            "name": "El riel no respondió (`rail_unavailable`) o Relia no tiene permiso activo para pagar\n(`relia_grant_unavailable`). No se creó ni cambió nada; se puede reintentar.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "relia-grant"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"debitLimit\": {\n    \"value\": \"5661\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 97\n  },\n  \"interval\": \"string\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Service Unavailable",
+                            "code": 503,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                }
+            ]
+        },
+        {
+            "name": "health",
+            "description": "",
+            "item": [
+                {
+                    "id": "2df459b3-9bbd-4bf9-8771-b94a9b2da176",
+                    "name": "Estado del proxy, del riel y del permiso de Relia",
+                    "request": {
+                        "name": "Estado del proxy, del riel y del permiso de Relia",
+                        "description": {},
+                        "url": {
+                            "path": [
+                                "health"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "e92ad593-d326-44a8-8270-35a31f48316b",
+                            "name": "Estado.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "health"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"status\": \"degraded\",\n  \"rail\": \"openPayments\",\n  \"reliaGrant\": \"active\",\n  \"reliaWallet\": {\n    \"pointer\": \"$;'SZw-&*~s/MeVA.L3sF\",\n    \"url\": \"https://cEsfVoblNIUpMbp.draaMgNY7hwUAd8.DA46\",\n    \"assetCode\": \"string\",\n    \"assetScale\": 9718\n  }\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "7ef13b59-acb6-44dd-a999-41ccb00e73c4",
+                            "name": "Demasiadas consultas (`too_many_requests`).",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "health"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Too Many Requests",
+                            "code": 429,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"string\",\n  \"status\": 5543,\n  \"code\": \"rail_unavailable\",\n  \"detail\": \"string\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                }
+            ]
+        }
+    ],
+    "auth": {
+        "type": "apikey",
+        "apikey": [
+            {
+                "type": "any",
+                "value": "X-Api-Key",
+                "key": "key"
+            },
+            {
+                "type": "any",
+                "value": "{{apiKey}}",
+                "key": "value"
+            },
+            {
+                "type": "any",
+                "value": "header",
+                "key": "in"
+            }
+        ]
+    },
+    "event": [],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:4000"
+        },
+        {
+            "key": "counterpartyForeign",
+            "value": "$ilp.interledger-test.dev/usuario-usd"
+        },
+        {
+            "key": "counterpartyNoRoute",
+            "value": "$ilp.interledger-test.dev/usuario-sin-ruta"
+        }
+    ],
+    "info": {
+        "_postman_id": "ff90cec7-2210-455f-b9d4-b3bb68635ee1",
+        "name": "Relia Rail Proxy",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "description": {
+            "content": "Contrato agnóstico al riel (ver ADR 0001). El backend pide \"cobrar a una billetera\" o \"pagar a una billetera\"\ny consulta el estado. Un adaptador Bre-B futuro implementa este mismo contrato.\n\nSolo el proxy conoce Open Payments: grants GNAP, quotes, incoming y outgoing payments, y las llaves de la\nbilletera de Relia (variable de entorno, en base64).\n\nConvenciones:\n- Red privada. Toda llamada lleva `X-Api-Key`.\n- Sin webhooks. El backend consulta `GET /payments/{paymentId}`, que devuelve el último estado que conoce el\n  proxy sin llamar al riel en esa petición. El proxy consulta Open Payments por su cuenta.\n- Montos en unidades mínimas del riel: `{ value, assetCode, assetScale }`. En la red de prueba, COP con escala 2.\n- Toda creación lleva `Idempotency-Key`, que es el id del pago en el backend (`pagos.id`).\n- Errores en `application/problem+json` (RFC 9457) con un `code` estable.\n- Los fallos forzados del Modo demo no pasan por aquí: el backend los simula.\n",
+            "type": "text/plain"
+        }
+    }
+}
