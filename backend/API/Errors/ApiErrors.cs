@@ -57,6 +57,14 @@ public static class ApiErrors
     public static ApiException OtpAttemptsExceeded() =>
         new(StatusCodes.Status422UnprocessableEntity, "otp_attempts_exceeded", "Se agotaron los intentos");
 
+    /// <summary>Cargas de cupo, ajustes y liquidaciones no tienen recibo.</summary>
+    public static ApiException ReceiptNotAvailable() =>
+        new(StatusCodes.Status409Conflict, "receipt_not_available", "Esta operación no tiene recibo");
+
+    /// <summary>El recibo existe solo cuando la operación está completed.</summary>
+    public static ApiException OperationNotCompleted() =>
+        new(StatusCodes.Status409Conflict, "operation_not_completed", "La operación no está completada");
+
     /// <summary>422 insufficient_quota con lo que falta (depósitos).</summary>
     public static ApiException InsufficientQuota(long shortfall) =>
         new(StatusCodes.Status422UnprocessableEntity, "insufficient_quota", "Cupo insuficiente",

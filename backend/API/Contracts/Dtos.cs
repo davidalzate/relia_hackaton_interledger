@@ -184,7 +184,7 @@ public record ReceiptDataDto(
 public record ReceiptDto(
     string Code, Guid OperationId, string ContentHash, bool IsCopy, DateTimeOffset IssuedAt, ReceiptDataDto Data);
 
-public record SendReceiptRequest([Required] ReceiptSendChannel Channel);
+public record SendReceiptRequest([Required] ReceiptSendChannel? Channel);
 
 public record ReceiptDeliveryDto(ReceiptSendChannel Channel, string SentTo, bool IsCopy, DateTimeOffset SentAt);
 

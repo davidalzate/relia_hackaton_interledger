@@ -11,19 +11,6 @@ namespace Relia.Api.Services;
 // Implementaciones en desarrollo: reciben ya sus repositorios y responden 501 "En desarrollo".
 // Cada una se implementa en el ticket indicado de docs/issues/backend-relia-api/.
 
-/// <summary>Ticket 08.</summary>
-public class ReceiptService(
-    IOperationRepository operations, IReceiptRepository receipts, ISimulatedMessageRepository messages,
-    IUnitOfWork unitOfWork, ICurrentUser currentUser) : IReceiptService
-{
-    public Task<ReceiptDto> GetAsync(Guid operationId, ReceiptViewChannel channel, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("getReceipt");
-
-    public Task<ReceiptDeliveryDto> SendAsync(Guid operationId, SendReceiptRequest request,
-        CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("sendReceipt");
-}
-
 /// <summary>Ticket 13.</summary>
 public class SettlementService(ISettlementRepository settlements, ICurrentUser currentUser) : ISettlementService
 {
