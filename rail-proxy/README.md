@@ -53,6 +53,12 @@ curl -X POST localhost:4000/relia-grant -H "X-Api-Key: $RAIL_PROXY_API_KEY" -H '
 2. Después de aprobar, la wallet queda en una página en blanco: es normal. El proxy detecta la aprobación solo.
 3. `GET /relia-grant` pasa a `active` y `/health` a `ok`. El permiso queda en `DATABASE_PATH` y sobrevive a los reinicios.
 
+El inicio del `interval` debe estar en el pasado: el riel rechaza los pagos creados antes de que empiece (el proxy responde `422`). El token del permiso dura poco (~10 min); el proxy lo rota solo antes de que venza.
+
+Estados que verás en `GET /relia-grant`:
+- `exhausted`: el riel rechazó un pago por el tope del periodo. Los pagos se siguen intentando (uno más pequeño puede caber) y vuelve a `active` con el primer pago que pase o al empezar el siguiente periodo.
+- `missing` después de haber estado `active`: el riel revocó el permiso (por ejemplo, lo revocaste desde la wallet). Pide uno nuevo.
+
 Para subir el tope, pide uno nuevo: al aprobarlo reemplaza al anterior, que se revoca en el riel. Mientras el nuevo no se apruebe, el estado es `awaiting_approval` y los `outgoing` responden `503`. Si el operador lo rechaza o se vence la ventana, vuelve a regir el anterior.
 
 ## Errores
