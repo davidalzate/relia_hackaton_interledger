@@ -52,7 +52,7 @@ PR #28. Vista previa y llave las reusa Retirar.
 
 ### 3. Retirar (B3)
 
-PR #29. En el demo se aprueba desde el enlace de C2; Mi billetera (26) lo reemplaza.
+PR #29. El usuario escanea un QR con la `approvalUrl` y aprueba en su billetera; nada se envía a C2.
 
 | # | Endpoint | Pantalla | Bloqueado por | Estado |
 |---|---|---|---|---|

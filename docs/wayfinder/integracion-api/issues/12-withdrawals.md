@@ -27,3 +27,4 @@ Conectar el frontend (`frontend/relia`) al endpoint real de la Relia API y retir
 ## Notas
 
 - Estado y polling en `WithdrawalService` (sobrevive a abrir C2). B3.1 usa el preview del API; se borró `withdrawBreakdown`. C2 enlaza a `approvalUrl` en vez de Aprobar/Rechazar simulados.
+- Cambio de flujo: ya no se envía la solicitud al teléfono del usuario. B3.2 muestra la `approvalUrl` como código QR (`QrCodeComponent`) para que el usuario la escanee y apruebe en su billetera; C2 ya no muestra la solicitud.
