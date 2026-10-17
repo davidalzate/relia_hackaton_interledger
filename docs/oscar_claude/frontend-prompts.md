@@ -2,10 +2,10 @@
 
 Registro de los prompts usados con **Claude Code** (app de escritorio, modelo Claude Opus) para construir el frontend de Relia en `frontend/relia`. Complementa [AI_USAGE.md](../../AI_USAGE.md).
 
-- **Fecha:** 16 de octubre de 2026, en dos sesiones: pantallas con datos simulados (prompts 1–22) e integración con la Relia API (prompts 23–31).
+- **Fecha:** 16 y 17 de octubre de 2026, en dos sesiones: pantallas con datos simulados (prompts 1–22) e integración con la Relia API (prompts 23–48).
 - **Stack resultante:** Angular 21 standalone, zone.js, signals, PrimeNG 21 (Aura), Zod (`zod/mini`) y SCSS con tokens en `:root`.
 - **Flujo de trabajo:** cada pantalla se pidió pegando su especificación (A1, B0–B9, D0–D1). Claude implementó la pantalla, corrió typecheck, build y tests y la probó en el navegador. Luego, con un segundo prompt, hizo el commit y abrió el PR hacia `main`.
-- **Integración con la API:** a partir de [contracts/FLUJOS.md](../../contracts/FLUJOS.md) Claude creó un ticket por endpoint en [docs/wayfinder/integracion-api](../wayfinder/integracion-api/map.md) y luego se pidió cada ticket por número. Cada uno reemplaza un mock por la llamada real, con schema Zod, tests con `HttpTestingController` y su PR. Los PRs van apilados: cada uno parte del anterior.
+- **Integración con la API:** a partir de [contracts/FLUJOS.md](../../contracts/FLUJOS.md) Claude creó un ticket por endpoint en [docs/wayfinder/integracion-api](../wayfinder/integracion-api/map.md) y luego se pidió cada ticket por número; desde el prompt 33, una feature completa (varios tickets) por rama y PR. Cada uno reemplaza un mock por la llamada real, con schema Zod, tests con `HttpTestingController` y su PR. Los PRs van apilados: cada uno parte del anterior, y al final se llevaron a `main` con PRs de cierre (#34, #38).
 - **Qué hicimos nosotros:** escribimos las especificaciones de cada pantalla, revisamos y mergeamos cada PR y decidimos cuando había alternativas (por ejemplo, quedarnos en Angular 21 en lugar de bajar a 19).
 
 ## Resumen
@@ -43,6 +43,23 @@ Registro de los prompts usados con **Claude Code** (app de escritorio, modelo Cl
 | 29 | Ticket 04. `GET /agents/{agentId}/history` | [PR #24](https://github.com/davidalzate/relia_hackaton_interledger/pull/24) |
 | 30 | Ticket 05. `POST /agents/{agentId}/cash-adjustments` | [PR #25](https://github.com/davidalzate/relia_hackaton_interledger/pull/25) |
 | 31 | Actualizar este registro | Este archivo |
+| 32 | Agrupar los tickets restantes por feature | `map.md` con 9 features |
+| 33 | Feature Seguimiento de operaciones (07, 08) | [PR #27](https://github.com/davidalzate/relia_hackaton_interledger/pull/27) |
+| 34 | Feature Depositar (09, 10, 11) | [PR #28](https://github.com/davidalzate/relia_hackaton_interledger/pull/28) |
+| 35 | Feature Retirar (12, 13) | [PR #29](https://github.com/davidalzate/relia_hackaton_interledger/pull/29) |
+| 36 | Feature Cargar cupo (06, 23) | [PR #31](https://github.com/davidalzate/relia_hackaton_interledger/pull/31) |
+| 37 | Feature Llaves y vinculación (14, 15, 16), con OTP simulado | [PR #32](https://github.com/davidalzate/relia_hackaton_interledger/pull/32) |
+| 38 | Feature Comprobante (17, 18) | [PR #33](https://github.com/davidalzate/relia_hackaton_interledger/pull/33) |
+| 39 | Retiro con QR en lugar de enviar la solicitud | [PR #29](https://github.com/davidalzate/relia_hackaton_interledger/pull/29) (commit adicional) |
+| 40 | Llevar a `main` la cadena y el tracker | [PR #34](https://github.com/davidalzate/relia_hackaton_interledger/pull/34), [PR #35](https://github.com/davidalzate/relia_hackaton_interledger/pull/35) |
+| 41 | Cambiar la base de #29 a `main` | [PR #29](https://github.com/davidalzate/relia_hackaton_interledger/pull/29) |
+| 42 | ¿Qué feature sigue y cuáles faltan? | Respuesta (sin cambios) |
+| 43 | Feature Admin y quitar Modo demo de las tareas | [PR #37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37), [PR #36](https://github.com/davidalzate/relia_hackaton_interledger/pull/36) |
+| 44 | Pull de `main` tras fusionar #29 | Sin cambios |
+| 45 | Cambiar la base de #31 a `main` | [PR #38](https://github.com/davidalzate/relia_hackaton_interledger/pull/38) |
+| 46 | Fetch para ver el estado real del repo | Sin cambios |
+| 47 | Omitir cambios locales innecesarios y hacer pull | Sin cambios |
+| 48 | Actualizar este registro | Este archivo |
 
 Después de cada pantalla venía un prompt corto para hacer el commit y abrir el PR. Esos no se listan uno por uno; su forma era siempre la misma:
 
@@ -625,3 +642,68 @@ B7 guarda con `POST /agents/{agentId}/cash-adjustments`, muestra los errores `in
 ### 31. Actualizar este registro
 
 > actualiza el archivo de promps de oscar con lo que se a agregado
+
+### 32. Tickets agrupados por feature
+
+> agrupa los tickets restantes por feature y actualiza el archivo de tickets
+
+`map.md` pasó a 9 features en orden sugerido (una rama y un PR por feature). Cada ticket lleva `Feature:` y los ya hechos quedaron en `claimed` con su PR.
+
+### 33–38. Una feature por rama y PR
+
+Desde aquí cada prompt pidió una feature completa:
+
+> Sigue con la feature de seguimiento de operaciones (tickets 07 y 08) en una rama y un PR
+
+- **33. Seguimiento de operaciones:** `OperationsService` con `get`, `watch` (polling hasta el estado final) y `cancel`, y textos por `failureCode`. Resultado: [PR #27](https://github.com/davidalzate/relia_hackaton_interledger/pull/27).
+- **34. Depositar:** desglose en vivo con `POST .../operations/preview`, llave real con `GET /keys/{phone}` y depósito creado y seguido hasta el final; se borró el cálculo local. Resultado: [PR #28](https://github.com/davidalzate/relia_hackaton_interledger/pull/28).
+- **35. Retirar:** `WithdrawalService` guarda el retiro en curso y su polling; cancelación, entrega de efectivo con `POST .../cash-handover` y errores por `failureCode`. Resultado: [PR #29](https://github.com/davidalzate/relia_hackaton_interledger/pull/29).
+- **36. Cargar cupo:** `QuotaTopUpService` para Bre-B (QR simulado y botón "Simular pago recibido") y Wallet (enlace a `approvalUrl`). Resultado: [PR #31](https://github.com/davidalzate/relia_hackaton_interledger/pull/31).
+- **37. Llaves y vinculación:** se construyó C1 (era un placeholder). Lo pedimos con esta aclaración:
+
+  > en el caso del otp no va a haber endpoint ni envio a wasap, esta parte sera mokeada para facilidad del demo
+
+  El OTP y la invitación por WhatsApp se simulan en el navegador y la llave se crea con `POST /key-links` después de verificar el código. Queda pendiente alinear ese endpoint con backend. Resultado: [PR #32](https://github.com/davidalzate/relia_hackaton_interledger/pull/32).
+- **38. Comprobante:** recibo oficial con `GET .../receipt` (insignia COPIA), impresión registrada con `channel=print` y SMS por `POST .../receipt/send`. Resultado: [PR #33](https://github.com/davidalzate/relia_hackaton_interledger/pull/33).
+
+### 39. Retiro con QR
+
+> en el feat integrar retirar, vamos a cambiar el flujo, ahora no se envia la solicitud si no que el endpoint nos retorna una url que debemos convertir a codigo qr
+
+B3.2 muestra la `approvalUrl` como código QR (`QrCodeComponent` con la librería `qrcode`, en SVG) para que el usuario la escanee; C2 ya no recibe la solicitud. Claude propagó el cambio con merges a las ramas apiladas (#31, #32, #33). Resultado: commit adicional en [PR #29](https://github.com/davidalzate/relia_hackaton_interledger/pull/29).
+
+### 40–41. Llevar la cadena a `main`
+
+> Abre los PRs para llevar a main la cadena de integración (feat/cash-adjustments con lo fusionado) y los commits del tracker que quedaron fuera de #18
+
+> Cuando se fusione #34, cambia la base de #29 a main
+
+Los PRs apilados se habían fusionado en ramas intermedias y no en `main`. Claude abrió [PR #34](https://github.com/davidalzate/relia_hackaton_interledger/pull/34) (tickets 01–11) y [PR #35](https://github.com/davidalzate/relia_hackaton_interledger/pull/35) (tracker) y cambió la base de #29 a `main`; resolvió 4 conflictos con el commit de depósito reescrito, quedándose con la versión de Retirar.
+
+### 42. Qué falta
+
+> cual era el feature siguiente y cuales faltan
+
+Respuesta con la tabla de features y su estado: seguían Admin y Modo demo.
+
+### 43. Admin y fuera Modo demo
+
+> continua con el admin y el modo demo removameslo de las tareas
+
+Modo demo (tickets 24–29) salió del tracker como fuera de alcance ([PR #36](https://github.com/davidalzate/relia_hackaton_interledger/pull/36)). Admin: D1 con `GET /agents` y `GET /settlements?from=hoy` (hora de Bogotá), D2 y D3 construidas (eran placeholders) con el pago de comisión y su seguimiento; se borraron los mocks que quedaban. Resultado: [PR #37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37).
+
+### 44–47. Sincronizar el repo
+
+> haz pull de main 29 ya esta fusionado
+
+> Cambia la base de #31 a main y resuelve si hay conflictos
+
+> puedes hacer un fetch para que tengas el estado cerrecto del repo
+
+> si no son necesarios esos cambios omitelos y haz pull para actualizar el local
+
+#31, #32 y #33 se habían fusionado en sus ramas base y no llegaron a `main`, así que Claude abrió [PR #38](https://github.com/davidalzate/relia_hackaton_interledger/pull/38) desde la última rama de la cadena. Los cambios locales en `angular.json` y `tsconfig.spec.json` no eran necesarios y quedaron en un stash.
+
+### 48. Actualizar este registro
+
+> actualiza el archivo /Users/oscarcorrea/development/projects/relia_hackaton_interledger/docs/oscar_claude/frontend-prompts.md
