@@ -6,9 +6,10 @@ namespace Relia.Api.Contracts;
 // DTOs de contracts/relia-api.openapi.yaml usados por las rutas del corresponsal.
 // Dinero: long en pesos COP. Fechas: DateTimeOffset en UTC.
 
-internal static class Patterns
+public static class Patterns
 {
     public const string Phone = "^3[0-9]{9}$";
+    public const string WalletAddress = @"^\$[^\s/]+(/\S*)?$";
 }
 
 // ---- Enums del API ----
@@ -104,7 +105,9 @@ public record OperationPreviewRequest(
 
 public record FeeDto(long Total, long Relia, long Agent);
 
-public record PreviewViolationDto(PreviewViolationCode Code, long? Shortfall);
+public record PreviewViolationDto(
+    PreviewViolationCode Code,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? Shortfall);
 
 public record OperationPreviewDto(
     CashMovingOperationType Type, long RequestedAmount, bool RoundAmount, FeeDto Fee,
@@ -176,3 +179,58 @@ public record SettlementPageDto(IReadOnlyList<SettlementDto> Items, string? Next
 
 public record SettlementQuery(
     DateOnly? From, DateOnly? To, Guid? AgentId, SettlementStatus? Status, string? Cursor, int Limit);
+
+// ---- Admin ----
+
+public record CountAmountDto(int Count, long Amount);
+
+public record AgentSummaryDto(
+    Guid Id, string Name, string ManagerName, string City, string WalletAddress, bool WalletSimulated,
+    int Operations, CountAmountDto Deposits, CountAmountDto Withdrawals, long TotalMoved, long Quota,
+    long CashOnHand, long AccruedCommission, long SettledCommissionTotal, long CommissionPaidToday);
+
+public record NetworkTotalsDto(
+    CountAmountDto TotalMoved, CountAmountDto Deposits, CountAmountDto Withdrawals, long CommissionPayable,
+    long CommissionPaidToday);
+
+public record AgentListDto(IReadOnlyList<AgentSummaryDto> Items, NetworkTotalsDto Totals);
+
+// ---- Modo demo ----
+
+public enum DemoMessageType
+{
+    [JsonStringEnumMemberName("otp")] Otp,
+    [JsonStringEnumMemberName("invitacion_wallet")] InvitacionWallet,
+    [JsonStringEnumMemberName("aviso_deposito")] AvisoDeposito,
+    [JsonStringEnumMemberName("solicitud_pago")] SolicitudPago,
+    [JsonStringEnumMemberName("comprobante")] Comprobante,
+    [JsonStringEnumMemberName("aviso_comision")] AvisoComision,
+}
+
+public record DemoMessageDto(
+    string Id, string Phone, ReceiptSendChannel Channel, DemoMessageType Type, string Content, string? Link,
+    Guid? OperationId, bool Read, DateTimeOffset CreatedAt);
+
+public record DemoMessagePageDto(IReadOnlyList<DemoMessageDto> Items, int UnreadCount, string? NextCursor);
+
+public record MarkMessagesReadRequest([RegularExpression(Patterns.Phone)] string? Phone);
+
+public record DemoFaultsDto(bool FailNextPayment);
+
+public record DemoPaymentRequestDto(
+    Guid OperationId, string Reference, OperationType Type, string AgentName, long ChargedAmount,
+    DateTimeOffset ExpiresAt, string ApprovalUrl);
+
+public record DemoPaymentRequestListDto(IReadOnlyList<DemoPaymentRequestDto> Items);
+
+// ---- Vinculación pública ----
+
+public record CreateKeyLinkRequest(
+    [Required, RegularExpression(Patterns.Phone)] string Phone,
+    [Required, RegularExpression(Patterns.WalletAddress)] string WalletAddress);
+
+public record KeyLinkChallengeDto(Guid ChallengeId, string Phone, DateTimeOffset ExpiresAt, int MaxAttempts);
+
+public record VerifyKeyLinkRequest([Required, RegularExpression("^[0-9]{6}$")] string Code);
+
+public record KeyLinkDto(string Phone, string WalletAddress, DateTimeOffset LinkedAt);

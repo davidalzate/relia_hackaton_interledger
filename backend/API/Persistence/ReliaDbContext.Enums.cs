@@ -29,6 +29,14 @@ public partial class ReliaDbContext
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder)
     {
+        // El scaffold leyó el índice único parcial "una liquidación pendiente por corresponsal" como una
+        // relación uno a uno. Es uno a muchos: sin esto, EF desliga la liquidación anterior al crear otra.
+        modelBuilder.Entity<Agent>().Ignore(a => a.Settlement);
+        modelBuilder.Entity<Settlement>().HasOne(s => s.Agent).WithMany()
+            .HasForeignKey(s => s.AgentId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("settlements_agent_id_fkey");
+
         modelBuilder.Entity<Operation>(e =>
         {
             e.Property(x => x.Type).HasColumnName("type");

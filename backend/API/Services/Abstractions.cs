@@ -84,6 +84,12 @@ public interface IReceiptService
 /// <summary>GET /settlements y GET /settlements/{settlementId}. El agente solo ve las suyas.</summary>
 public interface ISettlementService
 {
+    /// <summary>
+    /// Solo admin. Liquida toda la comisión acumulada (monto fijo desde ahora). 409 settlement_in_progress,
+    /// 422 no_commission, 503 rail_unavailable.
+    /// </summary>
+    Task<SettlementDto> CreateAsync(Guid agentId, string idempotencyKey, CancellationToken ct = default);
+
     Task<SettlementPageDto> ListAsync(SettlementQuery query, CancellationToken ct = default);
 
     Task<SettlementDto> GetAsync(Guid settlementId, CancellationToken ct = default);
