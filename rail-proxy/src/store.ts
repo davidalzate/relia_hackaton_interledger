@@ -119,6 +119,19 @@ const MIGRATIONS: string[] = [
 
   // 6. Vencimiento de cobros: el sincronizador busca por fecha límite en cada vuelta.
   `CREATE INDEX ix_payments_expiry ON payments (status, expires_at);`,
+
+  // 7. Pagos entre monedas. `asset_code`/`asset_scale` siguen siendo la moneda de `receive_value` (la de Relia);
+  //    el débito, lo recibido y lo cotizado al receptor llevan su propia moneda. NULL en pagos anteriores: misma
+  //    moneda que `asset_code`. `fixed_side`: `receive` = el receptor recibe exactamente `receive_value`;
+  //    `debit` = Relia debita exactamente `receive_value` (outgoing a otra moneda).
+  `ALTER TABLE payments ADD COLUMN fixed_side TEXT NOT NULL DEFAULT 'receive' CHECK (fixed_side IN ('receive', 'debit'));
+  ALTER TABLE payments ADD COLUMN debit_asset_code TEXT;
+  ALTER TABLE payments ADD COLUMN debit_asset_scale INTEGER;
+  ALTER TABLE payments ADD COLUMN received_asset_code TEXT;
+  ALTER TABLE payments ADD COLUMN received_asset_scale INTEGER;
+  ALTER TABLE payments ADD COLUMN quoted_receive_value TEXT;
+  ALTER TABLE payments ADD COLUMN quoted_receive_asset_code TEXT;
+  ALTER TABLE payments ADD COLUMN quoted_receive_asset_scale INTEGER;`,
 ];
 
 /** Abre (o crea) el archivo SQLite del proxy y lo lleva a la última versión del esquema. */

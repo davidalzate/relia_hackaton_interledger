@@ -26,6 +26,8 @@ export type PaymentStatus =
   | 'rejected'
   | 'expired'
   | 'cancelled';
+/** Lado del pago que queda fijo en la moneda de Relia. */
+type FixedSide = 'receive' | 'debit';
 export type FailureCode = 'insufficient_funds' | 'quote_expired' | 'relia_grant_unavailable' | 'partial_payment' | 'rail_error';
 
 export interface CreatePaymentRequest {
@@ -47,6 +49,7 @@ export interface PaymentView {
   receiveAmount: Amount;
   debitAmount: Amount | null;
   receivedAmount: Amount | null;
+  quotedReceiveAmount: Amount | null;
   approval: { method: 'redirect' | 'qr'; url?: string; payload?: string } | null;
   expiresAt: string | null;
   failureCode: FailureCode | null;
@@ -70,6 +73,17 @@ interface PaymentRow {
   receive_value: string;
   debit_value: string | null;
   received_value: string | null;
+  /** `receive`: el receptor recibe exactamente `receive_value`. `debit`: Relia debita exactamente `receive_value`. */
+  fixed_side: FixedSide;
+  // Moneda de cada monto; NULL = la de `asset_code` (pagos anteriores a multimoneda).
+  debit_asset_code: string | null;
+  debit_asset_scale: number | null;
+  received_asset_code: string | null;
+  received_asset_scale: number | null;
+  /** Lo que el quote promete entregar al receptor, en su moneda. */
+  quoted_receive_value: string | null;
+  quoted_receive_asset_code: string | null;
+  quoted_receive_asset_scale: number | null;
   description: string | null;
   expires_at: string | null;
   failure_code: FailureCode | null;
@@ -335,17 +349,17 @@ export class PaymentService {
     if (counterparty.url === relia.url) {
       throw new ProblemError(422, 'same_wallet', 'Misma billetera', 'La contraparte es la billetera de Relia.');
     }
-    if (!sameAsset(counterparty, relia)) {
-      throw unsupported(
-        `${counterparty.pointer} opera en ${counterparty.assetCode} con escala ${counterparty.assetScale}; el riel opera en ${relia.assetCode} con escala ${relia.assetScale}.`,
-      );
-    }
+    // La contraparte puede estar en cualquier moneda: si el riel no convierte, falla el quote (unsupported_asset).
     return counterparty;
   }
 
   /**
    * Relia paga: incoming payment en el receptor, quote y outgoing payment en la billetera de Relia con el
    * permiso permanente. Si algo falla, no queda pago y el cobro abierto en el receptor se cierra.
+   *
+   * Misma moneda: el incoming lleva `incomingAmount` = `receiveAmount` y el receptor recibe exacto.
+   * Entre monedas: el incoming va sin monto y el quote fija `debitAmount` = `receiveAmount`; Relia envía
+   * exactamente ese monto y el receptor recibe lo que el riel convierta.
    */
   private async createOutgoing(
     idempotencyKey: string,
@@ -356,35 +370,39 @@ export class PaymentService {
     // Fallar antes de abrir nada en el riel si el permiso no está activo.
     this.deps.reliaGrants.assertCanPay();
     const metadata = paymentMetadata(idempotencyKey, request.description);
+    const fixedSide: FixedSide = sameAsset(receiver, relia) ? 'receive' : 'debit';
 
     let incoming: IncomingPayment;
     try {
       incoming = await grants.withToken(receiver.authServer, 'incoming-payment', (accessToken) =>
         client.incomingPayment.create(
           { url: receiver.resourceServer, accessToken },
-          { walletAddress: receiver.url, incomingAmount: request.receiveAmount, metadata },
+          fixedSide === 'receive'
+            ? { walletAddress: receiver.url, incomingAmount: request.receiveAmount, metadata }
+            : { walletAddress: receiver.url, metadata },
         ),
       );
     } catch (error) {
       throw railUnavailable(error);
     }
 
-    let quoteId: string;
-    let debitValue: string;
+    let quote: Quote;
     let outgoing: OutgoingPayment;
     try {
-      const quote = await grants.withToken(relia.authServer, 'quote', (accessToken) =>
+      quote = await grants.withToken(relia.authServer, 'quote', (accessToken) =>
         client.quote.create(
           { url: relia.resourceServer, accessToken },
-          { walletAddress: relia.url, receiver: incoming.id, method: 'ilp' },
+          fixedSide === 'receive'
+            ? { walletAddress: relia.url, receiver: incoming.id, method: 'ilp' }
+            : { walletAddress: relia.url, receiver: incoming.id, method: 'ilp', debitAmount: request.receiveAmount },
         ),
       );
-      quoteId = quote.id;
-      debitValue = quote.debitAmount.value;
     } catch (error) {
       await this.closeIncoming(receiver.authServer, incoming.id);
+      if (fixedSide === 'debit' && isUnsupportedConversion(error)) throw unsupportedConversion(relia, receiver, error);
       throw railUnavailable(error);
     }
+    const quoteId = quote.id;
     let grantId: string | undefined;
     try {
       outgoing = await this.deps.reliaGrants.withPermitToken('create', (accessToken, usedGrant) => {
@@ -431,8 +449,12 @@ export class PaymentService {
       asset_code: request.receiveAmount.assetCode,
       asset_scale: request.receiveAmount.assetScale,
       receive_value: request.receiveAmount.value,
-      debit_value: debitValue,
+      debit_value: quote.debitAmount.value,
       received_value: null,
+      fixed_side: fixedSide,
+      ...quoteAmounts(quote),
+      received_asset_code: null,
+      received_asset_scale: null,
       description: request.description ?? null,
       expires_at: request.expiresAt ?? null,
       failure_code: null,
@@ -482,8 +504,8 @@ export class PaymentService {
       throw railUnavailable(error);
     }
 
+    // El quote se hace en la billetera del pagador: `debitAmount` sale en su moneda y Relia recibe exacto.
     let quote: Quote;
-    let pending: PendingGrant;
     try {
       quote = await grants.withToken(payer.authServer, 'quote', (accessToken) =>
         client.quote.create(
@@ -491,6 +513,14 @@ export class PaymentService {
           { walletAddress: payer.url, receiver: incoming.id, method: 'ilp' },
         ),
       );
+    } catch (error) {
+      await this.closeIncoming(relia.authServer, incoming.id);
+      if (!sameAsset(payer, relia) && isUnsupportedConversion(error)) throw unsupportedConversion(relia, payer, error);
+      throw railUnavailable(error);
+    }
+
+    let pending: PendingGrant;
+    try {
       const grant = await client.grant.request(
         { url: payer.authServer },
         {
@@ -529,6 +559,10 @@ export class PaymentService {
       receive_value: request.receiveAmount.value,
       debit_value: quote.debitAmount.value,
       received_value: null,
+      fixed_side: 'receive',
+      ...quoteAmounts(quote),
+      received_asset_code: null,
+      received_asset_scale: null,
       description: request.description ?? null,
       expires_at: new Date(request.expiresAt).toISOString(),
       failure_code: null,
@@ -683,8 +717,9 @@ export class PaymentService {
       return;
     }
     // Guardar la quote nueva antes de usarla: si la creación falla de forma transitoria, el reintento la usa.
-    this.transition(row, 'processing', { quote_url: quote.id, debit_value: quote.debitAmount.value, requoted: 1 }, now);
-    row = { ...row, quote_url: quote.id, debit_value: quote.debitAmount.value, requoted: 1 };
+    const requote = { quote_url: quote.id, debit_value: quote.debitAmount.value, ...quoteAmounts(quote), requoted: 1 };
+    this.transition(row, 'processing', requote, now);
+    row = { ...row, ...requote };
     try {
       created((await create(quote.id)).id);
     } catch (error) {
@@ -807,24 +842,14 @@ export class PaymentService {
    * Si el riel no confirma, el pago sigue en `processing` y se vuelve a consultar.
    */
   private async confirm(row: PaymentRow, now: number): Promise<void> {
-    const { client, grants } = this.deps;
-    const changes: PaymentUpdate = {};
+    if (row.fixed_side === 'debit') {
+      await this.confirmFixedDebit(row, now);
+      return;
+    }
 
     // Primero el incoming: si el dinero ya llegó, el pago está completo aunque falte el outgoing en el registro.
-    let incoming: IncomingPayment | undefined;
-    if (row.incoming_payment_url && row.incoming_auth_server) {
-      try {
-        incoming = await grants.withToken(row.incoming_auth_server, 'incoming-payment', (accessToken) =>
-          client.incomingPayment.get({ url: row.incoming_payment_url!, accessToken }),
-        );
-      } catch (error) {
-        this.deps.log.warn({ paymentId: row.id, error: describeRailError(error) }, 'no se pudo leer el incoming payment');
-      }
-    }
-    // `receivedAmount` es null hasta que empiece a llegar dinero.
-    if (incoming && BigInt(incoming.receivedAmount.value) > 0n && incoming.receivedAmount.value !== row.received_value) {
-      changes.received_value = incoming.receivedAmount.value;
-    }
+    const incoming = await this.readIncoming(row);
+    const changes = receivedChanges(row, incoming);
     if (incoming && BigInt(incoming.receivedAmount.value) >= BigInt(row.receive_value)) {
       if (this.transition(row, 'processing', { ...changes, status: 'completed', completed_at: iso(now), next_poll_at: null }, now)) {
         this.deps.log.info({ paymentId: row.id }, 'pago completado');
@@ -856,6 +881,64 @@ export class PaymentService {
       return;
     }
 
+    this.reschedule(row, changes, now);
+  }
+
+  /**
+   * `outgoing` entre monedas (Relia debita exacto). Éxito: el outgoing de Relia envió todo su `debitAmount` sin
+   * fallar, o el receptor ya recibió lo que prometió el quote (respaldo si no se puede leer el outgoing).
+   * `receivedAmount` sale del incoming del receptor, en su moneda. Al terminar se cierra ese incoming, que sin
+   * monto no se cierra solo.
+   */
+  private async confirmFixedDebit(row: PaymentRow, now: number): Promise<void> {
+    // Primero el outgoing y después el incoming: así lo recibido refleja al menos lo ya enviado.
+    const outgoing = await this.readOutgoing(row);
+    const incoming = await this.readIncoming(row);
+    const changes = receivedChanges(row, incoming);
+
+    if (outgoing?.failed) {
+      this.deps.log.warn({ paymentId: row.id, sent: outgoing.sentAmount.value }, 'pago fallido en el riel');
+      await this.fail(
+        row,
+        BigInt(outgoing.sentAmount.value) > 0n ? 'partial_payment' : 'rail_error',
+        `El riel marcó el pago como fallido: enviado ${outgoing.sentAmount.value} de ${outgoing.debitAmount.value} ${outgoing.debitAmount.assetCode}.`,
+        now,
+        changes,
+      );
+      return;
+    }
+
+    const sentAll = outgoing !== undefined && BigInt(outgoing.sentAmount.value) >= BigInt(outgoing.debitAmount.value);
+    const deliveredQuote =
+      incoming !== undefined &&
+      row.quoted_receive_value !== null &&
+      BigInt(incoming.receivedAmount.value) >= BigInt(row.quoted_receive_value);
+    if (sentAll || deliveredQuote) {
+      if (this.transition(row, 'processing', { ...changes, status: 'completed', completed_at: iso(now), next_poll_at: null }, now)) {
+        this.deps.log.info({ paymentId: row.id }, 'pago completado');
+        await this.closeIncoming(row.incoming_auth_server!, row.incoming_payment_url!);
+      }
+      return;
+    }
+
+    this.reschedule(row, changes, now);
+  }
+
+  /** Lee el incoming payment del pago (el de Relia en `incoming`, el del receptor en `outgoing`). */
+  private async readIncoming(row: PaymentRow): Promise<IncomingPayment | undefined> {
+    if (!row.incoming_payment_url || !row.incoming_auth_server) return undefined;
+    try {
+      return await this.deps.grants.withToken(row.incoming_auth_server, 'incoming-payment', (accessToken) =>
+        this.deps.client.incomingPayment.get({ url: row.incoming_payment_url!, accessToken }),
+      );
+    } catch (error) {
+      this.deps.log.warn({ paymentId: row.id, error: describeRailError(error) }, 'no se pudo leer el incoming payment');
+      return undefined;
+    }
+  }
+
+  /** Programa la siguiente consulta de un pago en `processing`, guardando lo que haya cambiado. */
+  private reschedule(row: PaymentRow, changes: PaymentUpdate, now: number): void {
     const delay = pollDelay(now - (row.processing_since ?? now));
     if (Object.keys(changes).length > 0) {
       this.update(row, { ...changes, next_poll_at: now + delay }, now);
@@ -958,8 +1041,16 @@ function pollDelay(elapsedMs: number): number {
 }
 
 function toView(row: PaymentRow): PaymentView {
-  const amount = (value: string | null): Amount | null =>
-    value === null ? null : { value, assetCode: row.asset_code, assetScale: row.asset_scale };
+  // Sin moneda propia guardada (pagos anteriores a multimoneda): la de `receiveAmount`.
+  const amount = (value: string | null, assetCode: string | null = null, assetScale: number | null = null): Amount | null =>
+    value === null
+      ? null
+      : { value, assetCode: assetCode ?? row.asset_code, assetScale: assetScale ?? row.asset_scale };
+  // Pagos con `receiveAmount` fijo guardados antes de multimoneda: el quote prometía exactamente ese monto.
+  const quotedReceive =
+    row.quoted_receive_value === null && row.fixed_side === 'receive' && row.quote_url !== null
+      ? amount(row.receive_value)
+      : amount(row.quoted_receive_value, row.quoted_receive_asset_code, row.quoted_receive_asset_scale);
   return {
     id: row.id,
     idempotencyKey: row.idempotency_key,
@@ -968,8 +1059,9 @@ function toView(row: PaymentRow): PaymentView {
     sender: row.sender,
     receiver: row.receiver,
     receiveAmount: amount(row.receive_value)!,
-    debitAmount: amount(row.debit_value),
-    receivedAmount: amount(row.received_value),
+    debitAmount: amount(row.debit_value, row.debit_asset_code, row.debit_asset_scale),
+    receivedAmount: amount(row.received_value, row.received_asset_code, row.received_asset_scale),
+    quotedReceiveAmount: quotedReceive,
     approval: row.status === 'pending_approval' && row.approval_url ? { method: 'redirect', url: row.approval_url } : null,
     expiresAt: row.expires_at,
     failureCode: row.failure_code,
@@ -984,6 +1076,49 @@ function toView(row: PaymentRow): PaymentView {
     completedAt: row.completed_at,
     version: row.version,
   };
+}
+
+/** Débito (moneda del pagador) y entrega prometida (moneda del receptor) de un quote, en columnas del almacén. */
+function quoteAmounts(quote: Quote) {
+  return {
+    debit_asset_code: quote.debitAmount.assetCode,
+    debit_asset_scale: quote.debitAmount.assetScale,
+    quoted_receive_value: quote.receiveAmount.value,
+    quoted_receive_asset_code: quote.receiveAmount.assetCode,
+    quoted_receive_asset_scale: quote.receiveAmount.assetScale,
+  } satisfies PaymentUpdate;
+}
+
+/** Lo recibido según el incoming payment, con su moneda. `receivedAmount` es null hasta que empiece a llegar. */
+function receivedChanges(row: PaymentRow, incoming: IncomingPayment | undefined): PaymentUpdate {
+  if (!incoming || BigInt(incoming.receivedAmount.value) === 0n || incoming.receivedAmount.value === row.received_value) {
+    return {};
+  }
+  return {
+    received_value: incoming.receivedAmount.value,
+    received_asset_code: incoming.receivedAmount.assetCode,
+    received_asset_scale: incoming.receivedAmount.assetScale,
+  };
+}
+
+/**
+ * El quote falló porque el riel no cotiza entre las dos monedas (Rafiki: 4xx al crear el quote, o un mensaje de
+ * tasa o moneda). Un 401/403/429 o un 5xx genérico se tratan como riel no disponible.
+ */
+function isUnsupportedConversion(error: unknown): boolean {
+  if (!(error instanceof OpenPaymentsClientError)) return false;
+  const status = error.status;
+  if (status !== undefined && status >= 400 && status < 500 && ![401, 403, 408, 429].includes(status)) return true;
+  return /\b(rates?|asset|convert|conversion|currency)\b/i.test(error.description);
+}
+
+function unsupportedConversion(relia: ResolvedWallet, counterparty: ResolvedWallet, error: unknown): ProblemError {
+  return new ProblemError(
+    422,
+    'unsupported_asset',
+    'Moneda no soportada',
+    `El riel no cotiza entre ${relia.assetCode} y ${counterparty.assetCode} (${counterparty.pointer}). Riel: ${describeRailError(error)}`,
+  );
 }
 
 /** Rafiki responde 400 "invalid quote" (OutgoingPaymentError.InvalidQuote) cuando la quote venció. */
