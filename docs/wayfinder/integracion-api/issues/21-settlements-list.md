@@ -1,8 +1,8 @@
 # Integrar GET /settlements
 
 Type: task
-Status: claimed
-PR: [#37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37)
+Status: resolved
+PR: [#37](https://github.com/davidalzate/relia_hackaton_interledger/pull/37) · [#41](https://github.com/davidalzate/relia_hackaton_interledger/pull/41)
 Blocked by: [00](00-base-http.md)
 Labels: wayfinder:task, frontend, feature:admin
 Feature: Admin (D1–D3)
