@@ -1,0 +1,155 @@
+
+❯ /mattpocock-skills:research como y para que usamos OpenPayments skd en el
+proxy de relia y agrega explicación clara en el README en una sección sobre
+este modulo
+
+⏺ Lanzo un agente en segundo plano para investigar cómo usa el proxy de Relia el
+  SDK de Open Payments.
+
+⏺ Agent(Research OpenPayments SDK usage in Relia proxy)
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+⏺ Un agente en segundo plano está investigando cómo y para qué usa el proxy de
+  Relia el SDK de Open Payments. Revisa el código del proxy y lo contrasta con
+  la documentación oficial (openpayments.dev) y con el repositorio del SDK en
+  GitHub.
+
+  Cuando termine, debería haber:
+  - Una nota de investigación con fuentes citadas: irá en la carpeta de
+    documentación que ya use el repo, o en docs/research/open-payments-sdk.md si
+    no encaja ninguna.
+  - Una sección nueva en el README del proxy: se llamará "Módulo Open Payments
+    (SDK)" y explicará para qué sirve el módulo, en qué archivos está, el flujo
+    paso a paso, las variables de entorno necesarias y un enlace a la nota.
+
+  Te aviso cuando termine con el resumen y cualquier punto donde el código no
+  coincida con la documentación oficial.
+
+› Message from general-purpose
+  Escribí las notas de investigación y añadí la sección del SDK al README del
+  proxy. No modifiqué ningún otro archivo.
+
+  **Archivos**
+  - Notas: `/Users/admin/Documents/Hackathon_Interledger/relia/relia_hackaton_in
+  terledger/docs/research/open-payments-sdk.md`. La carpeta `docs/research/` no
+  existía en el árbol principal. Seguí la convención de las ramas de trabajo en
+  `.claude/worktrees/*/docs/research/`.
+  - README: `/Users/admin/Documents/Hackathon_Interledger/relia/relia_hackaton_i
+  nterledger/rail-proxy/README.md`. La sección nueva "## Módulo Open Payments
+  (SDK)" va justo antes de "## Errores". Tiene una tabla de archivos, el flujo
+  para pagar y para cobrar en listas numeradas, la confirmación, la cancelación
+  y el enlace a las notas. No usé mermaid porque el README no lo usa.
+
+  **Cómo y por qué se usa el SDK**
+  1. Versión: `@interledger/open-payments` 7.4.0 (`package.json` pide `^7.4.0` y
+  el lockfile fija 7.4.0). El proxy en `rail-proxy/src/` es el único componente
+  de Relia que habla Open Payments. Así el backend .NET no conoce GNAP ni
+  guarda llaves (ADR 0001).
+  2. Cliente: se crea uno solo con `createAuthenticatedClient`
+  (`src/main.ts:16`), usando `RELIA_WALLET_ADDRESS`, `RELIA_KEY_ID` y
+  `RELIA_PRIVATE_KEY_BASE64` (llave Ed25519). El SDK firma cada petición y manda
+  los tokens como `GNAP`. Al arrancar se valida la llave con
+  `walletAddress.getKeys`.
+  3. Billeteras: `walletAddress.get` obtiene el servidor de autorización, el de
+  recursos y la moneda de cada contraparte, y valida la moneda antes de mover
+  dinero.
+  4. Grants `incoming-payment` y `quote`: son no interactivos y se guardan en
+  caché en memoria (`src/grants.ts`).
+  5. Relia paga (depósitos y comisión): un grant `outgoing-payment` interactivo,
+  aprobado una vez por el operador, con tope por intervalo
+  (`src/relia-grant.ts`). Con él, cada pago es: crear el incoming payment en el
+  receptor, la quote en la billetera de Relia y el outgoing payment, sin
+  aprobación humana.
+  6. Relia cobra (retiro y carga de cupo): crea el incoming payment en la
+  billetera de Relia y la quote en la del pagador. Luego pide un grant
+  interactivo `outgoing-payment` en la billetera del pagador, limitado a ese
+  cobro. El pagador aprueba y el proxy crea el outgoing payment con el token del
+  pagador.
+  7. Un sincronizador de fondo (~1 s) sondea `grant.continue` y confirma el
+  estado con `incomingPayment.get` (llegó el monto completo) y
+  `outgoingPayment.get` (`failed`). Rota los tokens con `token.rotate`, revoca
+  con `grant.cancel` y cierra cobros con `incomingPayment.complete`.
+
+  **Postman:** no hay tests; la verificación es con
+  `contracts/rail-proxy.collection.json`. Las peticiones que sirven son health,
+  relia-grant (GET y POST), wallet-addresses, payments (crear y consultar) y la
+  cancelación de un cobro. Están listadas en las notas.
+
+  **Incertidumbres y diferencias con la documentación oficial**
+  - **Sin `interact.finish`:** los grants interactivos se piden sin él y el
+  proxy sondea la continuación, en vez de redirigir, recibir `interact_ref` y
+  verificar el hash como muestran las guías. La documentación solo menciona el
+  sondeo como alternativa cuando no hay interfaz, y el SDK lo permite, pero el
+  proxy depende de cómo responde Rafiki (`wait`, `too_fast`, `request_denied`).
+  - **Valores de Rafiki que no verifiqué contra su código:**
+    - ventana de aprobación de 10 min;
+    - 403 si el pago se crea antes de que empiece el intervalo;
+    - 404 `invalid_rotation` al rotar un permiso revocado;
+    - 400 "invalid quote" cuando vence la quote. El proxy lo detecta buscando
+  "quote" en el texto del error, lo cual es frágil.
+  - **403 = tope agotado:** el proxy trata cualquier 403 al crear un pago con el
+  permiso de Relia como tope agotado (`src/payments.ts:401-404`). Otro 403 se
+  mostraría por error como `exhausted`.
+  - **Control de doble débito:** `outgoingPayment.list` solo lee la primera
+  página (`src/payments.ts:707`), así que con muchos pagos podría no encontrar
+  el anterior.
+  - **Éxito del pago:** se mide con `receivedAmount >= receiveAmount` y no con
+  el campo `completed`. Según la spec es equivalente.
+  - **Fuentes:** el código del SDK se mudó a `interledger/open-payments-node`,
+  pero el `package.json` del paquete todavía apunta a
+  `interledger/open-payments`. Varias URLs antiguas de openpayments.dev dan 404;
+  las citas usan las rutas que hoy lista el sitemap.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Agent "Research OpenPayments SDK usage in Relia proxy" finished · 4m 0s
+
+⏺ Escribí la nota de investigación y añadí al README del proxy la sección
+  "Módulo Open Payments (SDK)", justo antes de "Errores". No toqué ningún otro
+  archivo.
+
+  - Nota con fuentes: docs/research/open-payments-sdk.md. Esa carpeta no existía
+    en el árbol principal; usé la misma ubicación que tienen las ramas en
+    .claude/worktrees.
+  - README: rail-proxy/README.md:64 (rail-proxy/README.md#L64). Explica para qué
+    sirve el módulo, en qué archivos está, cómo paga y cobra Relia, la
+    confirmación, la cancelación y las variables de entorno, y enlaza a la nota.
+
+  Para qué se usa: el proxy es la única parte de Relia que habla Open Payments
+  (@interledger/open-payments 7.4.0). Así el backend .NET no tiene que manejar
+  el protocolo de autorización (GNAP) ni guardar llaves (ADR 0001).
+
+  Cómo se usa:
+  1. Cliente: al arrancar se crea un solo cliente autenticado en src/main.ts:16
+     (rail-proxy/src/main.ts#L16) con la billetera, el id de la llave y la llave
+     privada de Relia. El SDK firma cada petición.
+  2. Billeteras: antes de mover dinero, el proxy consulta la billetera de cada
+     contraparte y comprueba la moneda.
+  3. Cuando Relia paga (depósitos y comisión): el operador aprueba una sola vez
+     un permiso de pago con tope por intervalo. Con ese permiso, cada pago
+     (cobro en el receptor, cotización y pago) sale sin aprobación humana.
+  4. Cuando Relia cobra (retiro y carga de cupo): por cada cobro se pide un
+     permiso limitado a ese monto en la billetera del pagador. El pagador lo
+     aprueba y el proxy hace el pago con ese permiso.
+  5. Seguimiento: un proceso en segundo plano revisa cada segundo si el pagador
+     ya aprobó y en qué estado está cada pago. También renueva los tokens,
+     revoca permisos y cierra cobros.
+
+  Para verificar a mano con Postman sirve contracts/rail-proxy.collection.json;
+  la nota lista las peticiones relevantes.
+
+  Puntos que conviene revisar, todos anotados en la nota:
+  - Aprobación por sondeo: el proxy espera la aprobación del pagador preguntando
+    cada segundo. Las guías oficiales usan otro método: redirigir al usuario y
+    recibir una confirmación de vuelta. Funciona porque el SDK lo permite, pero
+    depende de cómo responde Rafiki.
+  - Cualquier 403 cuenta como tope agotado: al pagar con el permiso de Relia,
+    todo 403 se marca como exhausted, aunque la causa sea otra
+    (src/payments.ts:401-404 (rail-proxy/src/payments.ts#L401-L404)).
+  - Control de doble débito incompleto: la lista de pagos solo lee la primera
+    página (src/payments.ts:707 (rail-proxy/src/payments.ts#L707)). Con muchos
+    pagos podría no encontrar el anterior.
+  - Cotización vencida: se detecta buscando la palabra "quote" en el texto del
+    error, lo cual es frágil.
+  - Valores de Rafiki sin comprobar: varios comportamientos, como la ventana de
+    aprobación de 10 minutos, no se contrastaron con el código de Rafiki.
