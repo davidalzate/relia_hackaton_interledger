@@ -15,7 +15,6 @@ import { ConfirmationService } from 'primeng/api';
 import { Checkbox } from 'primeng/checkbox';
 import { InputNumber } from 'primeng/inputnumber';
 import { InputText } from 'primeng/inputtext';
-import { ProgressSpinner } from 'primeng/progressspinner';
 import { catchError, debounceTime, distinctUntilChanged, interval, map, of, switchMap } from 'rxjs';
 
 import { ReceiptService } from '../../core/services/receipt.service';
@@ -24,6 +23,7 @@ import { AgentService } from '../../core/services/agent.service';
 import { WITHDRAWAL_TTL_MS, WithdrawalService } from '../../core/services/withdrawal.service';
 import { OperationPreview } from '../../shared/schemas/operation.schema';
 import { InviteDialogComponent } from '../../shared/components/invite-dialog/invite-dialog.component';
+import { QrCodeComponent } from '../../shared/components/qr-code/qr-code.component';
 import { formatPhone, phoneDigits } from '../../shared/utils/phone';
 import { formatCountdown } from '../../shared/utils/time';
 
@@ -44,8 +44,8 @@ function toBreakdown(p: OperationPreview) {
 
 const PREVIEW_DEBOUNCE_MS = 300;
 
-// B3: el usuario paga desde su billetera y recibe efectivo. La solicitud en curso vive en
-// WithdrawalService para sobrevivir a la visita al teléfono del usuario (C2)
+// B3: el usuario escanea un QR con la `approvalUrl`, paga desde su billetera y recibe efectivo.
+// El retiro en curso vive en WithdrawalService para sobrevivir a la navegación
 @Component({
   selector: 'app-withdraw',
   imports: [
@@ -55,8 +55,8 @@ const PREVIEW_DEBOUNCE_MS = 300;
     Checkbox,
     InputNumber,
     InputText,
-    ProgressSpinner,
     InviteDialogComponent,
+    QrCodeComponent,
   ],
   templateUrl: './withdraw.component.html',
   styleUrl: './withdraw.component.scss',

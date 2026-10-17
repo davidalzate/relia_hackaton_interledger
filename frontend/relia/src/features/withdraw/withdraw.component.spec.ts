@@ -99,11 +99,12 @@ describe('WithdrawComponent', () => {
     c['submit']();
     render();
     expect(el.textContent).toContain('$ilp...test.dev/je***');
+    expect(el.querySelector('button[type=submit]')?.textContent?.trim()).toBe('Generar código QR');
     c['submit']();
     expect(withdrawals.start).toHaveBeenCalledWith(request, expect.any(String));
   });
 
-  it('esperando: cuenta regresiva desde expiresAt y enlace a la wallet en C2', () => {
+  it('esperando: QR de la approvalUrl, cuenta regresiva desde expiresAt y cancelar', () => {
     const { state, el, render, withdrawals, c } = setup();
     state.set({
       status: 'waiting',
@@ -113,8 +114,13 @@ describe('WithdrawComponent', () => {
       approvalUrl: 'https://wallet.test/aprobar',
     });
     render();
-    expect(el.textContent).toContain('Esperando que el usuario apruebe en su billetera');
-    expect(el.querySelector('.countdown')?.textContent).toBe('4:00');
+    expect(el.textContent).toContain('Pide al usuario que escanee el código');
+    const qr = el.querySelector('app-qr-code');
+    expect(qr).toBeTruthy();
+    expect(el.querySelector('a[href="https://wallet.test/aprobar"]')?.textContent).toContain(
+      'Abrir enlace de pago',
+    );
+    expect(el.querySelector('.countdown')?.textContent?.trim()).toBe('Esperando aprobación · 4:00');
     expect(el.textContent).toContain('No entregues efectivo todavía');
     c['cancelRequest']();
     expect(withdrawals.cancel).toHaveBeenCalled();
