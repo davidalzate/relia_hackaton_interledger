@@ -45,11 +45,6 @@ export interface DepositReceipt {
   after: AgentBalances;
 }
 
-interface BalanceChange {
-  before: AgentBalances;
-  after: AgentBalances;
-}
-
 /** B7: sumar efectivo o fijar el total contado en caja */
 export type CashMode = 'add' | 'set';
 
@@ -71,15 +66,6 @@ const KIND_TYPE: Record<HistoryKind, OperationType> = {
   quotaTopUp: 'cupo',
   cashAdjustment: 'cash',
   settlement: 'commission',
-};
-
-/** Tipos locales que cubre cada `kind` del API (filtro de B8) */
-export const KIND_TYPES: Record<HistoryKind, OperationType[]> = {
-  deposit: ['deposit'],
-  withdrawal: ['withdrawal'],
-  quotaTopUp: ['cupo'],
-  cashAdjustment: ['cash', 'cash-set'],
-  settlement: ['commission'],
 };
 
 export interface HistoryPage {
@@ -108,39 +94,28 @@ function toOperation(entry: HistoryEntry): Operation {
   };
 }
 
-// shortcut: `_operations` y `record()` (operaciones en memoria) ya solo los usan los specs y el
-// panel admin simulado; borrarlos al integrar la feature Admin (docs/wayfinder/integracion-api)
 @Injectable({ providedIn: 'root' })
 export class AgentService {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
   private readonly _agent = signal<Agent | null>(null);
   private readonly _balances = signal<AgentBalances>({ cupo: 0, commission: 0, cash: 0 });
-  /** Más recientes primero */
-  private readonly _operations = signal<Operation[]>([]);
-  private sequence = 0;
 
   /** Perfil y saldos crudos del API (`cashReserved`, `quotaReserved`, `walletAddress`…) */
   readonly agent = this._agent.asReadonly();
   readonly balances = this._balances.asReadonly();
-  readonly operations = this._operations.asReadonly();
-  /** Del API; `_operations` guarda solo las creadas en memoria (aún no están en el servidor) */
+  /** Últimas operaciones del API (B1) y las que se crean en esta sesión, más recientes primero */
   private readonly _recent = signal<Operation[]>([]);
   private readonly _history = signal<HistoryPage & { kind: HistoryKind | null }>({
     kind: null,
     items: [],
     nextCursor: null,
   });
-  readonly recentOperations = computed(() =>
-    [...this._operations(), ...this._recent()].slice(0, 3),
-  );
-  /** B8: las de memoria del filtro actual y luego las páginas cargadas del API */
+  readonly recentOperations = computed(() => this._recent().slice(0, 3));
+  /** B8: páginas cargadas del filtro actual */
   readonly history = computed(() => {
-    const { kind, items, nextCursor } = this._history();
-    const local = kind
-      ? this._operations().filter((op) => KIND_TYPES[kind].includes(op.type))
-      : this._operations();
-    return { items: [...local, ...items], nextCursor };
+    const { items, nextCursor } = this._history();
+    return { items, nextCursor };
   });
 
   constructor() {
@@ -158,11 +133,17 @@ export class AgentService {
     });
   }
 
-  /** `GET /agents/{agentId}`; llamarlo tras cada operación terminal */
-  refresh(agentId = this.auth.agentId()): Observable<Agent> {
+  /** `GET /agents/{agentId}` de cualquier corresponsal (el admin lo usa en D2 y D3) */
+  fetchAgent(agentId: string): Observable<Agent> {
     return this.http.get(`${environment.apiUrl}/agents/${agentId}`).pipe(
       timeout(environment.httpTimeoutMs),
       map((res) => AgentSchema.parse(res)),
+    );
+  }
+
+  /** Saldos del corresponsal de la sesión; llamarlo tras cada operación terminal */
+  refresh(agentId = this.auth.agentId() ?? ''): Observable<Agent> {
+    return this.fetchAgent(agentId).pipe(
       tap((agent) => {
         const { quota, accruedCommission, cashOnHand } = agent.balances;
         this._agent.set(agent);
@@ -186,25 +167,23 @@ export class AgentService {
     );
   }
 
-  private fetchHistory(query: {
-    kind?: HistoryKind | null;
-    cursor?: string | null;
-    limit?: number;
-  }): Observable<HistoryPage> {
+  /** `GET /agents/{agentId}/history`; por defecto el corresponsal de la sesión (D2 pasa el suyo) */
+  fetchHistory(
+    query: { kind?: HistoryKind | null; cursor?: string | null; limit?: number },
+    agentId = this.auth.agentId(),
+  ): Observable<HistoryPage> {
     const params = Object.fromEntries(Object.entries(query).filter(([, v]) => v != null)) as Record<
       string,
       string | number
     >;
-    return this.http
-      .get(`${environment.apiUrl}/agents/${this.auth.agentId()}/history`, { params })
-      .pipe(
-        timeout(environment.httpTimeoutMs),
-        map((res) => HistoryPageSchema.parse(res)),
-        map(({ items, nextCursor }) => ({
-          items: items.map(toOperation),
-          nextCursor: nextCursor ?? null,
-        })),
-      );
+    return this.http.get(`${environment.apiUrl}/agents/${agentId}/history`, { params }).pipe(
+      timeout(environment.httpTimeoutMs),
+      map((res) => HistoryPageSchema.parse(res)),
+      map(({ items, nextCursor }) => ({
+        items: items.map(toOperation),
+        nextCursor: nextCursor ?? null,
+      })),
+    );
   }
 
   /** `GET /keys/{phone}`: null si el celular no tiene billetera (`404 key_not_found`) */
@@ -277,7 +256,7 @@ export class AgentService {
   }
 
   operation(id: string): Operation | undefined {
-    const all = [...this._operations(), ...this._recent(), ...this._history().items];
+    const all = [...this._recent(), ...this._history().items];
     return all.find((op) => op.id === id);
   }
 
@@ -311,37 +290,9 @@ export class AgentService {
             after,
             details: { reason },
           };
-          // Ya está en el servidor: va con las del API, no con las de memoria
           this._recent.update((ops) => [operation, ...ops]);
           return { operation, before: cashOnHand.before, after: cashOnHand.after };
         }),
       );
-  }
-
-  private record(
-    amount: number,
-    status: Operation['status'],
-    type: Operation['type'] = 'deposit',
-    balances?: BalanceChange,
-    details?: OperationDetails,
-  ): Operation {
-    const operation: Operation = {
-      id: `RL-${String(++this.sequence).padStart(4, '0')}`,
-      type,
-      amount,
-      status,
-      createdAt: new Date().toISOString(),
-      ...this.snapshot(status, balances),
-      ...(details && { details }),
-    };
-    this._operations.update((ops) => [operation, ...ops]);
-    return operation;
-  }
-
-  /** Saldos para el historial (B8): sin cambios si no se pasan; ninguno si sigue pendiente */
-  private snapshot(status: Operation['status'], balances?: BalanceChange): Partial<BalanceChange> {
-    if (status === 'pending') return {};
-    const current = this._balances();
-    return balances ?? { before: current, after: current };
   }
 }

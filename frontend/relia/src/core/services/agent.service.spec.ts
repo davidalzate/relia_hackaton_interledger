@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { errorInterceptor } from '../interceptors/error.interceptor';
+import { ApiOperation } from '../../shared/schemas/operation.schema';
 import { AgentService } from './agent.service';
 import { loginAs } from './auth.testing';
 
@@ -81,36 +82,38 @@ describe('AgentService efectivo en caja', () => {
     expect(await done).toMatchObject({ before: 20_000, after: 0 });
     expect(agent.balances()).toEqual({ cupo: 10, commission: 5, cash: 0 });
     expect(agent.recentOperations()[0]).toMatchObject({ id: 'adj-1', type: 'cash-set' });
-    expect(agent.operations()).toEqual([]);
   });
 });
 
-describe('AgentService saldos por operación (B8)', () => {
-  it('pendiente sin saldos; completada y fallida con antes/después', () => {
-    vi.useFakeTimers();
+describe('AgentService.recordApiOperation', () => {
+  it('pendiente sin saldos; final con antes/después y motivo por failureCode', () => {
     const agent = TestBed.inject(AgentService);
-    agent['_balances'].set({ cupo: 0, commission: 0, cash: 80_000 });
+    const op = (status: string, failureCode: string | null = null) =>
+      ({
+        id: 'op-1',
+        reference: 'OP-000001',
+        type: 'withdrawal',
+        status,
+        failureCode,
+        createdAt: '2026-10-16T15:00:00Z',
+        chargedAmount: 51_000,
+        balances: {
+          quota: { before: 0, after: 50_000 },
+          accruedCommission: { before: 0, after: 500 },
+          cashOnHand: { before: 80_000, after: 30_000 },
+        },
+      }) as unknown as ApiOperation;
 
-    agent['record'](50_000, 'pending', 'withdrawal');
-    expect(agent.operations()[0].before).toBeUndefined();
-    agent['record'](
-      50_000,
-      'completed',
-      'withdrawal',
-      {
-        before: { cupo: 0, commission: 0, cash: 80_000 },
-        after: { cupo: 50_000, commission: 500, cash: 30_000 },
-      },
-      { phone: '3000000001', cash: 50_000, wallet: 51_000, roundForUser: true },
-    );
-    expect(agent.operations()[0]).toMatchObject({
+    expect(agent.recordApiOperation(op('pending')).before).toBeUndefined();
+    expect(agent.recordApiOperation(op('completed'))).toMatchObject({
       before: { cupo: 0, cash: 80_000, commission: 0 },
       after: { cupo: 50_000, cash: 30_000, commission: 500 },
     });
-
-    const failed = agent['record'](10, 'failed', 'cupo');
-    expect(failed.before).toEqual(failed.after);
-    vi.useRealTimers();
+    expect(agent.recordApiOperation(op('failed', 'customer_rejected')).details?.reason).toBe(
+      'El usuario rechazó el pago',
+    );
+    // Reemplaza la misma operación en vez de duplicarla
+    expect(agent.recentOperations().length).toBe(1);
   });
 });
 

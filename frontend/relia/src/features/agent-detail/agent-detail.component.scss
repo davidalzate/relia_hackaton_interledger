@@ -4,3 +4,132 @@ main {
   gap: 16px;
   padding-block: 1.5rem;
 }
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+.meta,
+.hint,
+.muted {
+  font-size: 0.875rem;
+  color: var(--relia-muted-text);
+}
+
+.meta {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+
+  article {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  h2 {
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+}
+
+.value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+// Coral sobre blanco no alcanza AA en texto normal: se usa el rojo oscuro del theme
+.due {
+  color: var(--relia-failed-text);
+}
+
+.btn-pay {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding-inline: 14px;
+  border-radius: 9999px;
+  background: var(--relia-cobalt);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+
+  &:focus-visible {
+    outline: 2px solid var(--relia-cobalt);
+    outline-offset: 2px;
+  }
+}
+
+.table-wrap {
+  padding: 0;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+th,
+td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--relia-line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  font-size: 0.75rem;
+  color: var(--relia-muted-text);
+}
+
+tbody tr {
+  cursor: pointer;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.strong {
+  font-weight: 700;
+}
+
+.pending {
+  color: var(--relia-muted-text);
+}
+
+.link-cell {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--relia-cobalt);
+  cursor: pointer;
+}
+
+.op-id {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--relia-muted-text);
+}
+
+.more {
+  align-self: center;
+}
