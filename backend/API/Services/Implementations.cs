@@ -17,9 +17,20 @@ public class OperationService(
     IPaymentRepository payments, ILedgerRepository ledger, ISimulatedMessageRepository messages,
     IUnitOfWork unitOfWork, ICurrentUser currentUser) : IOperationService
 {
-    public Task<OperationPreviewDto> PreviewAsync(Guid agentId, OperationPreviewRequest request,
-        CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("previewOperation");
+    /// <summary>Siempre 200: lo que impide crear la operación va en violations.</summary>
+    public async Task<OperationPreviewDto> PreviewAsync(Guid agentId, OperationPreviewRequest request,
+        CancellationToken ct = default)
+    {
+        currentUser.EnsureCanOperateAgent(agentId);
+        var agent = await agents.GetByIdAsync(agentId, ct) ?? throw ApiErrors.NotFound();
+        var balance = agent.Balance
+                      ?? throw new InvalidOperationException($"El corresponsal {agent.Id} no tiene agent_balances");
+        var fee = await fees.GetCurrentAsync(ct);
+        var reserved = await operations.GetReservationsAsync(agentId, ct);
+        // [Required] en el DTO garantiza los tres valores.
+        return OperationRules.Preview(
+            request.Type!.Value, request.RequestedAmount!.Value, request.RoundAmount!.Value, fee, balance, reserved);
+    }
 
     public Task<OperationDto> CreateDepositAsync(Guid agentId, string idempotencyKey, CreateDepositRequest request,
         CancellationToken ct = default) =>

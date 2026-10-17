@@ -9,6 +9,9 @@ namespace Relia.Api.Contracts;
 internal static class Patterns
 {
     public const string Phone = "^3[0-9]{9}$";
+
+    /// <summary>Tope de cualquier monto de entrada ($1 billón): evita desbordar long al sumar tarifa o saldos.</summary>
+    public const long MaxCop = 1_000_000_000_000;
 }
 
 // ---- Enums del API ----
@@ -89,7 +92,7 @@ public record HistoryPageDto(IReadOnlyList<HistoryEntryDto> Items, string? NextC
 // Nullable + [Required]: con tipos de valor, un campo ausente llegaría como 0 o como el primer valor del enum.
 public record CreateCashAdjustmentRequest(
     [Required] CashAdjustmentMode? Mode,
-    [Required, Range(0, long.MaxValue)] long? Amount,
+    [Required, Range(0, Patterns.MaxCop)] long? Amount,
     [MaxLength(200)] string? Reason);
 
 public record CashAdjustmentDto(
@@ -99,13 +102,16 @@ public record CashAdjustmentDto(
 // ---- Desglose ----
 
 public record OperationPreviewRequest(
-    [Required] CashMovingOperationType Type,
-    [Range(1, long.MaxValue)] long RequestedAmount,
-    bool RoundAmount);
+    [Required] CashMovingOperationType? Type,
+    [Required, Range(1, Patterns.MaxCop)] long? RequestedAmount,
+    [Required] bool? RoundAmount);
 
 public record FeeDto(long Total, long Relia, long Agent);
 
-public record PreviewViolationDto(PreviewViolationCode Code, long? Shortfall);
+// shortfall es Cop (entero, no nullable): sin valor, se omite.
+public record PreviewViolationDto(
+    PreviewViolationCode Code,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? Shortfall);
 
 public record OperationPreviewDto(
     CashMovingOperationType Type, long RequestedAmount, bool RoundAmount, FeeDto Fee,
@@ -122,18 +128,18 @@ public record KeyInvitationDto(string Phone, string WaLink, string Message, Date
 
 public record CreateDepositRequest(
     [Required, RegularExpression(Patterns.Phone)] string Phone,
-    [Range(1001, long.MaxValue)] long RequestedAmount,
+    [Range(1001, Patterns.MaxCop)] long RequestedAmount,
     bool RoundAmount,
     bool CashReceivedConfirmed);
 
 public record CreateWithdrawalRequest(
     [Required, RegularExpression(Patterns.Phone)] string Phone,
-    [Range(1001, long.MaxValue)] long RequestedAmount,
+    [Range(1001, Patterns.MaxCop)] long RequestedAmount,
     bool RoundAmount);
 
 public record CreateQuotaTopUpRequest(
     [Required] TopUpMethod Method,
-    [Range(1, long.MaxValue)] long RequestedAmount);
+    [Range(1, Patterns.MaxCop)] long RequestedAmount);
 
 public record OperationCustomerDto(string PhoneMasked, string WalletAddressMasked);
 
