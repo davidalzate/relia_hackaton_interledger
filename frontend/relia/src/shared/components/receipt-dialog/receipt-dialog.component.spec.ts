@@ -78,14 +78,14 @@ describe('ReceiptDialogComponent (B9)', () => {
 
   it('carga de cupo rechazada: método, saldos, estado y motivo; sin botón SMS', async () => {
     const { card, rows } = await open((agent) => {
-      agent.requestCupoLoad({ method: 'wallet', amount: 20_000, key: '3105550101' });
-      agent.failCupoLoad('rejected');
-      return agent.operations()[0].id;
+      return agent['record'](20_000, 'failed', 'cupo', undefined, {
+        method: 'wallet',
+        reason: 'Pago rechazado',
+      }).id;
     });
     expect(card().textContent).toContain('cargados a tu cupo');
     expect(rows()).toMatchObject({ Método: 'Wallet', Estado: 'Fallido', Motivo: 'Pago rechazado' });
     expect(document.querySelector('.receipt-dialog .actions')?.textContent).not.toContain('SMS');
-    TestBed.inject(AgentService).clearCupoLoad();
   });
 
   it('ajuste de efectivo muestra "nuevo total en caja"', async () => {

@@ -4,8 +4,8 @@ import { ConfirmationService, MenuItem } from 'primeng/api';
 import { ConfirmDialog } from 'primeng/confirmdialog';
 import { Menu } from 'primeng/menu';
 
-import { AgentService } from '../../core/services/agent.service';
 import { AuthService } from '../../core/services/auth.service';
+import { QuotaTopUpService } from '../../core/services/quota-top-up.service';
 import { WithdrawalService } from '../../core/services/withdrawal.service';
 import { DemoPanelComponent } from '../../shared/components/demo-panel/demo-panel.component';
 import { ReceiptDialogComponent } from '../../shared/components/receipt-dialog/receipt-dialog.component';
@@ -29,8 +29,8 @@ import { ReceiptDialogComponent } from '../../shared/components/receipt-dialog/r
 })
 export class AgentShellComponent {
   private readonly auth = inject(AuthService);
-  private readonly agent = inject(AgentService);
   private readonly withdrawals = inject(WithdrawalService);
+  private readonly topUps = inject(QuotaTopUpService);
   private readonly router = inject(Router);
 
   protected readonly user = this.auth.user;
@@ -47,7 +47,7 @@ export class AgentShellComponent {
   // Cerrar sesión descarta cualquier flujo en curso (p. ej. un retiro esperando aprobación)
   private logout(): void {
     this.withdrawals.clear();
-    this.agent.clearCupoLoad();
+    this.topUps.clear();
     this.auth.clear();
     void this.router.navigateByUrl('/login');
   }
