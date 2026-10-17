@@ -37,10 +37,20 @@ public interface IOperationSync
         CancellationToken ct = default);
 
     /// <summary>
-    /// Consulta el pago en el proxy y lo aplica, como máximo una vez por segundo por pago. Si el proxy no responde,
-    /// la operación sigue igual y se reintenta en la siguiente lectura.
+    /// Consulta el pago en el proxy y lo aplica, como máximo una vez por segundo por pago. Si la operación sigue
+    /// pendiente pasado su expiresAt, la vence (<see cref="ExpireAsync"/>). Si el proxy no responde, la operación
+    /// sigue igual y se reintenta en la siguiente lectura o en el siguiente barrido.
     /// </summary>
     Task RefreshAsync(Operation operation, CancellationToken ct = default);
+
+    /// <summary>
+    /// Vence una operación pendiente: cancela en el riel si su pago pasó por el proxy y la deja
+    /// expired/request_expired, liberando la reserva. Devuelve false si ya no estaba pendiente o si el pagador
+    /// alcanzó a aprobar (payment_not_cancellable: la operación sigue su curso), o si el proxy respondió un error
+    /// inesperado. Si el proxy no conoce el pago (not_found), la vence solo en el backend. Lanza
+    /// RailUnavailableException si el riel no responde. Abre su propia transacción.
+    /// </summary>
+    Task<bool> ExpireAsync(Operation operation, CancellationToken ct = default);
 }
 
 /// <summary>Tabla de traducción del pago de riel a la operación (spec, "Operaciones").</summary>
@@ -99,8 +109,87 @@ public class OperationSync(
     {
         if (operation.State != OperationState.Pending) return;
         var payment = await payments.GetLatestByOperationAsync(operation.Id, ct);
-        if (payment?.RailPaymentId is not { } railPaymentId || !throttle.TryAcquire(payment.Id)) return;
+        if (payment is null) return;
+        // Un solo turno por segundo por pago, para la consulta y para la cancelación al vencer.
+        var turn = payment.RailPaymentId is null || throttle.TryAcquire(payment.Id);
+        if (payment.RailPaymentId is { } railPaymentId && turn)
+            await RefreshFromRailAsync(operation, payment, railPaymentId, ct);
 
+        // El backend es dueño del plazo: vence aunque el proxy no lo haya reportado.
+        if (turn && operation.State == OperationState.Pending && payment.ExpiresAt <= time.GetUtcNow())
+        {
+            try
+            {
+                await ExpireAsync(operation, ct);
+            }
+            catch (RailException e)
+            {
+                logger.LogWarning(e, "No se pudo vencer {Reference} en el riel; se reintenta", operation.Reference);
+            }
+        }
+    }
+
+    public async Task<bool> ExpireAsync(Operation operation, CancellationToken ct = default)
+    {
+        var payment = await payments.GetLatestByOperationAsync(operation.Id, ct);
+        if (operation.State != OperationState.Pending || payment is null) return false;
+
+        // La cancelación en el riel va fuera de la transacción, como el refresco.
+        RailPayment? reading = null;
+        if (payment.RailPaymentId is { } railPaymentId)
+        {
+            try
+            {
+                reading = await rail.CancelPaymentAsync(railPaymentId, ct);
+            }
+            catch (RailException e) when (e.Code == "payment_not_cancellable")
+            {
+                // Aprobó justo a tiempo: el pago sigue en el riel y el próximo refresco lo completa o lo falla.
+                logger.LogInformation("{Reference} venció con el pago ya aprobado: sigue su curso", operation.Reference);
+                return false;
+            }
+            catch (RailException e) when (e.Code == "not_found")
+            {
+                // El proxy no conoce el pago: nadie puede aprobarlo, así que se vence solo en el backend.
+                logger.LogWarning(e, "El proxy no conoce el pago de {Reference}: se vence en el backend", operation.Reference);
+            }
+            catch (RailException e) when (e is not RailUnavailableException)
+            {
+                // Error del proxy que no es indisponibilidad: se deja pendiente y se reintenta en el siguiente turno.
+                logger.LogError(e, "Respuesta inesperada del riel al vencer {Reference} ({Code})", operation.Reference, e.Code);
+                return false;
+            }
+        }
+
+        var expired = await unitOfWork.InTransactionAsync(async tx =>
+        {
+            var locked = await operations.GetForUpdateAsync(operation.Id, tx);
+            var lockedPayment = await payments.GetLatestByOperationForUpdateAsync(operation.Id, tx);
+            if (locked is null || lockedPayment?.Id != payment.Id || locked.State != OperationState.Pending)
+                return false;
+            if (reading is not null)
+            {
+                var (state, _) = RailStatusTranslation.ToOperation(reading.Status);
+                if (state is OperationState.Completed or OperationState.Failed)
+                {
+                    // El riel cerró por su cuenta antes de cancelar: manda lo que dice el riel.
+                    await ApplyAsync(locked, lockedPayment, reading, "expire", EventOrigin.Rail, tx);
+                    return false;
+                }
+                if (!LogReading(lockedPayment, reading, "expire", OperationState.Expired))
+                    CopyRailData(lockedPayment, reading);
+            }
+            await CloseWithoutMovementAsync(locked, lockedPayment, OperationState.Expired, "request_expired",
+                "Venció el plazo de aprobación", EventOrigin.System, tx);
+            return true;
+        }, ct);
+        if (expired) throttle.Forget(payment.Id);
+        return expired;
+    }
+
+    private async Task RefreshFromRailAsync(Operation operation, Payment payment, Guid railPaymentId,
+        CancellationToken ct)
+    {
         // La consulta al proxy va fuera de la transacción, para no tener filas bloqueadas mientras responde.
         RailPayment reading;
         try
@@ -133,21 +222,12 @@ public class OperationSync(
     public async Task ApplyAsync(Operation operation, Payment payment, RailPayment reading, string action,
         EventOrigin origin = EventOrigin.Rail, CancellationToken ct = default)
     {
-        var previous = payment.State;
         var (state, failureCode) = RailStatusTranslation.ToOperation(reading.Status);
-        var stale = payment.RailVersion is { } processed && reading.Version <= processed;
-        // Toda respuesta del riel queda en la bitácora, también las lecturas viejas que se descartan.
-        payments.AddEvent(new PaymentEvent
-        {
-            PaymentId = payment.Id,
-            Action = action,
-            PreviousState = previous,
-            NewState = stale ? previous : state,
-            Origin = EventOrigin.Rail,
-            RailResponse = JsonSerializer.SerializeToDocument(reading, RailJson),
-            Detail = $"{reading.Status} v{reading.Version}{(stale ? " (descartada)" : "")}",
-            CreatedAt = time.GetUtcNow(),
-        });
+        // Una cancelación que el backend pidió al vencer y cuya respuesta se perdió (timeout) llega después como
+        // cancelled: pasado el plazo y sin que la pidiera el corresponsal, es un vencimiento.
+        if (state == OperationState.Cancelled && action != "cancel" && payment.ExpiresAt <= time.GetUtcNow())
+            (state, failureCode) = (OperationState.Expired, "request_expired");
+        var stale = LogReading(payment, reading, action, state);
         if (stale)
         {
             await unitOfWork.SaveChangesAsync(ct);
@@ -251,6 +331,27 @@ public class OperationSync(
             $"Relia: recibiste {operation.NetAmount.ToString("C0", Colombia)} en tu billetera por un depósito en " +
             $"{agent.Name} ({operation.Reference}).",
             operationId: operation.Id);
+    }
+
+    /// <summary>
+    /// Toda respuesta del riel queda en la bitácora del pago, también las lecturas viejas que se descartan.
+    /// Devuelve true si la lectura es vieja (version ≤ rail_version).
+    /// </summary>
+    private bool LogReading(Payment payment, RailPayment reading, string action, OperationState state)
+    {
+        var stale = payment.RailVersion is { } processed && reading.Version <= processed;
+        payments.AddEvent(new PaymentEvent
+        {
+            PaymentId = payment.Id,
+            Action = action,
+            PreviousState = payment.State,
+            NewState = stale ? payment.State : state,
+            Origin = EventOrigin.Rail,
+            RailResponse = JsonSerializer.SerializeToDocument(reading, RailJson),
+            Detail = $"{reading.Status} v{reading.Version}{(stale ? " (descartada)" : "")}",
+            CreatedAt = time.GetUtcNow(),
+        });
+        return stale;
     }
 
     private static void CopyRailData(Payment payment, RailPayment reading)

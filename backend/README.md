@@ -39,6 +39,7 @@ El DDL solo corre cuando el volumen es nuevo. Si cambias `db/db_ddl.sql`, borra 
 | `RailProxy:TimeoutSeconds` | `10` | Pasado este plazo, el riel cuenta como no disponible (503) |
 | `Relia:WalletAddress` | `$ilp.interledger-test.dev/relia-test1` | Billetera de Relia; la misma `RELIA_WALLET_ADDRESS` del proxy |
 | `Relia:PublicBaseUrl` | `http://localhost:4200` | Página pública del enlace de invitación |
+| `Relia:SweepIntervalSeconds` | `15` | Cada cuánto el barrido de fondo avanza y vence operaciones pendientes |
 | `Relia:KeyLinkRateLimitPerMinute` | `20` | Peticiones por minuto y por IP a `/key-links` (luego `429`) |
 | `DEMO_MODE` | `true` en Development | Habilita `/demo/*` |
 

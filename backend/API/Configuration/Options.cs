@@ -36,6 +36,9 @@ public class ReliaOptions
     /// <summary>URL base de la página pública (enlace de la invitación por WhatsApp).</summary>
     public string PublicBaseUrl { get; set; } = "";
 
+    /// <summary>Cada cuánto corre el barrido de fondo de operaciones (y liquidaciones).</summary>
+    public int SweepIntervalSeconds { get; set; } = 15;
+
     /// <summary>Peticiones por minuto y por IP a /key-links (rate limit en memoria).</summary>
     public int KeyLinkRateLimitPerMinute { get; set; } = 20;
 

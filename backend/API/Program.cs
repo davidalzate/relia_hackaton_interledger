@@ -105,6 +105,8 @@ builder.Services.AddScoped<ICashAdjustmentService, CashAdjustmentService>();
 builder.Services.AddSingleton<RailRefreshThrottle>();
 builder.Services.AddScoped<IOperationSync, OperationSync>();
 builder.Services.AddScoped<IOperationService, OperationService>();
+builder.Services.AddScoped<ISweepTask, OperationSweepTask>();
+builder.Services.AddHostedService<SweepService>();
 builder.Services.AddScoped<ISimulatedInbox, SimulatedInbox>();
 builder.Services.AddScoped<IKeyService, KeyService>();
 builder.Services.AddScoped<IKeyLinkService, KeyLinkService>();

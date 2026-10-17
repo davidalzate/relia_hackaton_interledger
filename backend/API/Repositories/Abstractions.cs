@@ -77,6 +77,9 @@ public interface IOperationRepository
     Task<Operation?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<Operation?> GetByIdempotencyKeyAsync(Guid agentId, string idempotencyKey, CancellationToken ct = default);
 
+    /// <summary>Ids de las operaciones pendientes, la más vieja primero (para el barrido).</summary>
+    Task<IReadOnlyList<Guid>> ListPendingIdsAsync(CancellationToken ct = default);
+
     /// <summary>SELECT ... FOR UPDATE de la operación, con los valores de la base. Solo dentro de una transacción.</summary>
     Task<Operation?> GetForUpdateAsync(Guid id, CancellationToken ct = default);
 

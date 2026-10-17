@@ -114,6 +114,10 @@ public class EfOperationRepository(ReliaDbContext db) : IOperationRepository
         CancellationToken ct = default) =>
         db.Operations.FirstOrDefaultAsync(o => o.AgentId == agentId && o.IdempotencyKey == idempotencyKey, ct);
 
+    public async Task<IReadOnlyList<Guid>> ListPendingIdsAsync(CancellationToken ct = default) =>
+        await db.Operations.Where(o => o.State == OperationState.Pending)
+            .OrderBy(o => o.CreatedAt).Select(o => o.Id).ToListAsync(ct);
+
     public async Task<Operation?> GetForUpdateAsync(Guid id, CancellationToken ct = default)
     {
         var operation = await db.Operations
