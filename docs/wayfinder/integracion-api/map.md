@@ -61,12 +61,12 @@ PR #29. En el demo se aprueba desde el enlace de C2; Mi billetera (26) lo reempl
 
 ### 4. Cargar cupo (B6)
 
-23 es el botón del simulador Bre-B que completa la carga.
+PR #31. 23 es el botón del simulador Bre-B que completa la carga.
 
 | # | Endpoint | Pantalla | Bloqueado por | Estado |
 |---|---|---|---|---|
-| [06](issues/06-quota-top-ups.md) | POST /agents/{agentId}/quota-top-ups | B6 Cargar cupo | 07 | open |
-| [23](issues/23-demo-breb-payment.md) | POST /demo/quota-top-ups/{operationId}/breb-payment | E1 Simulador Bre-B | 06 | open |
+| [06](issues/06-quota-top-ups.md) | POST /agents/{agentId}/quota-top-ups | B6 Cargar cupo | 07 | claimed · [#31](https://github.com/davidalzate/relia_hackaton_interledger/pull/31) |
+| [23](issues/23-demo-breb-payment.md) | POST /demo/quota-top-ups/{operationId}/breb-payment | E1 Simulador Bre-B | 06 | claimed · [#31](https://github.com/davidalzate/relia_hackaton_interledger/pull/31) |
 
 ### 5. Llave inexistente y vinculación (B5, C1)
 
