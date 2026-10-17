@@ -26,4 +26,4 @@ Conectar el frontend (`frontend/relia`) al endpoint real de la Relia API y retir
 
 ## Notas
 
-- C1 construida. `POST /key-links` se llama después del OTP simulado y debe crear la llave (pendiente alinear contrato con backend).
+- C1 construida. `POST /key-links` crea el desafío y el API manda el OTP; el texto se copia de `GET /demo/messages` al teléfono simulado (C2).

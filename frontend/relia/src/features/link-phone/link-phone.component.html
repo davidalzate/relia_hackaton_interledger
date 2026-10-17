@@ -56,7 +56,13 @@
           }
         </div>
 
-        <button class="btn-primary" type="submit">Enviar código</button>
+        @if (linkError(); as e) {
+          <p class="error" role="alert">{{ e }}</p>
+        }
+
+        <button class="btn-primary" type="submit" [disabled]="linking()">
+          {{ linking() ? 'Enviando…' : 'Enviar código' }}
+        </button>
       </form>
     }
     @case ('code') {
@@ -92,7 +98,7 @@
         </div>
 
         <button class="btn-primary" type="submit" [disabled]="linking()">
-          {{ linking() ? 'Vinculando…' : 'Verificar' }}
+          {{ linking() ? 'Verificando…' : 'Verificar' }}
         </button>
         <div class="secondary">
           <a routerLink="/telefono">Ver SMS</a>

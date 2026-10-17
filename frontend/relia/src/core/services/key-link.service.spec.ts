@@ -5,12 +5,16 @@ import { provideRouter } from '@angular/router';
 
 import { authInterceptor } from '../interceptors/auth.interceptor';
 import { AuthService } from './auth.service';
-import { KeyLinkService, OTP_TTL_MS } from './key-link.service';
+import { KeyLinkService } from './key-link.service';
 import { SmsService } from './sms.service';
+
+const PHONE = '3000000002';
+const WALLET = '$ilp.interledger-test.dev/maria';
+const CHALLENGE = { challengeId: 'ch-1', phone: PHONE, expiresAt: '2026-10-17T12:05:00Z', maxAttempts: 5 };
 
 describe('KeyLinkService', () => {
   let service: KeyLinkService;
-  const code = () => /\d{6}/.exec(TestBed.inject(SmsService).messages()[0].text)?.[0] ?? '';
+  let http: HttpTestingController;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -21,46 +25,45 @@ describe('KeyLinkService', () => {
       ],
     });
     service = TestBed.inject(KeyLinkService);
-  });
-  afterEach(() => vi.useRealTimers());
-
-  it('envía el OTP por SMS simulado al celular y lo verifica', () => {
-    service.sendCode('3000000002', '$ilp.interledger-test.dev/maria');
-    expect(TestBed.inject(SmsService).messages()[0].phone).toBe('3000000002');
-    expect(service.pending()?.walletAddress).toBe('$ilp.interledger-test.dev/maria');
-    expect(service.verify(code())).toEqual({ ok: true });
-  });
-
-  it('cuenta intentos fallidos y se bloquea al quinto', () => {
-    service.sendCode('3000000002', '$ilp.interledger-test.dev/maria');
-    const wrong = code() === '000000' ? '111111' : '000000';
-    expect(service.verify(wrong)).toEqual({ ok: false, reason: 'invalid', attemptsRemaining: 4 });
-    for (let i = 0; i < 3; i++) service.verify(wrong);
-    expect(service.verify(wrong)).toEqual({ ok: false, reason: 'exceeded' });
-    expect(service.verify(code())).toEqual({ ok: false, reason: 'exceeded' });
-  });
-
-  it('vence a los 5 minutos y reenviar invalida el código anterior', () => {
-    vi.useFakeTimers();
-    service.sendCode('3000000002', '$ilp.interledger-test.dev/maria');
-    const first = code();
-    vi.advanceTimersByTime(OTP_TTL_MS + 1);
-    expect(service.verify(first)).toEqual({ ok: false, reason: 'expired' });
-
-    service.sendCode('3000000002', '$ilp.interledger-test.dev/maria');
-    expect(service.verify(code())).toEqual({ ok: true });
-  });
-
-  it('link hace POST /key-links sin token', () => {
+    http = TestBed.inject(HttpTestingController);
     vi.spyOn(TestBed.inject(AuthService), 'token').mockReturnValue('tok');
-    service.link('3000000002', '$ilp.interledger-test.dev/maria').subscribe();
-    const req = TestBed.inject(HttpTestingController).expectOne('/api/key-links');
-    req.flush({ phone: '3000000002', walletAddress: '$ilp.interledger-test.dev/maria' });
-    expect(service.pending()).toBeNull();
-    expect(req.request.body).toEqual({
-      phone: '3000000002',
-      walletAddress: '$ilp.interledger-test.dev/maria',
-    });
+  });
+  afterEach(() => http.verify());
+
+  it('start hace POST /key-links sin token y copia el OTP de la bandeja demo al teléfono simulado', () => {
+    service.start(PHONE, WALLET).subscribe();
+    const req = http.expectOne('/api/key-links');
+    expect(req.request.body).toEqual({ phone: PHONE, walletAddress: WALLET });
     expect(req.request.headers.has('Authorization')).toBe(false);
+    req.flush(CHALLENGE, { status: 201, statusText: 'Created' });
+
+    expect(service.pending()).toEqual({ phone: PHONE, walletAddress: WALLET, challengeId: 'ch-1' });
+    http
+      .expectOne((r) => r.url === '/api/demo/messages' && r.params.get('phone') === PHONE)
+      .flush({ items: [{ content: 'Relia: tu código es 123456' }], unreadCount: 1 });
+    expect(TestBed.inject(SmsService).messages()[0]).toMatchObject({
+      phone: PHONE,
+      text: 'Relia: tu código es 123456',
+    });
+  });
+
+  it('sin modo demo la bandeja falla y start igual completa', () => {
+    let done = false;
+    service.start(PHONE, WALLET).subscribe({ complete: () => (done = true) });
+    http.expectOne('/api/key-links').flush(CHALLENGE);
+    http.expectOne((r) => r.url === '/api/demo/messages').flush(null, { status: 404, statusText: 'Not Found' });
+    expect(done).toBe(true);
+  });
+
+  it('verify hace POST /key-links/{challengeId}/verify y limpia el desafío', () => {
+    service.start(PHONE, WALLET).subscribe();
+    http.expectOne('/api/key-links').flush(CHALLENGE);
+    http.expectOne((r) => r.url === '/api/demo/messages').flush({ items: [] });
+
+    service.verify('123456').subscribe();
+    const req = http.expectOne('/api/key-links/ch-1/verify');
+    expect(req.request.body).toEqual({ code: '123456' });
+    req.flush({ phone: PHONE, walletAddress: WALLET, linkedAt: '2026-10-17T12:01:00Z' });
+    expect(service.pending()).toBeNull();
   });
 });

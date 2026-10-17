@@ -24,4 +24,4 @@ Conectar el frontend (`frontend/relia`) al endpoint real de la Relia API y retir
 
 ## Notas
 
-- Simulado por decisión del equipo (demo): el OTP se genera y verifica en el navegador; no se usa `POST /key-links/{challengeId}/verify`.
+- El OTP lo verifica el API con `POST /key-links/{challengeId}/verify`, que crea la llave. Antes se simulaba en el navegador y la llave nunca se creaba.

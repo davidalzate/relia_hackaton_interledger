@@ -72,7 +72,7 @@ En `main` (#31 y #38). 23 es el botón del simulador Bre-B que completa la carga
 
 ### 5. Llave inexistente y vinculación (B5, C1)
 
-En `main` (#32 y #38). Invitación y OTP simulados en el frontend (decisión de demo); la llave se crea con `POST /key-links` tras el OTP.
+En `main` (#32 y #38). La invitación por WhatsApp se simula en el frontend; el OTP lo genera y verifica el API (`POST /key-links` y `.../verify`) y llega a C2 desde la bandeja demo.
 
 | # | Endpoint | Pantalla | Bloqueado por | Estado |
 |---|---|---|---|---|

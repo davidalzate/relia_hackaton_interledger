@@ -1,20 +1,23 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
-import { Observable, Subject, throwError } from 'rxjs';
+import { Observable, Subject, of, throwError } from 'rxjs';
 
 import { ApiError } from '../../core/http/api';
-import { KeyLinkService, OtpResult, PendingLink } from '../../core/services/key-link.service';
+import { KeyLink, KeyLinkService, PendingLink } from '../../core/services/key-link.service';
+import { Problem } from '../../shared/schemas/problem.schema';
 import { LinkPhoneComponent } from './link-phone.component';
 
+const apiError = (status: number, problem: Omit<Problem, 'title' | 'status'>) =>
+  throwError(() => new ApiError(status, { title: 'Error', status, ...problem }));
+
 function setup(phone: string | null = null, pending: PendingLink | null = null) {
-  const linked = new Subject<{ phone: string }>();
+  const linked = new Subject<KeyLink>();
   const keyLinks = {
     pending: signal(pending).asReadonly(),
     reset: vi.fn(),
-    sendCode: vi.fn(),
-    verify: vi.fn((): OtpResult => ({ ok: true })),
-    link: vi.fn((): Observable<{ phone: string }> => linked),
+    start: vi.fn((): Observable<void> => of(undefined)),
+    verify: vi.fn((): Observable<KeyLink> => linked),
   };
   TestBed.configureTestingModule({
     providers: [
@@ -47,56 +50,51 @@ describe('LinkPhoneComponent (C1)', () => {
     render();
     expect(el.textContent).toContain('Escribe un celular de 10 dígitos.');
     expect(el.textContent).toContain('El payment pointer empieza por $ y tiene una ruta');
-    expect(keyLinks.sendCode).not.toHaveBeenCalled();
+    expect(keyLinks.start).not.toHaveBeenCalled();
   });
 
-  it('paso 1 → 2 → 3: OTP correcto crea la llave en el API', () => {
+  it('paso 1 → 2 → 3: el API envía el OTP, lo verifica y crea la llave', () => {
     const { keyLinks, linked, c, el, render } = setup('3000000002');
     c['form'].patchValue({ walletAddress: '$ilp.interledger-test.dev/maria' });
     c['sendCode']();
     render();
-    expect(keyLinks.sendCode).toHaveBeenCalledWith('3000000002', '$ilp.interledger-test.dev/maria');
+    expect(keyLinks.start).toHaveBeenCalledWith('3000000002', '$ilp.interledger-test.dev/maria');
     expect(el.textContent).toContain('Te enviamos un SMS al 300 000 0002.');
 
     c['form'].patchValue({ code: '123456' });
     c['verify']();
     expect(keyLinks.verify).toHaveBeenCalledWith('123456');
-    expect(keyLinks.link).toHaveBeenCalledWith('3000000002', '$ilp.interledger-test.dev/maria');
-    linked.next({ phone: '3000000002' });
+    linked.next({ phone: '3000000002', walletAddress: '$ilp.interledger-test.dev/maria' });
     render();
     expect(el.textContent).toContain('Tu celular quedó vinculado a tu billetera');
     expect(el.textContent).toContain('$ilp.interledger-test.dev/maria');
   });
 
-  it('código incorrecto no llama al API y muestra los intentos', () => {
+  it('422 invalid_otp muestra los intentos que quedan', () => {
     const { keyLinks, c, el, render } = setup('3000000002');
-    keyLinks.verify.mockReturnValue({ ok: false, reason: 'invalid', attemptsRemaining: 4 });
+    keyLinks.verify.mockReturnValue(apiError(422, { code: 'invalid_otp', attemptsRemaining: 4 }));
     c['form'].patchValue({ walletAddress: '$ilp.interledger-test.dev/maria' });
     c['sendCode']();
     c['verify']();
     render();
     expect(el.textContent).toContain('El código no coincide. Revisa el SMS. Te quedan 4 intentos.');
-    expect(keyLinks.link).not.toHaveBeenCalled();
   });
 
-  it('409 wallet_already_linked muestra el motivo', () => {
+  it('409 wallet_already_linked al enviar el código se queda en el paso 1 con el motivo', () => {
     const { keyLinks, c, el, render } = setup('3000000002');
-    keyLinks.link.mockReturnValue(
-      throwError(
-        () => new ApiError(409, { title: 'Conflicto', status: 409, code: 'wallet_already_linked' }),
-      ),
-    );
+    keyLinks.start.mockReturnValue(apiError(409, { code: 'wallet_already_linked' }));
     c['form'].patchValue({ walletAddress: '$ilp.interledger-test.dev/jeffdev' });
     c['sendCode']();
-    c['verify']();
     render();
     expect(el.textContent).toContain('Esta billetera ya está vinculada a otro celular.');
+    expect(el.textContent).toContain('Vincula tu billetera a tu celular');
   });
 
   it('al volver de Ver SMS retoma el paso 2 con los datos', () => {
     const { c, el } = setup(null, {
       phone: '3000000002',
       walletAddress: '$ilp.interledger-test.dev/maria',
+      challengeId: 'ch-1',
     });
     expect(el.textContent).toContain('Escribe el código');
     expect(c['form'].getRawValue()).toMatchObject({
