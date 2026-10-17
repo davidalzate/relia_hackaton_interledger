@@ -205,6 +205,12 @@ public class EfPaymentRepository(ReliaDbContext db) : IPaymentRepository
         db.Payments.Where(p => p.SettlementId == settlementId)
             .OrderByDescending(p => p.CreatedAt).FirstOrDefaultAsync(ct);
 
+    public async Task<IReadOnlyList<Payment>> ListPendingRailChargesAsync(CancellationToken ct = default) =>
+        await db.Payments.AsNoTracking()
+            .Where(p => p.Direction == PaymentDirection.Incoming && p.State == OperationState.Pending
+                        && p.RailPaymentId != null)
+            .ToListAsync(ct);
+
     public async Task<Payment?> GetLatestBySettlementForUpdateAsync(Guid settlementId, CancellationToken ct = default)
     {
         var payment = await db.Payments

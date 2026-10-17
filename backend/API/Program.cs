@@ -114,6 +114,8 @@ builder.Services.AddScoped<IKeyService, KeyService>();
 builder.Services.AddScoped<IKeyLinkService, KeyLinkService>();
 builder.Services.AddScoped<IReceiptService, ReceiptService>();
 builder.Services.AddScoped<ISettlementService, SettlementService>();
+builder.Services.AddSingleton<DemoFaults>();
+builder.Services.AddScoped<IDemoService, DemoService>();
 
 // ---- Auth: JWT bearer con rol y agentId ----
 var jwt = builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();

@@ -18,7 +18,7 @@ namespace Relia.Api.Services;
 public class OperationService(
     IAgentRepository agents, IFeeRepository fees, IWalletKeyRepository keys, IOperationRepository operations,
     IPaymentRepository payments, ILedgerRepository ledgerEntries, ILedger ledger, IRailClient rail,
-    IOperationSync sync, ISimulatedInbox inbox, IUnitOfWork unitOfWork, ICurrentUser currentUser,
+    IOperationSync sync, ISimulatedInbox inbox, DemoFaults faults, IUnitOfWork unitOfWork, ICurrentUser currentUser,
     IOptions<ReliaOptions> options, TimeProvider time, ILogger<OperationService> logger) : IOperationService
 {
     /// <summary>Plazo para aprobar un cobro por Wallet (retiro y carga).</summary>
@@ -89,6 +89,7 @@ public class OperationService(
             payments.Add(payment);
             // Se guarda antes de llamar al riel: si la base rechaza algo, no se llega a pedir el pago.
             await unitOfWork.SaveChangesAsync(tx);
+            if (await FailIfForcedAsync(operation, payment, tx)) return await ToDtoAsync(operation, payment, tx);
 
             var reading = await rail.CreateOrThrowAsync(payment, new RailPaymentRequest(
                 RailDirection.Outgoing, key.WalletAddress, RailAmount.FromCop(amounts.NetAmount),
@@ -144,6 +145,7 @@ public class OperationService(
             };
             payments.Add(payment);
             await unitOfWork.SaveChangesAsync(tx);
+            if (await FailIfForcedAsync(operation, payment, tx)) return await ToDtoAsync(operation, payment, tx);
 
             var reading = await rail.CreateOrThrowAsync(payment, new RailPaymentRequest(
                 RailDirection.Incoming, key.WalletAddress, RailAmount.FromCop(amounts.ChargedAmount), expiresAt,
@@ -214,6 +216,7 @@ public class OperationService(
             };
             payments.Add(payment);
             await unitOfWork.SaveChangesAsync(tx);
+            if (await FailIfForcedAsync(operation, payment, tx)) return await ToDtoAsync(operation, payment, tx);
 
             if (breB)
             {
@@ -258,6 +261,26 @@ public class OperationService(
             return operation;
         }, ct);
         return await ToDtoAsync(completed, await payments.GetLatestByOperationAsync(operationId, ct), ct);
+    }
+
+    public async Task<OperationDto> ExpireNowAsync(Guid operationId, CancellationToken ct = default)
+    {
+        var operation = await operations.GetByIdAsync(operationId, ct) ?? throw ApiErrors.NotFound();
+        if (operation.Kind == OperationKind.Deposit || operation.State != OperationState.Pending)
+            throw ApiErrors.OperationNotCancellable();
+        bool expired;
+        try
+        {
+            expired = await sync.ExpireAsync(operation, ct);
+        }
+        catch (RailUnavailableException)
+        {
+            throw ApiErrors.RailUnavailable();
+        }
+        if (!expired) throw ApiErrors.OperationNotCancellable();
+
+        var current = await operations.GetByIdAsync(operation.Id, ct) ?? throw ApiErrors.NotFound();
+        return await ToDtoAsync(current, await payments.GetLatestByOperationAsync(operation.Id, ct), ct);
     }
 
     /// <summary>403 si es de otro corresponsal. Si está pendiente, refresca antes el pago desde el proxy.</summary>
@@ -383,6 +406,18 @@ public class OperationService(
         var minute = TimeSpan.TicksPerMinute;
         var ceiling = (now.UtcTicks + minute - 1) / minute * minute;
         return new DateTimeOffset(ceiling, TimeSpan.Zero) + WalletApprovalWindow;
+    }
+
+    /// <summary>
+    /// "El próximo pago falla" del Modo demo: si estaba encendido, la operación queda failed/payment_failed sin llamar
+    /// al riel (la reserva se libera sola) y el interruptor se apaga.
+    /// </summary>
+    private async Task<bool> FailIfForcedAsync(Operation operation, Payment payment, CancellationToken ct)
+    {
+        if (!faults.TryFailPayment(payments, payment, time.GetUtcNow())) return false;
+        await sync.CloseWithoutMovementAsync(operation, payment, OperationState.Failed, "payment_failed",
+            DemoFaults.ForcedFailureDetail, EventOrigin.Simulator, ct);
+        return true;
     }
 
     /// <summary>Depósito o retiro en pending con los montos del desglose y su evento de creación.</summary>

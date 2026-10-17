@@ -67,6 +67,13 @@ public interface IOperationService
     /// </summary>
     Task<OperationDto> SimulateBreBPaymentAsync(Guid operationId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Modo demo, "La solicitud vence ya": cancela en el riel un retiro o carga pendiente y lo deja
+    /// expired/request_expired. 409 operation_not_cancellable si no está pendiente o el pagador ya aprobó;
+    /// 503 rail_unavailable si el riel no responde.
+    /// </summary>
+    Task<OperationDto> ExpireNowAsync(Guid operationId, CancellationToken ct = default);
+
     /// <summary>Solo retiros completed; idempotente; no cambia saldos.</summary>
     Task<OperationDto> ConfirmCashHandoverAsync(Guid operationId, CancellationToken ct = default);
 }

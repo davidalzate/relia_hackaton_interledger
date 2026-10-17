@@ -17,8 +17,9 @@ namespace Relia.Api.Services;
 /// </summary>
 public class SettlementService(
     ISettlementRepository settlements, IAgentRepository agents, IOperationRepository operations,
-    IPaymentRepository payments, ILedger ledger, IRailClient rail, ISettlementSync sync, IUnitOfWork unitOfWork,
-    ICurrentUser currentUser, IOptions<ReliaOptions> options, TimeProvider time, ILogger<SettlementService> logger)
+    IPaymentRepository payments, ILedger ledger, IRailClient rail, ISettlementSync sync, DemoFaults faults,
+    IUnitOfWork unitOfWork, ICurrentUser currentUser, IOptions<ReliaOptions> options, TimeProvider time,
+    ILogger<SettlementService> logger)
     : ISettlementService
 {
     /// <summary>
@@ -71,6 +72,13 @@ public class SettlementService(
             payments.Add(payment);
             // Se guarda antes de llamar al riel: si la base rechaza algo, no se llega a pedir el pago.
             await unitOfWork.SaveChangesAsync(tx);
+
+            // "El próximo pago falla" del Modo demo: voided sin llamar al riel, y el interruptor se apaga.
+            if (faults.TryFailPayment(payments, payment, now))
+            {
+                await sync.VoidAsync(settlement, payment, OperationState.Failed, DemoFaults.ForcedFailureDetail, tx);
+                return settlement.Id;
+            }
 
             if (simulated)
             {

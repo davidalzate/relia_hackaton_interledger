@@ -20,9 +20,28 @@ namespace Relia.Api.Controllers;
 [DemoOnly]
 [Tags("demo")]
 public class DemoController(
-    ISimulatedInbox inbox, IOperationRepository operations, IOperationService operationService, TimeProvider time)
-    : ControllerBase
+    ISimulatedInbox inbox, IOperationRepository operations, IOperationService operationService, IDemoService demo,
+    TimeProvider time) : ControllerBase
 {
+    [HttpGet("faults")]
+    public DemoFaultsDto GetFaults() => demo.GetFaults();
+
+    /// <summary>failNextPayment: el próximo depósito, retiro, carga o liquidación falla sin llamar al riel.</summary>
+    [HttpPut("faults")]
+    public DemoFaultsDto SetFaults(SetDemoFaultsRequest request) => demo.SetFaults(request);
+
+    /// <summary>"La solicitud vence ya": retiros y cargas pendientes.</summary>
+    [HttpPost("operations/{operationId:guid}/expire")]
+    public Task<OperationDto> ExpireOperation(Guid operationId, CancellationToken ct) =>
+        operationService.ExpireNowAsync(operationId, ct);
+
+    [HttpPost("reset")]
+    public async Task<IActionResult> Reset(CancellationToken ct)
+    {
+        await demo.ResetAsync(ct);
+        return NoContent();
+    }
+
     /// <summary>Simulador Bre-B: "Simular pago recibido" de una carga pendiente.</summary>
     [HttpPost("quota-top-ups/{operationId:guid}/breb-payment")]
     public Task<OperationDto> SimulateBreBPayment(Guid operationId, CancellationToken ct) =>

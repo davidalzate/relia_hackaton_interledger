@@ -25,6 +25,13 @@ public interface ISettlementSync
     Task PayAsync(Settlement settlement, Payment payment, DateTimeOffset paidAt, CancellationToken ct = default);
 
     /// <summary>
+    /// Anula la liquidación sin movimiento: el pago queda en <paramref name="paymentState"/> (failed, expired o
+    /// cancelled) y la comisión sigue acumulada. Solo dentro de una transacción.
+    /// </summary>
+    Task VoidAsync(Settlement settlement, Payment payment, OperationState paymentState, string reason,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Consulta el pago en el proxy y lo aplica, como máximo una vez por segundo por pago. Si el proxy no responde,
     /// la liquidación sigue pendiente y se reintenta en la siguiente lectura o en el siguiente barrido.
     /// </summary>
@@ -92,9 +99,16 @@ public class SettlementSync(
             await PayAsync(settlement, payment, reading.CompletedAt ?? time.GetUtcNow(), ct);
             return;
         }
-        payment.State = state;
+        await VoidAsync(settlement, payment, state,
+            reading.FailureDetail ?? reading.FailureCode ?? $"El pago terminó en {reading.Status}", ct);
+    }
+
+    public async Task VoidAsync(Settlement settlement, Payment payment, OperationState paymentState, string reason,
+        CancellationToken ct = default)
+    {
+        payment.State = paymentState;
         settlement.State = SettlementState.Voided;
-        settlement.VoidReason = reading.FailureDetail ?? reading.FailureCode ?? $"El pago terminó en {reading.Status}";
+        settlement.VoidReason = reason;
         await unitOfWork.SaveChangesAsync(ct);
     }
 

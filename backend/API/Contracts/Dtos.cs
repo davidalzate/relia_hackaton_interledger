@@ -227,6 +227,12 @@ public record DemoPaymentRequestDto(
 
 public record DemoPaymentRequestListDto(IReadOnlyList<DemoPaymentRequestDto> Items);
 
+// ---- Modo demo: fallos forzados ----
+
+public record DemoFaultsDto(bool FailNextPayment);
+
+public record SetDemoFaultsRequest([Required] bool? FailNextPayment);
+
 // ---- Modo demo: bandeja del teléfono simulado ----
 
 public enum DemoMessageChannel { Sms, [JsonStringEnumMemberName("whatsapp")] WhatsApp }

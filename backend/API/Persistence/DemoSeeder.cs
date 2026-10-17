@@ -10,7 +10,7 @@ namespace Relia.Api.Persistence;
 /// <summary>
 /// Datos iniciales de la demo: tarifa vigente, un admin, los 4 corresponsales de docs/prototype.md §9.4
 /// (Rosa en ceros, los demás con historial de ejemplo) y la llave 3000000001 → jeffdev; el 3000000002
-/// queda sin llave. Corre al arrancar con la base vacía y, más adelante, en POST /demo/reset.
+/// queda sin llave. Corre al arrancar con la base vacía y en POST /demo/reset.
 /// </summary>
 /// <remarks>
 /// El historial de ejemplo pasa por las mismas reglas de la base que una operación real: pago completado,
@@ -64,11 +64,37 @@ public class DemoSeeder(
     /// <summary>Siembra sobre tablas vacías, en una transacción.</summary>
     public async Task SeedAsync(CancellationToken ct = default)
     {
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await SeedTablesAsync(ct);
+        await tx.CommitAsync(ct);
+    }
+
+    /// <summary>
+    /// POST /demo/reset: vacía todas las tablas con TRUNCATE … RESTART IDENTITY CASCADE (los triggers de
+    /// inmutabilidad son por fila y no lo bloquean; las referencias OP-, LQ- y los códigos vuelven a empezar) y
+    /// vuelve a sembrar, todo en una transacción. Los ids de admin y corresponsales cambian: hay que volver a entrar.
+    /// </summary>
+    public async Task ResetAsync(CancellationToken ct = default)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlRawAsync("""
+            TRUNCATE admins, agents, agent_balances, fees, wallet_keys, otp_challenges, operations, operation_events,
+                     payments, payment_events, ledger_entries, receipts, receipt_issuances, settlements,
+                     simulated_messages, idempotency_records
+            RESTART IDENTITY CASCADE
+            """, ct);
+        // Lo que EF tenía cargado ya no existe.
+        db.ChangeTracker.Clear();
+        await SeedTablesAsync(ct);
+        await tx.CommitAsync(ct);
+    }
+
+    private async Task SeedTablesAsync(CancellationToken ct)
+    {
         var reliaWallet = options.Value.WalletAddress;
         if (string.IsNullOrWhiteSpace(reliaWallet))
             throw new InvalidOperationException("Falta Relia:WalletAddress (payment pointer de Relia) para sembrar.");
 
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
         var now = clock.GetUtcNow();
 
         var fee = new Fee { Total = FeeTotal, ReliaShare = FeeTotal - FeeAgent, AgentShare = FeeAgent, ValidFrom = now.AddDays(-30) };
@@ -108,7 +134,6 @@ public class DemoSeeder(
             }
         }
 
-        await tx.CommitAsync(ct);
         log.LogInformation("Base sembrada: {Agents} corresponsales, admin {Admin}", agents.Count, AdminEmail);
     }
 

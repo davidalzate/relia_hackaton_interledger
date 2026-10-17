@@ -138,6 +138,9 @@ public interface IPaymentRepository
     Task<Payment?> GetLatestByOperationForUpdateAsync(Guid operationId, CancellationToken ct = default);
     Task<Payment?> GetLatestBySettlementAsync(Guid settlementId, CancellationToken ct = default);
 
+    /// <summary>Cobros (incoming) pendientes que pasaron por el proxy: los que POST /demo/reset cancela en el riel.</summary>
+    Task<IReadOnlyList<Payment>> ListPendingRailChargesAsync(CancellationToken ct = default);
+
     /// <summary>Como <see cref="GetLatestBySettlementAsync"/>, con FOR UPDATE y los valores de la base.</summary>
     Task<Payment?> GetLatestBySettlementForUpdateAsync(Guid settlementId, CancellationToken ct = default);
     void Add(Payment payment);
