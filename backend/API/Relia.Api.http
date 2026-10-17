@@ -1,0 +1,33 @@
+@host = http://localhost:5080
+
+### Login del corresponsal (Rosa): 200 con role agent y agentId
+# @name loginRosa
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{ "email": "rosa@demo.relia", "password": "demo1234" }
+
+### Perfil de Rosa con saldos
+GET {{host}}/me
+Authorization: Bearer {{loginRosa.response.body.accessToken}}
+
+### Login del admin: 200 con role admin, sin agentId
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{ "email": "admin@relia.co", "password": "admin1234" }
+
+### Credenciales malas: 401 invalid_credentials
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{ "email": "rosa@demo.relia", "password": "otra" }
+
+### Cuerpo inválido: 422 validation_error
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{ "email": "no-es-correo" }
+
+### Sin token: 401 problem+json
+GET {{host}}/me

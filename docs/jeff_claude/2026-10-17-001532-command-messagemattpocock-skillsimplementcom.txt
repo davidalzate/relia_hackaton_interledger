@@ -1,0 +1,3387 @@
+
+❯ /mattpocock-skills:implement @relia/relia_hackaton_interledger/docs/issues/ba
+ckend-relia-api/12-admin-panel-de-la-red.md
+  ⎿  Read relia/relia_hackaton_interledger/docs/issues/backend-relia-api/12-admi
+     n-panel-de-la-red.md (17 lines)
+
+⏺ Implementando el ticket 12: Admin: panel de la red. Primero exploro el código.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Hay cambios sin commitear del ticket 11 en el árbol. Los dejaré fuera de mi
+  commit. Veo la estructura del backend.
+
+  Searched for 1 pattern, ran 3 shell commands (ctrl+o to expand)
+
+⏺ La mayor parte de lectura/403 parece hecha. Falta GET /agents. Reviso
+  contrato, vista y DTOs.
+
+  Ran 7 shell commands (ctrl+o to expand)
+
+⏺ Lo que falta es GET /agents; las lecturas del admin y los 403 de operar ya
+  parecen estar. Verifico eso y luego agrego el endpoint.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Ahora escribo el código: DTOs, fila de la vista en el repositorio, servicio y
+  ruta.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Update(backend/API/Repositories/Abstractions.cs)
+  ⎿  Added 28 lines
+      30      /// pointer ($dominio/ruta), sin mayúsculas ni "/" final de
+           ningún lado.
+      31      /// </summary>
+      32      Task<bool> UsesPhoneOrWalletAsync(string phone, string wall
+          etAddress, CancellationToken ct = default);
+      33 +                                                               
+      34 +    /// <summary>Filas de v_admin_agent_summary con wallet_simu
+         +lated, por nombre.</summary>                                   
+      35 +    Task<IReadOnlyList<AgentSummaryRow>> ListSummariesAsync(Can
+         +cellationToken ct = default);                                  
+      36  }
+      37  
+      38 +/// <summary>                                                  
+      39 +/// Fila de v_admin_agent_summary. Los montos movidos son de de
+         +pósitos y retiros completados, con el monto                    
+      40 +/// solicitado (M); CommissionPaidToday usa "hoy" en America/Bo
+         +gota.                                                          
+      41 +/// </summary>                                                 
+      42 +public record AgentSummaryRow                                  
+      43 +{                                                              
+      44 +    public Guid AgentId { get; init; }                         
+      45 +    public string Name { get; init; } = "";                    
+      46 +    public string ManagerName { get; init; } = "";             
+      47 +    public string City { get; init; } = "";                    
+      48 +    public string WalletAddress { get; init; } = "";           
+      49 +    public bool WalletSimulated { get; init; }                 
+      50 +    public long Quota { get; init; }                           
+      51 +    public long CashOnHand { get; init; }                      
+      52 +    public long CommissionPayable { get; init; }               
+      53 +    public long CommissionPaidTotal { get; init; }             
+      54 +    public int OperationsCount { get; init; }                  
+      55 +    public int DepositsCount { get; init; }                    
+      56 +    public long DepositsValue { get; init; }                   
+      57 +    public int WithdrawalsCount { get; init; }                 
+      58 +    public long WithdrawalsValue { get; init; }                
+      59 +    public long TotalMoved { get; init; }                      
+      60 +    public long CommissionPaidToday { get; init; }             
+      61 +}                                                              
+      62 +                                                               
+      63  public interface IAdminRepository
+      64  {
+      65      Task<Admin?> GetByIdAsync(Guid id, CancellationToken ct = d
+          efault);
+
+⏺ Update(backend/API/Repositories/EfRepositories.cs)
+  ⎿  Added 17 lines
+      52          var wallet = walletAddress.TrimEnd('/').ToLowerInvarian
+          t();
+      53          return db.Agents.AnyAsync(a => a.Phone == phone || a.Wa
+          lletAddress.ToLower().TrimEnd('/') == wallet, ct);
+      54      }
+      55 +                                                               
+      56 +    // La vista suma en numeric: se castea a bigint para leerla
+         + como long.                                                    
+      57 +    public async Task<IReadOnlyList<AgentSummaryRow>> ListSumma
+         +riesAsync(CancellationToken ct = default) =>                   
+      58 +        await db.Database.SqlQueryRaw<AgentSummaryRow>("""     
+      59 +            SELECT v.agent_id AS "AgentId", v.name AS "Name", v
+         +.contact_person AS "ManagerName",                              
+      60 +                   v.city AS "City", v.payment_pointer AS "Wall
+         +etAddress",                                                    
+      61 +                   a.wallet_simulated AS "WalletSimulated",    
+      62 +                   v.float_balance AS "Quota", v.expected_cash 
+         +AS "CashOnHand",                                               
+      63 +                   v.commission_payable AS "CommissionPayable",
+         + v.commission_paid_total AS "CommissionPaidTotal",             
+      64 +                   v.operations_count::int AS "OperationsCount"
+         +,                                                              
+      65 +                   v.deposits_count::int AS "DepositsCount", v.
+         +deposits_value::bigint AS "DepositsValue",                     
+      66 +                   v.withdrawals_count::int AS "WithdrawalsCoun
+         +t", v.withdrawals_value::bigint AS "WithdrawalsValue",         
+      67 +                   v.total_moved::bigint AS "TotalMoved", v.com
+         +mission_paid_today::bigint AS "CommissionPaidToday"            
+      68 +            FROM v_admin_agent_summary v                       
+      69 +            JOIN agents a ON a.id = v.agent_id                 
+      70 +            ORDER BY v.name                                    
+      71 +            """).ToListAsync(ct);                              
+      72  }
+      73  
+      74  public class EfAdminRepository(ReliaDbContext db) : IAdminRepos
+          itory
+
+⏺ Update(backend/API/Contracts/Dtos.cs)
+  ⎿  Added 15 lines
+      79  
+      80  public record BalancePairDto(long Before, long After);
+      81  
+      82 +// ---- Panel admin ----                                       
+      83 +                                                               
+      84 +public record CountAmountDto(int Count, long Amount);          
+      85 +                                                               
+      86 +public record AgentSummaryDto(                                 
+      87 +    Guid Id, string Name, string ManagerName, string City, stri
+         +ng WalletAddress, bool WalletSimulated,                        
+      88 +    int Operations, CountAmountDto Deposits, CountAmountDto Wit
+         +hdrawals, long TotalMoved, long Quota,                         
+      89 +    long CashOnHand, long AccruedCommission, long SettledCommis
+         +sionTotal, long CommissionPaidToday);                          
+      90 +                                                               
+      91 +public record NetworkTotalsDto(                                
+      92 +    CountAmountDto TotalMoved, CountAmountDto Deposits, CountAm
+         +ountDto Withdrawals,                                           
+      93 +    long CommissionPayable, long CommissionPaidToday);         
+      94 +                                                               
+      95 +public record AgentListDto(IReadOnlyList<AgentSummaryDto> Items
+         +, NetworkTotalsDto Totals);                                    
+      96 +                                                               
+      97  public record BalanceChangeDto(BalancePairDto Quota, BalancePai
+          rDto AccruedCommission, BalancePairDto CashOnHand);
+      98  
+      99  // ---- Historial ----
+
+⏺ Update(backend/API/Services/Abstractions.cs)
+  ⎿  Added 4 lines, removed 1 line
+      14      Task<MeDto> GetMeAsync(CancellationToken ct = default);
+      15  }
+      16  
+      17 -/// <summary>GET /agents/{agentId} y GET /agents/{agentId}/hist
+         -ory.</summary>                                                 
+      17 +/// <summary>GET /agents, GET /agents/{agentId} y GET /agents/{
+         +agentId}/history.</summary>                                    
+      18  public interface IAgentService
+      19  {
+      20 +    /// <summary>Panel admin: todos los corresponsales con métr
+         +icas y los totales de la red. 403 al agente.</summary>         
+      21 +    Task<AgentListDto> ListAgentsAsync(CancellationToken ct = d
+         +efault);                                                       
+      22 +                                                               
+      23      /// <summary>Saldos con reservas calculadas de las operacio
+          nes pendientes. 403 si es de otro corresponsal.</summary>
+      24      Task<AgentDto> GetAgentAsync(Guid agentId, CancellationToke
+          n ct = default);
+      25  
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Update(backend/API/Auth/CurrentUser.cs)
+  ⎿  Added 6 lines
+      43      /// Regla para operar (depósitos, retiros, cargas, ajustes)
+          : solo el corresponsal dueño. El admin lee
+      44      /// todo pero no opera por el corresponsal.
+      45      /// </summary>
+      46 +    /// <summary>Panel admin y liquidaciones: solo el admin.</s
+         +ummary>                                                        
+      47 +    public static void EnsureAdmin(this ICurrentUser user)     
+      48 +    {                                                          
+      49 +        if (user.Role != Role.Admin) throw ApiErrors.Forbidden(
+         +);                                                             
+      50 +    }                                                          
+      51 +                                                               
+      52      public static void EnsureCanOperateAgent(this ICurrentUser 
+          user, Guid agentId)
+      53      {
+      54          if (user.Role != Role.Agent || user.AgentId != agentId)
+           throw ApiErrors.Forbidden();
+
+⏺ Inserté antes del <summary> de EnsureCanOperateAgent; lo reacomodo.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(backend/API/Auth/CurrentUser.cs)
+  ⎿  Added 5 lines, removed 5 lines
+      39          if (user.Role == Role.Agent && user.AgentId != agentId)
+           throw ApiErrors.Forbidden();
+      40      }
+      41  
+      42 -    /// <summary>                                              
+      43 -    /// Regla para operar (depósitos, retiros, cargas, ajustes)
+         -: solo el corresponsal dueño. El admin lee                     
+      44 -    /// todo pero no opera por el corresponsal.                
+      45 -    /// </summary>                                             
+      46 -    /// <summary>Panel admin y liquidaciones: solo el admin.</s
+         -ummary>                                                        
+      42 +    /// <summary>Panel admin: solo el admin.</summary>         
+      43      public static void EnsureAdmin(this ICurrentUser user)
+      44      {
+      45          if (user.Role != Role.Admin) throw ApiErrors.Forbidden(
+          );
+      46      }
+      47  
+      48 +    /// <summary>                                              
+      49 +    /// Regla para operar (depósitos, retiros, cargas, ajustes)
+         +: solo el corresponsal dueño. El admin lee                     
+      50 +    /// todo pero no opera por el corresponsal.                
+      51 +    /// </summary>                                             
+      52      public static void EnsureCanOperateAgent(this ICurrentUser 
+          user, Guid agentId)
+      53      {
+      54          if (user.Role != Role.Agent || user.AgentId != agentId)
+           throw ApiErrors.Forbidden();
+
+⏺ Update(backend/API/Services/AgentService.cs)
+  ⎿  Added 1 line, removed 1 line
+       7  
+       8  namespace Relia.Api.Services;
+       9  
+      10 -/// <summary>GET /agents/{agentId} y GET /agents/{agentId}/hist
+         -ory.</summary>                                                 
+      10 +/// <summary>GET /agents, GET /agents/{agentId} y GET /agents/{
+         +agentId}/history.</summary>                                    
+      11  public class AgentService(
+      12      IAgentRepository agents, IOperationRepository operations, I
+          HistoryRepository history, ICurrentUser currentUser)
+      13      : IAgentService
+
+⏺ Update(backend/API/Services/AgentService.cs)
+  ⎿  Added 23 lines
+      25      private static readonly Dictionary<string, HistoryEntryKind
+          > KindsByLabel =
+      26          KindLabels.ToDictionary(p => p.Value, p => p.Key);
+      27  
+      28 +    public async Task<AgentListDto> ListAgentsAsync(Cancellatio
+         +nToken ct = default)                                           
+      29 +    {                                                          
+      30 +        currentUser.EnsureAdmin();                             
+      31 +        var rows = await agents.ListSummariesAsync(ct);        
+      32 +                                                               
+      33 +        var items = rows.Select(r => new AgentSummaryDto(      
+      34 +            r.AgentId, r.Name, r.ManagerName, r.City, r.WalletA
+         +ddress, r.WalletSimulated,                                     
+      35 +            r.OperationsCount,                                 
+      36 +            new CountAmountDto(r.DepositsCount, r.DepositsValue
+         +),                                                             
+      37 +            new CountAmountDto(r.WithdrawalsCount, r.Withdrawal
+         +sValue),                                                       
+      38 +            r.TotalMoved, r.Quota, r.CashOnHand, r.CommissionPa
+         +yable, r.CommissionPaidTotal,                                  
+      39 +            r.CommissionPaidToday)).ToList();                  
+      40 +                                                               
+      41 +        var deposits = new CountAmountDto(items.Sum(a => a.Depo
+         +sits.Count), items.Sum(a => a.Deposits.Amount));               
+      42 +        var withdrawals = new CountAmountDto(                  
+      43 +            items.Sum(a => a.Withdrawals.Count), items.Sum(a =>
+         + a.Withdrawals.Amount));                                       
+      44 +        var totals = new NetworkTotalsDto(                     
+      45 +            new CountAmountDto(deposits.Count + withdrawals.Cou
+         +nt, deposits.Amount + withdrawals.Amount),                     
+      46 +            deposits, withdrawals,                             
+      47 +            items.Sum(a => a.AccruedCommission), items.Sum(a =>
+         + a.CommissionPaidToday));                                      
+      48 +        return new AgentListDto(items, totals);                
+      49 +    }                                                          
+      50 +                                                               
+      51      public async Task<AgentDto> GetAgentAsync(Guid agentId, Can
+          cellationToken ct = default)
+      52      {
+      53          currentUser.EnsureCanReadAgent(agentId);
+
+⏺ Update(backend/API/Controllers/AgentsController.cs)
+  ⎿  Added 7 lines, removed 1 line
+       8  
+       9  namespace Relia.Api.Controllers;
+      10  
+      11 -/// <summary>Rutas bajo /agents/{agentId} que usa el correspons
+         -al.</summary>                                                  
+      11 +/// <summary>Panel admin (GET /agents) y rutas bajo /agents/{ag
+         +entId} que usa el corresponsal.</summary>                      
+      12  [ApiController]
+      13  [Route("agents/{agentId:guid}")]
+      14  [Authorize]
+      15  public class AgentsController(
+      16      IAgentService agents, ICashAdjustmentService cashAdjustment
+          s, IOperationService operations) : ControllerBase
+      17  {
+      18 +    // "~/" no combina con la ruta del controlador: esta no lle
+         +va {agentId}.                                                  
+      19 +    [HttpGet("~/agents")]                                      
+      20 +    [Tags("admin")]                                            
+      21 +    [Authorize(Roles = Roles.Admin)]                           
+      22 +    public Task<AgentListDto> ListAgents(CancellationToken ct) 
+         +=> agents.ListAgentsAsync(ct);                                 
+      23 +                                                               
+      24      [HttpGet]
+      25      [Tags("agents")]
+      26      public Task<AgentDto> GetAgent(Guid agentId, CancellationTo
+          ken ct) => agents.GetAgentAsync(agentId, ct);
+
+⏺ Compilo.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Compila. Ahora lo verifico contra la base en Docker.
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+⏺ Responde bien. Cuadro los totales contra la base y pruebo los 403 y las
+  lecturas del admin.
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Cuadra (12/690.000, 12/612.000, comisión 12.000). Ahora roles y 403:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Todo como pide el ticket. Reviso que la colección de Postman tenga la carpeta
+  agents con GET /agents.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ La colección ya cubre esas rutas. Veo cómo se marcó un ticket terminado para
+  hacer lo mismo con el 12.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Actualizo el ticket con el estado y las notas, al estilo del 10.
+
+⏺ Update(docs/issues/backend-relia-api/12-admin-panel-de-la-red.md)
+  ⎿  Added 20 lines, removed 6 lines
+       6  
+       7  **Blocked by:** 07 (Depósito de punta a punta)
+       8  
+       9 -**Status:** ready-for-agent                                    
+       9 +**Status:** ready-for-human (implementado y verificado con curl
+         + contra la base local. Falta correr la carpeta `agents` de Post
+         +man)                                                           
+      10  
+      11 -- [ ] `GET /agents` (solo admin; el agente recibe `403`) devuel
+         -ve `items` (`AgentSummary`, con `walletSimulated`) y `totals` (
+         -`NetworkTotals`), sin paginación.                              
+      12 -- [ ] Los montos movidos cuentan solo depósitos y retiros `comp
+         -leted`, con el monto solicitado (M).                           
+      13 -- [ ] `commissionPayable` y `commissionPaidToday` se calculan c
+         -on "hoy" en America/Bogota.                                    
+      14 -- [ ] El admin lee `GET /agents/{id}`, el historial, las operac
+         -iones y los recibos de cualquier corresponsal.                 
+      15 -- [ ] El admin recibe `403 forbidden` en todas las rutas de ope
+         -rar: crear depósito, retiro, carga y ajuste, cancelar y confirm
+         -ar la entrega.                                                 
+      11 +- [x] `GET /agents` (solo admin; el agente recibe `403`) devuel
+         +ve `items` (`AgentSummary`, con `walletSimulated`) y `totals` (
+         +`NetworkTotals`), sin paginación.                              
+      12 +- [x] Los montos movidos cuentan solo depósitos y retiros `comp
+         +leted`, con el monto solicitado (M).                           
+      13 +- [x] `commissionPayable` y `commissionPaidToday` se calculan c
+         +on "hoy" en America/Bogota.                                    
+      14 +- [x] El admin lee `GET /agents/{id}`, el historial, las operac
+         +iones y los recibos de cualquier corresponsal.                 
+      15 +- [x] El admin recibe `403 forbidden` en todas las rutas de ope
+         +rar: crear depósito, retiro, carga y ajuste, cancelar y confirm
+         +ar la entrega.                                                 
+      16  - [ ] Verificado con la carpeta `agents` como admin: los totale
+          s cuadran con los depósitos y retiros hechos en los tickets ant
+          eriores, y cada ruta de operar devuelve 403.
+      17 +                                                               
+      18 +## Notas de implementación                                     
+      19 +                                                               
+      20 +- **`GET /agents`**: vive en `AgentsController` con ruta `~/age
+         +nts` y `[Authorize(Roles = admin)]`. El servicio también llama 
+         +a `EnsureAdmin` (regla nueva en `CurrentUserAccess`).          
+      21 +- **Datos**: `IAgentRepository.ListSummariesAsync` lee `v_admin
+         +_agent_summary` con SQL propio, une `agents` para `wallet_simul
+         +ated` y ordena por nombre. Las sumas de la vista son `numeric` 
+         +y se castean a `bigint`/`int`.                                 
+      22 +- **Mapeo**: `quota` = `float_balance`, `cashOnHand` = `expecte
+         +d_cash`, `accruedCommission` = `commission_payable`, `settledCo
+         +mmissionTotal` = `commission_paid_total`, `operations` = depósi
+         +tos + retiros completados.                                     
+      23 +- **Totales**: se suman en el servicio a partir de las filas. `
+         +totalMoved` es `{count, amount}` de depósitos + retiros, `commi
+         +ssionPayable` es la suma de `accruedCommission`.               
+      24 +- **"Hoy"**: `commission_paid_today` lo calcula la vista con `n
+         +ow() AT TIME ZONE 'America/Bogota'`, no con `TimeProvider`. Hoy
+         + da igual porque el reloj es el del sistema. Si el Modo demo ll
+         +ega a mover el reloj, hay que pasarle la fecha a la consulta.  
+      25 +- **Lecturas y 403 del admin**: ya estaban desde los tickets 02
+         +, 07, 08 y 09 (`EnsureCanReadAgent`, `EnsureCanOperateAgent` y 
+         +`[Authorize(Roles = agent)]` en las rutas de operar). No hubo q
+         +ue cambiarlas.                                                 
+      26 +- **Verificado con curl** contra la base local, con el admin `a
+         +dmin@relia.co`:                                                
+      27 +  - `GET /agents` → `200` con los 4 corresponsales. Totales: 12
+         + depósitos por $690.000, 12 retiros por $612.000, comisión por 
+         +pagar $12.000. Cuadran con una consulta directa a `operations` 
+         +y `agent_balances`;                                            
+      28 +  - como agente → `403`; sin token → `401`;                    
+      29 +  - el admin lee el perfil, el historial, una operación y su re
+         +cibo de Luis → `200`;                                          
+      30 +  - el admin en depósito, retiro, carga, ajuste, cancelar y ent
+         +rega → `403 forbidden` en `problem+json`.                      
+
+⏺ Ahora la revisión de código que pide el flujo.
+
+⏺ Skill(mattpocock-skills:code-review)
+  ⎿  Successfully loaded skill
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ HEAD cambió desde que empecé. Reviso qué se commiteó mientras tanto.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ El ticket 11 ya se commiteó en otra sesión, así que el diff contra HEAD es
+  solo mío. Lanzo las dos revisiones en paralelo.
+
+⏺ 2 agents finished (ctrl+o to expand)
+   ├ Standards review ticket 12 · 6 tool uses · 45.4k tokens
+   │ ⎿  Done
+   └ Spec review ticket 12 · 6 tool uses · 50.1k tokens
+     ⎿  Done
+
+› Message from general-purpose
+  **Standards review: uncommitted backend diff (GET /agents admin panel)**
+
+  **Hard violations of documented standards: none.**
+  - Contract (`contracts/relia-api.openapi.yaml`,
+  `AgentSummary`/`NetworkTotals`/`CountAmount`/`AgentList`): the DTO records in
+  `Contracts/Dtos.cs` match field-for-field, including the `admin` tag and 403.
+  - Spec rule "servicio + repositorio + IUnitOfWork"
+  (`docs/issues/backend-relia-api.md`): followed.
+  - Role rule: `EnsureAdmin` sits in `CurrentUserAccess` and the service uses
+  it. Putting `[Authorize(Roles=...)]` on the controller as well matches the
+  existing pattern, as does the raw-SQL row record (like `HistoryRow` in
+  `Repositories/Abstractions.cs`) and Spanish comments.
+
+  **Judgement calls (baseline smells):**
+
+  1. **Mysterious Name / naming drift** (`Repositories/Abstractions.cs`
+  `AgentSummaryRow` vs `Services/AgentService.cs`):
+     - The row has `CommissionPayable` and `CommissionPaidTotal`, but the DTO
+  maps them into `AccruedCommission` and `SettledCommissionTotal`.
+     - Totals then use `items.Sum(a => a.AccruedCommission)` for
+  `CommissionPayable`.
+     - The same concept has two names on each side. Naming the row's properties
+  after the DTO (it's an alias in the SQL anyway) removes the translation.
+
+  2. **Data Clumps / long positional constructor**
+  (`AgentService.ListAgentsAsync`):
+     `new AgentSummaryDto(r.AgentId, ..., r.TotalMoved, r.Quota, r.CashOnHand,
+  r.CommissionPayable, r.CommissionPaidTotal, r.CommissionPaidToday)`
+     This passes 15 positional args, and 6 of them are adjacent `long`s, so a
+  swap would compile silently. Named arguments would make the order safe; no new
+  type is needed.
+
+  3. **Duplicated Code / logic split** (`AgentService`):
+     `new CountAmountDto(deposits.Count + withdrawals.Count, deposits.Amount +
+  withdrawals.Amount)`
+     The service rebuilds "total moved" as deposits + withdrawals, while the
+  view already exposes `total_moved` per agent (read as `r.TotalMoved`). The
+  definition of "moved" now lives in two places, the view and C#. Summing
+  `TotalMoved` for the amount would remove that. There is no `total_moved` count
+  column, so the count would still be computed in C#.
+
+  4. **Feature Envy (minor)**: the row-to-DTO mapping and the totals aggregation
+  both live in `AgentService`, so the service mostly reshapes repository data.
+  This is acceptable for the size; a static `ToDto` next to the row is optional.
+
+  5. **Comment** (`AgentsController`): the comment `// "~/" no combina con la
+  ruta del controlador` is fine. Making `/agents` the only route that escapes
+  the class-level `[Route("agents/{agentId:guid}")]` is a mild structural
+  oddity, but it's documented.
+
+  **Housekeeping (not in the diff, but in the working tree):** there's an
+  untracked file, `backend/API/Domain/Entities.cs.new`. It differs from
+  `Entities.cs` only by a removed `<summary>` comment line and a trailing line.
+  It looks like a leftover and shouldn't be committed.
+
+  Files: `/Users/admin/Documents/Hackathon_Interledger/relia/relia_hackaton_inte
+  rledger/backend/API/Services/AgentService.cs`,
+  `.../backend/API/Repositories/Abstractions.cs`,
+  `.../backend/API/Repositories/EfRepositories.cs`,
+  `.../backend/API/Controllers/AgentsController.cs`,
+  `.../backend/API/Domain/Entities.cs.new`.
+
+› Message from general-purpose
+  I reviewed ticket 12 (`GET /agents`, the admin network panel) against the
+  ticket, the parent spec and the contract. The contract mapping and the totals
+  are correct, and I found no scope creep in the code. Two things are open: the
+  Postman check and the "today" clock.
+
+  **(a) Missing or partial**
+  - The Postman criterion is still unchecked: "Verificado con la carpeta
+  `agents` como admin: los totales cuadran… y cada ruta de operar devuelve 403."
+  Only curl checks were done, and the ticket status says so. Until it runs, the
+  ticket is not done.
+  - "Today" does not come from `TimeProvider`. The parent spec says: "**Reloj**:
+  `TimeProvider` para todos los plazos y para 'hoy' en America/Bogota."
+  `commission_paid_today` is computed inside the view with `now() AT TIME ZONE
+  'America/Bogota'`. The ticket notes admit this. Bogota is right; the time
+  source is not. If Demo mode ever moves the clock, the panel will be wrong.
+  This is a recorded deviation, not a fix.
+
+  **(b) Scope creep**
+  - None in the code. The extra `EnsureAdmin` in the service duplicates
+  `[Authorize(Roles = admin)]`, but it matches the spec's "se aplica en un solo
+  lugar que reutilizan los servicios".
+  - Untracked files that aren't part of this ticket:
+    - `backend/API/Domain/Entities.cs.new` is an older copy of `Entities.cs`
+  (only a doc comment differs). It should be deleted, not committed.
+    - `.claude/` and two transcripts under `docs/jeff_claude/`. Keep them out of
+  the commit.
+
+  **(c) Implemented, checked**
+  - **Fields:** they match `AgentSummary`, `NetworkTotals`, `AgentList` and
+  `CountAmount` field for field, including `walletSimulated`. The app serialises
+  JSON in camelCase, which gives the contract's names. There are no enums on
+  this route.
+  - **Totals:** correct for "Solo depósitos y retiros completados, con el monto
+  solicitado (M)":
+    - the view filters `status='completed'`, `type IN (deposit, withdrawal)` and
+  sums `requested_amount`;
+    - `totals.totalMoved` is count + amount of deposits plus withdrawals;
+    - `commissionPayable` is the sum of `accruedCommission`.
+  - **Admin reads and 403 on operate routes (story 103):** these were already in
+  place via `EnsureCanReadAgent` and `EnsureCanOperateAgent`. Correct.
+  - **Inactive agents, open question:** `v_admin_agent_summary` has no `active`
+  filter, so deactivated agents appear in `items` and count in `totals`. The
+  spec doesn't say either way. Story 93 says "todos los corresponsales", so this
+  is probably fine, but someone should confirm that's intended.
+  - **Wallet masking, minor:** story 92 says "mi celular y mi billetera salgan
+  enmascarados en toda respuesta… al admin". `walletAddress` is returned
+  unmasked. This matches the contract: there it's a plain string described as
+  "destino de la liquidación", and masking only applies to users' wallets. No
+  change needed unless story 92 is meant to cover agents too.
+  - **Agents without a balance row, minor:** the view inner-joins
+  `agent_balances`, so an agent with no balance row would silently drop out. The
+  seeder presumably always creates that row.
+
+  Files: `backend/API/Services/AgentService.cs`,
+  `backend/API/Repositories/EfRepositories.cs`,
+  `backend/API/Controllers/AgentsController.cs`, `backend/db/db_ddl.sql` (lines
+  984–1012).
+
+⏺ Aplico dos ajustes baratos de la revisión de estándares: los nombres de la
+  fila pasan a ser los del DTO y el constructor largo usa argumentos con nombre.
+
+⏺ Bash(cd /Users/admin/Documents/Hackathon_Interledger/relia/relia_hackaton_inte
+      rledger/backend/API && sed -i '' -e 's/public long CommissionPayable {
+      get; init; }/pub…)
+  ⎿  Updated backend/API/Repositories/Abstractions.cs (+2 -2)
+      49      public bool WalletSimulated { get; init; }
+      50      public long Quota { get; init; }
+      51      public long CashOnHand { get; init; }
+      52 -    public long CommissionPayable { get; init; }               
+      53 -    public long CommissionPaidTotal { get; init; }             
+      52 +    public long AccruedCommission { get; init; }               
+      53 +    public long SettledCommissionTotal { get; init; }          
+      54      public int OperationsCount { get; init; }
+      55      public int DepositsCount { get; init; }
+      56      public long DepositsValue { get; init; }
+  ⎿  Updated backend/API/Repositories/EfRepositories.cs (+1 -1)
+      60                     v.city AS "City", v.payment_pointer AS "Wall
+          etAddress",
+      61                     a.wallet_simulated AS "WalletSimulated",
+      62                     v.float_balance AS "Quota", v.expected_cash 
+          AS "CashOnHand",
+      63 -                   v.commission_payable AS "CommissionPayable",
+         - v.commission_paid_total AS "CommissionPaidTotal",             
+      63 +                   v.commission_payable AS "AccruedCommission",
+         + v.commission_paid_total AS "SettledCommissionTotal",          
+      64                     v.operations_count::int AS "OperationsCount"
+          ,
+      65                     v.deposits_count::int AS "DepositsCount", v.
+          deposits_value::bigint AS "DepositsValue",
+      66                     v.withdrawals_count::int AS "WithdrawalsCoun
+          t", v.withdrawals_value::bigint AS "WithdrawalsValue",
+
+⏺ Update(backend/API/Services/AgentService.cs)
+  ⎿  Added 9 lines, removed 5 lines
+      32  
+      33          var items = rows.Select(r => new AgentSummaryDto(
+      34              r.AgentId, r.Name, r.ManagerName, r.City, r.WalletA
+          ddress, r.WalletSimulated,
+      35 -            r.OperationsCount,                                 
+      36 -            new CountAmountDto(r.DepositsCount, r.DepositsValue
+         -),                                                             
+      37 -            new CountAmountDto(r.WithdrawalsCount, r.Withdrawal
+         -sValue),                                                       
+      38 -            r.TotalMoved, r.Quota, r.CashOnHand, r.CommissionPa
+         -yable, r.CommissionPaidTotal,                                  
+      39 -            r.CommissionPaidToday)).ToList();                  
+      35 +            Operations: r.OperationsCount,                     
+      36 +            Deposits: new CountAmountDto(r.DepositsCount, r.Dep
+         +ositsValue),                                                   
+      37 +            Withdrawals: new CountAmountDto(r.WithdrawalsCount,
+         + r.WithdrawalsValue),                                          
+      38 +            TotalMoved: r.TotalMoved,                          
+      39 +            Quota: r.Quota,                                    
+      40 +            CashOnHand: r.CashOnHand,                          
+      41 +            AccruedCommission: r.AccruedCommission,            
+      42 +            SettledCommissionTotal: r.SettledCommissionTotal,  
+      43 +            CommissionPaidToday: r.CommissionPaidToday)).ToList
+         +();                                                            
+      44  
+      45          var deposits = new CountAmountDto(items.Sum(a => a.Depo
+          sits.Count), items.Sum(a => a.Deposits.Amount));
+      46          var withdrawals = new CountAmountDto(
+
+⏺ Recompilo y repito la llamada para confirmar que la respuesta no cambió.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Background command "Run the API on port 5080 in background" completed (exit
+code 0)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Igual que antes. Commiteo solo los archivos del ticket 12.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ El ticket 12: Admin: panel de la red está commiteado como 9cfbed2 en
+  dotnet-jeff. Lo único que falta es correr la carpeta agents de Postman.
+
+  Qué cambió
+  - GET /agents: devuelve items (cada uno con walletSimulated) y totals desde la
+    vista v_admin_agent_summary, ordenados por nombre y sin paginación. Solo el
+    admin puede llamarla; el agente recibe 403. Los totales de la red se suman
+    a partir de las filas.
+  - Sin cambios: las lecturas del admin y los 403 en las rutas de operar ya
+    funcionaban por los tickets anteriores.
+
+  Verificación (con curl contra la base en Docker; no hay pruebas unitarias,
+  como acordó el equipo):
+  - Totales: 12 depósitos por $690.000, 12 retiros por $612.000 y $12.000 de
+    comisión por pagar. Coinciden con una consulta directa a operations y
+    agent_balances.
+  - GET /agents: el agente recibe 403 y una llamada sin token, 401.
+  - Lecturas del admin: el perfil, el historial, una operación y su recibo
+    responden 200.
+  - Rutas de operar: depósito, retiro, carga, ajuste, cancelar y confirmar la
+    entrega le responden 403 forbidden al admin.
+
+  Como la última casilla no está marcada, dejé el ticket en ready-for-human.
+
+  Revisión de código
+  - Estándares: el código respeta las convenciones del repo. De los 5 olores que
+    marcó (todos de criterio), arreglé los dos que valían la pena: los campos
+    de comisión ahora se llaman igual en la fila y en el DTO, y el constructor
+    de 15 argumentos usa argumentos con nombre. Volví a verificar y la respuesta
+    no cambió.
+  - Spec: los campos coinciden con el contrato y los totales tienen la semántica
+    correcta; no hay nada fuera del alcance del ticket.
+
+  Para que lo decidas tú
+  - El "hoy" de Bogotá sale del reloj de la base, no de TimeProvider. La spec
+    pide TimeProvider, pero la vista calcula commissionPaidToday con now() de
+    Postgres. Hoy da lo mismo porque ambos usan la hora del sistema. Si el Modo
+    demo llega a mover el reloj, el panel mostraría mal la comisión de hoy. Lo
+    dejé anotado en el ticket.
+  - Los corresponsales inactivos salen en el panel y cuentan en los totales,
+    porque la vista no los filtra. La spec dice "todos los corresponsales", así
+    que lo dejé así.
+
+  Hay archivos sin seguimiento que no son de este ticket y que no commiteé:
+  backend/API/Domain/Entities.cs.new (una copia de Entities.cs que solo difiere
+  en un comentario; parece sobrante), .claude/ y las transcripciones de
+  docs/jeff_claude/. El ticket 11 se commiteó desde otra sesión mientras yo
+  trabajaba, así que este commit solo lleva lo del 12.
+
+❯ /mattpocock-skills:implement @relia/relia_hackaton_interledger/docs/issues/ba
+ckend-relia-api/13-liquidaciones.md
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Implementando 13: Liquidaciones (pago de comisión). Leo lo que ya existe para
+  liquidaciones, el seguimiento de pagos y el barrido.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Ahora el esquema de la base: tabla settlements, pagos y sus triggers.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Ahora el código de servicios en el que me voy a apoyar: Ledger, seguimiento de
+  pagos, barrido y bandeja simulada.
+
+  Ran 2 shell commands (ctrl+o to expand)
+⏺ Ahora cómo se crea un depósito (pago outgoing por el riel), las entidades y el
+  mapeo de EF.
+
+  Searched for 1 pattern, ran 2 shell commands (ctrl+o to expand)
+
+⏺ Reviso las decisiones de la spec para liquidaciones, el filtro de
+  idempotencia, los errores y los repositorios de pagos.
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+⏺ Busco utilidades existentes para "hoy en Bogotá", el mapeo de DTOs y los
+  repositorios de pagos y liquidaciones.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Tengo el panorama. Reviso las opciones de configuración y el resto del
+  repositorio de liquidaciones antes de escribir.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Voy a extraer a un archivo compartido lo que liquidaciones y operaciones
+  usarán en común: el id idempotente del pago, la traducción de errores al crear
+  un pago, y el registro y copia de las lecturas del riel.
+
+⏺ Write(backend/API/Services/RailPayments.cs)
+  ⎿  Wrote 106 lines to backend/API/Services/RailPayments.cs
+      1 using System.Security.Cryptography;
+      2 using System.Text;
+      3 using System.Text.Json;
+      4 using Relia.Api.Domain;
+      5 using Relia.Api.Errors;
+      6 using Relia.Api.Rail;
+      7 using Relia.Api.Repositories;
+      8
+      9 namespace Relia.Api.Services;
+     … +133 lines (ctrl+o to expand)
+
+⏺ Ahora hago que OperationSync y OperationService usen esos helpers en vez de
+  sus copias privadas.
+
+⏺ Bash(python3 - <<'EOF'
+      import re…)
+  ⎿  Updated backend/API/Services/OperationService.cs (+9 -56)
+      1  using System.Globalization;
+      2 -using System.Security.Cryptography;                             
+      3 -using System.Text;                                              
+      2  using Microsoft.Extensions.Options;
+      3  using Relia.Api.Auth;
+      4  using Relia.Api.Configuration;
+     ...
+      79                  idempotencyKey, now);
+      80              var payment = new Payment
+      81              {
+      84 -                Id = RailPaymentId(agentId, "deposit", idempote
+         -ncyKey),                                                       
+      82 +                Id = RailPayments.PaymentId(agentId, "deposit",
+         + idempotencyKey),                                              
+      83                  OperationId = operation.Id,
+      84                  Rail = PaymentRail.OpenPayments,
+      85                  Direction = PaymentDirection.Outgoing,
+     ...
+       93              // Se guarda antes de llamar al riel: si la base r
+           echaza algo, no se llega a pedir el pago.
+       94              await unitOfWork.SaveChangesAsync(tx);
+       95  
+       98 -            var reading = await CreateRailPaymentAsync(payment
+          -, new RailPaymentRequest(                                     
+       96 +            var reading = await rail.CreateOrThrowAsync(paymen
+          +t, new RailPaymentRequest(                                    
+       97                  RailDirection.Outgoing, key.WalletAddress, Rai
+           lAmount.FromCop(amounts.NetAmount),
+       98                  Description: RailDescription($"Depósito en {ag
+           ent.Name}")),
+      101 -                tx);                                          
+       99 +                logger, tx);                                  
+      100              await sync.ApplyAsync(operation, payment, reading,
+            "create", ct: tx);
+      101              return await ToDtoAsync(operation, payment, tx);
+      102          }, ct);
+     ...
+      134                  idempotencyKey, now);
+      135              var payment = new Payment
+      136              {
+      139 -                Id = RailPaymentId(agentId, "withdrawal", idem
+          -potencyKey),                                                  
+      137 +                Id = RailPayments.PaymentId(agentId, "withdraw
+          +al", idempotencyKey),                                         
+      138                  OperationId = operation.Id,
+      139                  Rail = PaymentRail.OpenPayments,
+      140                  Direction = PaymentDirection.Incoming,
+     ...
+      148              payments.Add(payment);
+      149              await unitOfWork.SaveChangesAsync(tx);
+      150  
+      153 -            var reading = await CreateRailPaymentAsync(payment
+          -, new RailPaymentRequest(                                     
+      151 +            var reading = await rail.CreateOrThrowAsync(paymen
+          +t, new RailPaymentRequest(                                    
+      152                  RailDirection.Incoming, key.WalletAddress, Rai
+           lAmount.FromCop(amounts.ChargedAmount), expiresAt,
+     … 77 more lines (ctrl+o to expand)
+  ⎿  Updated backend/API/Services/OperationSync.cs (+4 -48)
+      1  using System.Collections.Concurrent;
+      2  using System.Globalization;
+      3 -using System.Text.Json;                                         
+      3  using Relia.Api.Domain;
+      4  using Relia.Api.Rail;
+      5  using Relia.Api.Repositories;
+     ...
+      101      IWalletKeyRepository keys, IRailClient rail, ILedger ledge
+           r, ISimulatedInbox inbox, IUnitOfWork unitOfWork,
+      102      RailRefreshThrottle throttle, TimeProvider time, ILogger<O
+           perationSync> logger) : IOperationSync
+      103  {
+      105 -    private static readonly JsonSerializerOptions RailJson = n
+          -ew(JsonSerializerDefaults.Web);                               
+      104      private static readonly CultureInfo Colombia = CultureInfo
+           .GetCultureInfo("es-CO");
+      105  
+      106      public async Task RefreshAsync(Operation operation, Cancel
+           lationToken ct = default)
+     ...
+      174                      await ApplyAsync(locked, lockedPayment, re
+           ading, "expire", EventOrigin.Rail, tx);
+      175                      return false;
+      176                  }
+      179 -                if (!LogReading(lockedPayment, reading, "expir
+          -e", OperationState.Expired))                                  
+      180 -                    CopyRailData(lockedPayment, reading);     
+      177 +                if (!payments.LogReading(lockedPayment, readin
+          +g, "expire", OperationState.Expired, time.GetUtcNow()))       
+      178 +                    lockedPayment.CopyRailData(reading);      
+      179              }
+      180              await CloseWithoutMovementAsync(locked, lockedPaym
+           ent, OperationState.Expired, "request_expired",
+      181                  "Venció el plazo de aprobación", EventOrigin.S
+           ystem, tx);
+     ...
+      225          // cancelled: pasado el plazo y sin que la pidiera el 
+           corresponsal, es un vencimiento.
+      226          if (state == OperationState.Cancelled && action != "ca
+           ncel" && payment.ExpiresAt <= time.GetUtcNow())
+      227              (state, failureCode) = (OperationState.Expired, "r
+           equest_expired");
+      230 -        var stale = LogReading(payment, reading, action, state
+          -);                                                            
+      228 +        var stale = payments.LogReading(payment, reading, acti
+          +on, state, time.GetUtcNow());                                 
+      229          if (stale)
+      230          {
+      231              await unitOfWork.SaveChangesAsync(ct);
+      232              return;
+      233          }
+      234  
+      237 -        CopyRailData(payment, reading);                       
+      235 +        payment.CopyRailData(reading);                        
+      236          if (state != OperationState.Pending && operation.State
+            != OperationState.Pending)
+      237          {
+      238              // La operación ya terminó por otro camino (p. ej.
+            vencida en el backend) y el riel cerró después:
+     ...
+      330              $"{agent.Name} ({operation.Reference}).",
+     … 45 more lines (ctrl+o to expand)
+
+⏺ Ahora los repositorios: lo que necesita la liquidación para crearse,
+  bloquearse y barrerse.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      p='Repositories/Abstractions.cs'; s=open(p).read()…)
+  ⎿  Updated backend/API/Repositories/Abstractions.cs (+21 -0)
+      111      /// <summary>SELECT ... FOR UPDATE de la operación, con lo
+           s valores de la base. Solo dentro de una transacción.</summary
+           >
+      112      Task<Operation?> GetForUpdateAsync(Guid id, CancellationTo
+           ken ct = default);
+      113  
+      114 +    /// <summary>Cuándo se completó la primera operación del c
+          +orresponsal; null si no tiene ninguna.</summary>              
+      115 +    Task<DateTimeOffset?> GetFirstCompletedAtAsync(Guid agentI
+          +d, CancellationToken ct = default);                           
+      116 +                                                              
+      117      /// <summary>
+      118      /// Retiros y cargas por Wallet pendientes cuyo pagador es
+            <paramref name="phone"/> (el usuario del retiro o el
+      119      /// corresponsal de la carga), con la approvalUrl de su úl
+           timo pago y su plazo después de <paramref name="now"/>.
+     ...
+      137      /// <summary>Como <see cref="GetLatestByOperationAsync"/>,
+            con FOR UPDATE y los valores de la base.</summary>
+      138      Task<Payment?> GetLatestByOperationForUpdateAsync(Guid ope
+           rationId, CancellationToken ct = default);
+      139      Task<Payment?> GetLatestBySettlementAsync(Guid settlementI
+           d, CancellationToken ct = default);
+      140 +                                                              
+      141 +    /// <summary>Como <see cref="GetLatestBySettlementAsync"/>
+          +, con FOR UPDATE y los valores de la base.</summary>          
+      142 +    Task<Payment?> GetLatestBySettlementForUpdateAsync(Guid se
+          +ttlementId, CancellationToken ct = default);                  
+      143      void Add(Payment payment);
+      144      void AddEvent(PaymentEvent paymentEvent);
+      145  }
+     ...
+      212  
+      213  public interface ISettlementRepository
+      214  {
+      215 +    /// <summary>Con el corresponsal y el admin que la creó.</
+          +summary>                                                      
+      216      Task<Settlement?> GetByIdAsync(Guid id, CancellationToken 
+           ct = default);
+      217 +                                                              
+      218 +    /// <summary>SELECT ... FOR UPDATE de la liquidación, con 
+          +los valores de la base. Solo dentro de una transacción.</summa
+          +ry>                                                           
+      219 +    Task<Settlement?> GetForUpdateAsync(Guid id, CancellationT
+          +oken ct = default);                                           
+      220 +                                                              
+      221      Task<IReadOnlyList<Settlement>> ListAsync(SettlementFilter
+            filter, CancellationToken ct = default);
+      222 +                                                              
+      223 +    /// <summary>Ids de las liquidaciones pendientes, la más v
+          +ieja primero (para el barrido).</summary>                     
+      224 +    Task<IReadOnlyList<Guid>> ListPendingIdsAsync(Cancellation
+          +Token ct = default);                                          
+      225 +                                                              
+      226 +    Task<bool> HasPendingAsync(Guid agentId, CancellationToken
+          + ct = default);                                               
+      227 +                                                              
+      228 +    /// <summary>Última liquidación pagada del corresponsal: e
+          +l período de la siguiente empieza al día siguiente.</summary> 
+      229 +    Task<Settlement?> GetLastPaidAsync(Guid agentId, Cancellat
+          +ionToken ct = default);                                       
+      230 +                                                              
+      231 +    void Add(Settlement settlement);                          
+      232  }
+      233  
+     … 1 more lines (ctrl+o to expand)
+  ⎿  Updated backend/API/Repositories/EfRepositories.cs (+38 -0)
+      144          return operation;
+      145      }
+      146  
+      147 +    public Task<DateTimeOffset?> GetFirstCompletedAtAsync(Guid
+          + agentId, CancellationToken ct = default) =>                  
+      148 +        db.Operations.Where(o => o.AgentId == agentId && o.Sta
+          +te == OperationState.Completed)                               
+      149 +            .MinAsync(o => o.CompletedAt, ct);                
+      150 +                                                              
+      151      public async Task<IReadOnlyList<PendingApproval>> ListPend
+           ingApprovalsAsync(string phone, DateTimeOffset now,
+      152          CancellationToken ct = default)
+      153      {
+     ...
+      205          db.Payments.Where(p => p.SettlementId == settlementId)
+      206              .OrderByDescending(p => p.CreatedAt).FirstOrDefaul
+           tAsync(ct);
+      207  
+      208 +    public async Task<Payment?> GetLatestBySettlementForUpdate
+          +Async(Guid settlementId, CancellationToken ct = default)      
+      209 +    {                                                         
+      210 +        var payment = await db.Payments                       
+      211 +            .FromSqlInterpolated($"""                         
+      212 +                SELECT * FROM payments WHERE settlement_id = {
+          +settlementId}                                                 
+      213 +                ORDER BY created_at DESC LIMIT 1 FOR UPDATE   
+      214 +                """)                                          
+      215 +            .SingleOrDefaultAsync(ct);                        
+      216 +        if (payment is not null) await db.Entry(payment).Reloa
+          +dAsync(ct);                                                   
+      217 +        return payment;                                       
+      218 +    }                                                         
+      219 +                                                              
+      220      public void Add(Payment payment) => db.Payments.Add(paymen
+           t);
+      221  
+      222      public void AddEvent(PaymentEvent paymentEvent) => db.Paym
+           entEvents.Add(paymentEvent);
+     ...
+      316          if (f.Before is not null) q = q.Where(s => s.CreatedAt
+            < f.Before);
+      317          return await q.OrderByDescending(s => s.CreatedAt).Tak
+           e(f.Limit).ToListAsync(ct);
+      318      }
+      319 +                                                              
+      320 +    public async Task<Settlement?> GetForUpdateAsync(Guid id, 
+          +CancellationToken ct = default)                               
+      321 +    {                                                         
+      322 +        var settlement = await db.Settlements                 
+      323 +            .FromSqlInterpolated($"SELECT * FROM settlements W
+          +HERE id = {id} FOR UPDATE")                                   
+      324 +            .SingleOrDefaultAsync(ct);                        
+      325 +        if (settlement is not null) await db.Entry(settlement)
+          +.ReloadAsync(ct);                                             
+      326 +        return settlement;                                    
+      327 +    }                                                         
+     … 16 more lines (ctrl+o to expand)
+
+⏺ Repositorios listos. Antes de escribir el servicio veo los valores de
+  EventOrigin y PaymentEvent.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Muevo también el recorte de la descripción del pago al helper compartido.
+
+⏺ Bash(python3 - <<'EOF'
+      p='Services/OperationService.cs'; s=open(p).read()…)
+  ⎿  Updated backend/API/Services/OperationService.cs (+3 -13)
+      21      IOperationSync sync, ISimulatedInbox inbox, IUnitOfWork uni
+          tOfWork, ICurrentUser currentUser,
+      22      IOptions<ReliaOptions> options, TimeProvider time, ILogger<
+          OperationService> logger) : IOperationService
+      23  {
+      24 -    /// <summary>Tope de la descripción que ve el pagador en su
+         - billetera (rail-proxy.openapi.yaml).</summary>                
+      25 -    private const int MaxRailDescription = 140;                
+      26 -                                                               
+      24      /// <summary>Plazo para aprobar un cobro por Wallet (retiro
+           y carga).</summary>
+      25      private static readonly TimeSpan WalletApprovalWindow = Tim
+          eSpan.FromMinutes(5);
+      26  
+     ...
+       92  
+       93              var reading = await rail.CreateOrThrowAsync(paymen
+           t, new RailPaymentRequest(
+       94                  RailDirection.Outgoing, key.WalletAddress, Rai
+           lAmount.FromCop(amounts.NetAmount),
+       98 -                Description: RailDescription($"Depósito en {ag
+          -ent.Name}")),                                                 
+       95 +                Description: RailPayments.Description($"Depósi
+          +to en {agent.Name}")),                                        
+       96                  logger, tx);
+       97              await sync.ApplyAsync(operation, payment, reading,
+            "create", ct: tx);
+       98              return await ToDtoAsync(operation, payment, tx);
+     ...
+      147  
+      148              var reading = await rail.CreateOrThrowAsync(paymen
+           t, new RailPaymentRequest(
+      149                  RailDirection.Incoming, key.WalletAddress, Rai
+           lAmount.FromCop(amounts.ChargedAmount), expiresAt,
+      153 -                RailDescription($"Retiro de {amounts.NetAmount
+          -.ToString("C0", PesoFormat)} en {agent.Name}")),              
+      150 +                RailPayments.Description($"Retiro de {amounts.
+          +NetAmount.ToString("C0", PesoFormat)} en {agent.Name}")),     
+      151                  logger, tx);
+      152              await sync.ApplyAsync(operation, payment, reading,
+            "create", ct: tx);
+      153              if (operation.State == OperationState.Pending && p
+           ayment.ApprovalUrl is { } approvalUrl)
+     ...
+      227  
+      228              var reading = await rail.CreateOrThrowAsync(paymen
+           t, new RailPaymentRequest(
+      229                  RailDirection.Incoming, agent.WalletAddress, R
+           ailAmount.FromCop(amount), payment.ExpiresAt,
+      233 -                RailDescription($"Carga de cupo de {amount.ToS
+          -tring("C0", PesoFormat)} para {agent.Name}")),                
+      230 +                RailPayments.Description($"Carga de cupo de {a
+          +mount.ToString("C0", PesoFormat)} para {agent.Name}")),       
+      231                  logger, tx);
+      232              await sync.ApplyAsync(operation, payment, reading,
+            "create", ct: tx);
+      233              return await ToDtoAsync(operation, payment, tx);
+     ...
+      416          return operation;
+      417      }
+      418  
+      422 -    /// <summary>                                             
+      423 -    /// Descripción que ve el pagador, recortada al tope del p
+          -roxy. Los llamadores no ponen el OP-xxxxxx: el número         
+      424 -    /// cambia en cada reintento y el proxy vería otro cuerpo 
+          -con la misma clave.                                           
+      425 -    /// </summary>                                            
+     … 6 more lines (ctrl+o to expand)
+  ⎿  Updated backend/API/Services/RailPayments.cs (+9 -0)
+      16  {
+      17      private static readonly JsonSerializerOptions RailJson = ne
+          w(JsonSerializerDefaults.Web);
+      18  
+      19 +    /// <summary>Tope de la descripción que ve el pagador en su
+         + billetera (rail-proxy.openapi.yaml).</summary>                
+      20 +    private const int MaxDescription = 140;                    
+      21 +                                                               
+      22 +    /// <summary>                                              
+      23 +    /// Descripción que ve el pagador, recortada al tope del pr
+         +oxy. Los llamadores no ponen el OP-xxxxxx ni el                
+      24 +    /// LQ-xxxxxx: el número cambia en cada reintento y el prox
+         +y vería otro cuerpo con la misma clave.                        
+      25 +    /// </summary>                                             
+      26 +    public static string Description(string text) => text.Lengt
+         +h > MaxDescription ? text[..MaxDescription] : text;            
+      27 +                                                               
+      28      /// <summary>
+      29      /// payments.id, que también es la Idempotency-Key del riel
+          , derivado de (corresponsal, tipo, clave del frontend).
+      30      /// Si el riel creó el pago pero la respuesta no llegó (tim
+          eout → 503 y rollback), el reintento con la misma
+
+⏺ Ahora el reloj de Bogotá, los errores nuevos y el sincronizador de
+  liquidaciones.
+
+⏺ Write(backend/API/Services/Bogota.cs)
+  ⎿  Wrote 17 lines to backend/API/Services/Bogota.cs
+      1 namespace Relia.Api.Services;
+      2
+      3 /// <summary>Días en America/Bogota: "hoy", el período de una liq
+      4 public static class Bogota
+      5 {
+      6     public static readonly TimeZoneInfo Zone = TimeZoneInfo.FindS
+        ystemTimeZoneById("America/Bogota");
+      8     public static DateOnly DateOf(DateTimeOffset instant) =>
+      9         DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, Z
+        one).DateTime);
+     … +12 lines (ctrl+o to expand)
+
+⏺ Update(backend/API/Errors/ApiErrors.cs)
+  ⎿  Added 7 lines
+      82          new(StatusCodes.Status422UnprocessableEntity, "insuffic
+          ient_cash", "Efectivo insuficiente",
+      83              new Dictionary<string, object?> { ["shortfall"] = s
+          hortfall });
+      84  
+      85 +    /// <summary>Una sola liquidación pendiente por corresponsa
+         +l (ux_settlements_one_pending).</summary>                      
+      86 +    public static ApiException SettlementInProgress() =>       
+      87 +        new(StatusCodes.Status409Conflict, "settlement_in_progr
+         +ess", "Ya hay una liquidación en curso");                      
+      88 +                                                               
+      89 +    public static ApiException NoCommission() =>               
+      90 +        new(StatusCodes.Status422UnprocessableEntity, "no_commi
+         +ssion", "No hay comisión por liquidar");                       
+      91 +                                                               
+      92      /// <summary>422 validation_error con detalle de un campo, 
+          como el de la validación de modelo.</summary>
+      93      public static ApiException Validation(string field, string 
+          message) =>
+      94          new(StatusCodes.Status422UnprocessableEntity, "validati
+          on_error", "Datos inválidos",
+
+⏺ Write(backend/API/Services/SettlementSync.cs)
+  ⎿  Wrote 155 lines to backend/API/Services/SettlementSync.cs
+       1 using System.Globalization;
+       2 using Relia.Api.Domain;
+       3 using Relia.Api.Rail;
+       5
+       6 namespace Relia.Api.Services;
+       7
+       8 /// <summary>
+         → paid | voided. Lo usan la creación (con la
+      10 /// respuesta de POST /payments), la lectura (refresco) y el bar
+         rido de fondo.
+     … +196 lines (ctrl+o to expand)
+
+⏺ Ahora el servicio de liquidaciones, que reemplaza el stub.
+
+⏺ Write(backend/API/Services/SettlementService.cs)
+  ⎿  Wrote 175 lines to backend/API/Services/SettlementService.cs
+       1 using System.Globalization;
+       2 using System.Text.Json;
+       3 using Microsoft.Extensions.Options;
+       4 using Relia.Api.Auth;
+       5 using Relia.Api.Configuration;
+       6 using Relia.Api.Contracts;
+       7 using Relia.Api.Domain;
+       8 using Relia.Api.Errors;
+       9 using Relia.Api.Rail;
+      10 using Relia.Api.Repositories;
+     … +215 lines (ctrl+o to expand)
+
+⏺ Conecto todo: interfaz, controlador, registro en DI, y borro el stub.
+
+⏺ Bash(python3 - <<'EOF'
+      p='Services/Abstractions.cs'; s=open(p).read()…)
+  ⎿  Updated backend/API/Errors/ApiErrors.cs (+0 -8)
+       95              new Dictionary<string, object?> { ["errors"] = new
+           [] { new { field, message } } });
+       96  }
+       97  
+       98 -/// <summary>                                                 
+       99 -/// Lanzada por los servicios aún sin implementar. Responde 50
+          -1 con <c>code: not_implemented</c>, que no está en            
+      100 -/// el contrato: desaparece cuando todos los servicios estén i
+          -mplementados.                                                 
+      101 -/// </summary>                                                
+      102 -public class FeatureInDevelopmentException(string feature)    
+      103 -    : ApiException(StatusCodes.Status501NotImplemented, "not_i
+          -mplemented", "En desarrollo",                                 
+      104 -        new Dictionary<string, object?> { ["feature"] = featur
+          -e });                                                         
+      105 -                                                              
+       98  /// <summary>Convierte ApiException en application/problem+jso
+           n (RFC 9457).</summary>
+       99  public class ApiExceptionHandler(IProblemDetailsService proble
+           mDetails) : IExceptionHandler
+      100  {
+  ⎿  Updated backend/API/Program.cs (+2 -0)
+      106  builder.Services.AddScoped<IOperationSync, OperationSync>();
+      107  builder.Services.AddScoped<IOperationService, OperationService
+           >();
+      108  builder.Services.AddScoped<ISweepTask, OperationSweepTask>();
+      109 +builder.Services.AddScoped<ISettlementSync, SettlementSync>();
+      110 +builder.Services.AddScoped<ISweepTask, SettlementSweepTask>();
+      111  builder.Services.AddHostedService<SweepService>();
+      112  builder.Services.AddScoped<ISimulatedInbox, SimulatedInbox>();
+      113  builder.Services.AddScoped<IKeyService, KeyService>();
+  ⎿  Updated backend/API/Services/Abstractions.cs (+10 -1)
+      103      Task<ReceiptDeliveryDto> SendAsync(Guid operationId, SendR
+           eceiptRequest request, CancellationToken ct = default);
+      104  }
+      105  
+      106 -/// <summary>GET /settlements y GET /settlements/{settlementId
+          -}. El agente solo ve las suyas.</summary>                     
+      106 +/// <summary>                                                 
+      107 +/// POST /agents/{agentId}/settlements (solo admin), GET /sett
+          +lements y GET /settlements/{settlementId}. El agente          
+      108 +/// solo ve las suyas.                                        
+      109 +/// </summary>                                                
+      110  public interface ISettlementService
+      111  {
+      112 +    /// <summary>                                             
+      113 +    /// 202 con la liquidación pending (o ya paid, con billete
+          +ra simulada). 409 settlement_in_progress,                     
+      114 +    /// 422 no_commission, 503 rail_unavailable sin crear nada
+          +.                                                             
+      115 +    /// </summary>                                            
+      116 +    Task<SettlementDto> CreateAsync(Guid agentId, string idemp
+          +otencyKey, CancellationToken ct = default);                   
+      117 +                                                              
+      118      Task<SettlementPageDto> ListAsync(SettlementQuery query, C
+           ancellationToken ct = default);
+      119  
+      120      Task<SettlementDto> GetAsync(Guid settlementId, Cancellati
+           onToken ct = default);
+  ⎿  Deleted backend/API/Services/Implementations.cs (+0 -22)
+       1 -using Relia.Api.Auth;                                          
+       2 -using Relia.Api.Contracts;                                     
+       3 -using Relia.Api.Errors;                                        
+       4 -using Relia.Api.Repositories;                                  
+       5 -                                                               
+       6 -namespace Relia.Api.Services;                                  
+       7 -                                                               
+       8 -// Los stubs aún no usan sus dependencias; se quita al implemen
+         -tar el último servicio.                                        
+       9 -#pragma warning disable CS9113                                 
+      10 -                                                               
+      11 -// Implementaciones en desarrollo: reciben ya sus repositorios 
+         -y responden 501 "En desarrollo".                               
+      12 -// Cada una se implementa en el ticket indicado de docs/issues/
+         -backend-relia-api/.                                            
+      13 -                                                               
+      14 -/// <summary>Ticket 13.</summary>                              
+      15 -public class SettlementService(ISettlementRepository settlement
+         -s, ICurrentUser currentUser) : ISettlementService              
+      16 -{                                                              
+      17 -    public Task<SettlementPageDto> ListAsync(SettlementQuery qu
+         -ery, CancellationToken ct = default) =>                        
+      18 -        throw new FeatureInDevelopmentException("listSettlement
+         -s");                                                           
+      19 -                                                               
+      20 -    public Task<SettlementDto> GetAsync(Guid settlementId, Canc
+         -ellationToken ct = default) =>                                 
+      21 -        throw new FeatureInDevelopmentException("getSettlement"
+         -);                                                             
+      22 -}                                                              
+  ⎿  Updated backend/API/Services/Sweep.cs (+2 -2)
+       5  namespace Relia.Api.Services;
+       6  
+       7  /// <summary>
+       8 -/// Un seguimiento que corre en cada ciclo del barrido de fondo
+         -. Las operaciones son uno; las liquidaciones                   
+       9 -/// (ticket 13) se registran como otro con <c>AddScoped&lt;ISwe
+         -epTask, ...&gt;()</c>.                                         
+       8 +/// Un seguimiento que corre en cada ciclo del barrido de fondo
+         +: operaciones y liquidaciones. Se registran con                
+       9 +/// <c>AddScoped&lt;ISweepTask, ...&gt;()</c>.                 
+      10  /// </summary>
+      11  public interface ISweepTask
+      12  {
+
+⏺ Ahora la ruta POST /agents/{agentId}/settlements en el controlador de
+  liquidaciones.
+
+⏺ Bash(python3 - <<'EOF'
+      p='Controllers/SettlementsController.cs'; s=open(p).read()…)
+  ⎿  Updated backend/API/Controllers/SettlementsController.cs (+16 -1)
+       1  using System.ComponentModel.DataAnnotations;
+       2  using Microsoft.AspNetCore.Authorization;
+       3  using Microsoft.AspNetCore.Mvc;
+       4 +using Relia.Api.Auth;                                          
+       5  using Relia.Api.Contracts;
+       6 +using Relia.Api.Idempotency;                                   
+       7  using Relia.Api.Services;
+       8  
+       9  namespace Relia.Api.Controllers;
+      10  
+       9 -/// <summary>Lectura de liquidaciones. Crear una (POST /agents/
+         -{agentId}/settlements) es del admin.</summary>                 
+      11 +/// <summary>Liquidaciones: el admin las crea (POST /agents/{ag
+         +entId}/settlements); ambos roles las leen.</summary>           
+      12  [ApiController]
+      13  [Route("settlements")]
+      14  [Authorize]
+      15  [Tags("settlements")]
+      16  public class SettlementsController(ISettlementService settlemen
+          ts) : ControllerBase
+      17  {
+      18 +    // "~/" no combina con la ruta del controlador. 202 con Loc
+         +ation: /settlements/{settlementId}.                            
+      19 +    [HttpPost("~/agents/{agentId:guid}/settlements")]          
+      20 +    [Authorize(Roles = Roles.Admin)]                           
+      21 +    [Idempotent]                                               
+      22 +    public async Task<ActionResult<SettlementDto>> Create(     
+      23 +        Guid agentId,                                          
+      24 +        [FromHeader(Name = "Idempotency-Key"), Required, String
+         +Length(128, MinimumLength = 8)] string idempotencyKey,         
+      25 +        CancellationToken ct)                                  
+      26 +    {                                                          
+      27 +        var settlement = await settlements.CreateAsync(agentId,
+         + idempotencyKey, ct);                                          
+      28 +        return Accepted($"/settlements/{settlement.Id}", settle
+         +ment);                                                         
+      29 +    }                                                          
+      30 +                                                               
+      31      [HttpGet]
+      32      public Task<SettlementPageDto> List(
+      33          [FromQuery] DateOnly? from,
+
+⏺ Compila. Lo pruebo: primero veo si el proxy de riel está corriendo y arranco
+  la API.
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ El proxy no está corriendo. Como en el ticket 10, pruebo contra un proxy
+  falso. Reviso cómo RailClient llama y qué espera.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Escribo un proxy falso mínimo en el scratchpad, con controles para completar,
+  fallar o simular el riel caído.
+
+  Made 1 scratchpad edit +73, ran 1 shell command (ctrl+o to expand)
+
+⏺ Ambos arriba. Pruebo primero el camino simulado (Luis), el 422 (Rosa sin
+  comisión), el 403 y el 404.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Responde 400 vacío. Lo investigo con una llamada directa.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Funciona: el 400 era de mi helper, que mandaba content-type: json sin cuerpo.
+  El período sale bien (hasta el 16 en Bogotá, aunque en UTC ya es 17). Corrijo
+  el helper y sigo.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ La base queda bien (movimiento, saldos, pago simulado, SMS y descuadres en 0).
+  El 400 sigue siendo de mi helper, que parte mal el header; lo reescribo sin
+  expansiones condicionales.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Errores correctos. Ahora el camino por riel: le doy comisión a Rosa (carga
+  Bre-B y un depósito por el proxy falso) y la liquido.
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+⏺ Es mi proxy falso: HttpClient manda el cuerpo en chunks y el falso solo lee
+  content-length. Lo arreglo.
+
+  Made 1 scratchpad edit +12 -2, ran 1 shell command (ctrl+o to expand)
+
+⏺ Rosa tiene $1.000 de comisión. Ahora el 503 (permiso sin aprobar), luego
+  creación por riel, el 409, y el paso a paid por la lectura.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Creación por riel bien: pago outgoing de $1.000 a la billetera de Rosa, y el
+  503 no dejó nada. Completo el pago en el proxy sin consultar la API, para ver
+  que el barrido solo la lleve a paid.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ El barrido la llevó a paid y todo cuadra. Ahora el camino voided, leyendo con
+  GET /settlements/{id}.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ La liquidación no se creó porque el depósito aún no se había completado
+  (comisión en 0). Reviso el depósito y repito.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ voided con su motivo y sin tocar saldos. Ahora listado, filtros, paginación y
+  permisos de lectura.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Todo bien. Reviso de paso que el panel admin ya muestre la comisión pagada
+  hoy, y apago los servidores.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ La comisión pagada hoy suma $10.500 y no hubo errores fail: en el log (las
+  excepciones son los 503 provocados a propósito). Actualizo el ticket.
+
+⏺ Update(docs/issues/backend-relia-api/13-liquidaciones.md)
+  ⎿  Added 11 lines, removed 11 lines
+       6  
+       7  **Blocked by:** 11 (Barrido de fondo y vencimiento de solicitud
+          es), 12 (Admin: panel de la red)
+       8  
+       9 -**Status:** ready-for-agent                                    
+       9 +**Status:** ready-for-human (implementado; probado contra un pr
+         +oxy falso. Falta pagar la comisión de Rosa en la red de prueba 
+         +y correr la colección)                                         
+      10  
+      11 -- [ ] `POST /agents/{agentId}/settlements` (solo admin, idempot
+         -ente) responde `202` con un `Settlement` `pending`, referencia 
+         -`LQ-NNNNNN` y `Location`.                                      
+      11 +- [x] `POST /agents/{agentId}/settlements` (solo admin, idempot
+         +ente) responde `202` con un `Settlement` `pending`, referencia 
+         +`LQ-NNNNNN` y `Location`.                                      
+      12    - El monto es toda la comisión acumulada al crear y queda fij
+          o.
+      13    - El período va del día siguiente a la última liquidación pag
+          ada (o de la primera operación) a hoy en Bogotá.
+      14    - `walletAddress` se copia del corresponsal.
+      15 -- [ ] `409 settlement_in_progress` si ya hay una pendiente, `42
+         -2 no_commission` si la comisión es $0 y `503 rail_unavailable` 
+         -sin crear nada.                                                
+      16 -- [ ] Llama `POST /payments` outgoing a la billetera del corres
+         -ponsal.                                                        
+      17 -- [ ] Con `walletSimulated`, crea un pago `bre_b_simulated` sim
+         -ulado y pasa a `paid` sin llamar al riel.                      
+      18 -- [ ] `completed` → `paid` con `paidAt`: la comisión acumulada 
+         -baja el monto, `settledCommissionTotal` sube el monto, queda un
+         - movimiento y se envía un SMS de aviso de comisión.            
+      19 -- [ ] `failed` → `voided` con `voidReason`.                    
+      20 -- [ ] El seguimiento corre en `GET /settlements/{id}` y en el b
+         -arrido.                                                        
+      21 -- [ ] `GET /settlements` filtra por `from`, `to`, `agentId` y `
+         -status`, va paginado y el más reciente primero. El agente solo 
+         -ve las suyas y se ignora `agentId`.                            
+      22 -- [ ] `GET /settlements/{id}` responde `403` a un agente ajeno 
+         -y `404` si no existe.                                          
+      23 -- [ ] La liquidación aparece en el historial como `settlement`,
+         - y `v_agent_balance_check` queda en 0.                         
+      15 +- [x] `409 settlement_in_progress` si ya hay una pendiente, `42
+         +2 no_commission` si la comisión es $0 y `503 rail_unavailable` 
+         +sin crear nada.                                                
+      16 +- [x] Llama `POST /payments` outgoing a la billetera del corres
+         +ponsal.                                                        
+      17 +- [x] Con `walletSimulated`, crea un pago `bre_b_simulated` sim
+         +ulado y pasa a `paid` sin llamar al riel.                      
+      18 +- [x] `completed` → `paid` con `paidAt`: la comisión acumulada 
+         +baja el monto, `settledCommissionTotal` sube el monto, queda un
+         + movimiento y se envía un SMS de aviso de comisión.            
+      19 +- [x] `failed` → `voided` con `voidReason`.                    
+      20 +- [x] El seguimiento corre en `GET /settlements/{id}` y en el b
+         +arrido.                                                        
+      21 +- [x] `GET /settlements` filtra por `from`, `to`, `agentId` y `
+         +status`, va paginado y el más reciente primero. El agente solo 
+         +ve las suyas y se ignora `agentId`.                            
+      22 +- [x] `GET /settlements/{id}` responde `403` a un agente ajeno 
+         +y `404` si no existe.                                          
+      23 +- [x] La liquidación aparece en el historial como `settlement`,
+         + y `v_agent_balance_check` queda en 0.                         
+      24  - [ ] Verificado con la carpeta `settlements`:
+      25    - pago de la comisión de Rosa en la red de prueba hasta `paid
+          `;
+      26    - un corresponsal con billetera simulada;
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ La shell no puede escribir en docs/ (como dice la memoria); uso Edit.
+
+⏺ Update(docs/issues/backend-relia-api/13-liquidaciones.md)
+  ⎿  Added 38 lines
+      25    - pago de la comisión de Rosa en la red de prueba hasta `paid
+          `;
+      26    - un corresponsal con billetera simulada;
+      27    - el 409, el 422 y el 503 (proxy apagado o permiso sin aproba
+          r).
+      28 +                                                               
+      29 +## Notas de implementación                                     
+      30 +                                                               
+      31 +- **Creación** (`SettlementService.CreateAsync`, `[Idempotent]`
+         +, solo admin):                                                 
+      32 +  - bloquea `agent_balances` (FOR UPDATE) y, dentro del bloqueo
+         +, revisa que no haya una pendiente (`409`) y que la comisión se
+         +a > 0 (`422`). `ux_settlements_one_pending` queda de respaldo e
+         +n la base;                                                     
+      33 +  - el monto es `accrued_commission` en ese momento y `destinat
+         +ion_payment_pointer` = `agents.payment_pointer`;               
+      34 +  - período: desde `period_end + 1` de la última pagada; si no 
+         +hay, desde el día (Bogotá) de la primera operación completada; 
+         +si tampoco, hoy. Se recorta a hoy, porque `ck_settlement_period
+         +` exige `period_end ≥ period_start` (pasa si se liquida dos vec
+         +es el mismo día);                                              
+      35 +  - el pago usa el mismo id idempotente que las operaciones (`R
+         +ailPayments.PaymentId`, con tipo `settlement`): reintentar tras
+         + un 503 con la misma clave pide al proxy el mismo pago;        
+      36 +  - descripción del pago: "Comisión de {corresponsal} en Relia"
+         +, sin el LQ (cambia en cada reintento).                        
+      37 +- **Billetera simulada**: solo con `DEMO_MODE` y `walletSimulat
+         +ed`. Crea el pago `bre_b_simulated` outgoing, con `rail_details
+         + = {"simulated": true}`, `rail_reference = SIM-LQ-…` y un `paym
+         +ent_event` `simulate` de origen `system`, y lo paga en la misma
+         + petición: la respuesta `202` ya trae `paid`. Sin `DEMO_MODE`, 
+         +el corresponsal se liquida por el riel.                        
+      38 +- **Seguimiento** (`ISettlementSync`, en `SettlementSync.cs`): 
+      39 +  - misma traducción que las operaciones: `completed` → `paid`;
+         + `failed`, `rejected`, `expired` y `cancelled` → `voided`;     
+      40 +  - `voidReason` = `failureDetail` del proxy, o su `failureCode
+         +`, o "El pago terminó en {status}";                            
+      41 +  - descarta lecturas con `version` ≤ `rail_version` y respeta 
+         +el máximo de una consulta por segundo por pago (`RailRefreshThr
+         +ottle`);                                                       
+      42 +  - al pagar sigue el orden de los triggers: pago `completed` →
+         + liquidación `paid` → movimiento `settlement` (la comisión baja
+         + el monto; `Ledger` sube `settled_commission_total`) → SMS `com
+         +mission_notice` al celular del corresponsal;                   
+      43 +  - corre en `GET /settlements/{id}` y en el barrido (`Settleme
+         +ntSweepTask`, un `ISweepTask` más).                            
+      44 +- **Listado**:                                                 
+      45 +  - `from` y `to` son días en Bogotá, inclusive, sobre `created
+         +_at`;                                                          
+      46 +  - el cursor es `created_at` en ticks UTC de la última fila;  
+      47 +  - el agente siempre ve las suyas: su `agentId` reemplaza el f
+         +iltro.                                                         
+      48 +- **Refactor**: lo que operaciones y liquidaciones hacen igual 
+         +con el riel pasó de `OperationService` y `OperationSync` a `Ser
+         +vices/RailPayments.cs`:                                        
+      49 +  - el id idempotente del pago;                                
+      50 +  - la traducción de errores al crear (503, `wallet_not_found`,
+         + `idempotency_conflict`);                                      
+      51 +  - el registro de cada lectura en `payment_events`;           
+      52 +  - la copia de los datos del proxy a `payments`;              
+      53 +  - el recorte de la descripción.                              
+      54 +- **Eliminado**: `Implementations.cs` y `FeatureInDevelopmentEx
+         +ception` (501), porque ya no quedan servicios sin implementar. 
+         +"Hoy en Bogotá" quedó en `Services/Bogota.cs`.                 
+      55 +- **Verificado contra un proxy falso** (`POST /payments` respon
+         +de `processing`, con controles para completar, fallar o respond
+         +er 503):                                                       
+      56 +  - **Luis (`walletSimulated`)**: `202` `paid` por $9.500, perí
+         +odo del 2026-10-11 (primera operación) al 2026-10-16. Quedó el 
+         +movimiento `settlement` con comisión −9.500, `settled_commissio
+         +n_total` en 9.500, el pago `bre_b_simulated` completado y el SM
+         +S. Descuadres en 0. Repetir la misma clave devuelve el mismo `2
+         +02`; otra clave da `422 no_commission`;                        
+      57 +  - **Rosa por el riel**: `422 no_commission` en $0. Le di $1.0
+         +00 de comisión con una carga Bre-B y dos depósitos. Con el prox
+         +y en 503 → `503 rail_unavailable` y 0 liquidaciones en la base.
+         + La misma clave, con el proxy arriba → `202` `pending` por $1.0
+         +00; el proxy recibió `outgoing` a `$…/rosa-test` por `100000`. 
+         +Otra liquidación → `409 settlement_in_progress`;               
+      58 +  - completado el pago en el proxy, **el barrido** (cada 3 s en
+         + la prueba) la pasó a `paid` sin que nadie la leyera. Comisión 
+         +de 1.000 a 0, liquidada en 1.000, SMS y descuadres en 0. El his
+         +torial de Rosa la muestra como `settlement` `completed` con com
+         +isión 1.000 → 0;                                               
+      59 +  - otra de $500 con el pago fallido → `GET /settlements/{id}` 
+         +la devuelve `voided` con el motivo del proxy, la comisión sigue
+         + en 500 y el pago queda `failed`;                              
+      60 +  - **permisos y errores**: el agente → `403` al crear; un corr
+         +esponsal inexistente → `404`; sin `Idempotency-Key` → `422`;   
+      61 +  - **listado**: filtros por `status`, `agentId`, `from`/`to` (
+         +hoy, ayer, mañana) y `limit=2` con `nextCursor` correctos. Un c
+         +ursor inválido → `422`. Luis con `agentId` de Rosa solo ve la s
+         +uya; leer una de Rosa → `403`; una inexistente → `404`;        
+      62 +  - **panel admin** (`GET /agents`): `commissionPaidToday` = 10
+         +.500.                                                          
+      63 +                                                               
+      64 +  Quedaron en la base local LQ-000001 (Luis), LQ-000003 y LQ-00
+         +0004 (Rosa, contra el proxy falso) y OP-000075 a OP-000077 de R
+         +osa. LQ-000002 se consumió en el 503: la secuencia no retrocede
+         +.                                                              
+      65 +- **Pendiente**: pagar la comisión de Rosa en la red de prueba 
+         +con el permiso de Relia aprobado, y el 503 con el permiso sin a
+         +probar en el proxy real.                                       
+
+⏺ Ahora la revisión de código con dos subagentes en paralelo: estándares y spec.
+
+⏺ 2 agents finished (ctrl+o to expand)
+   ├ Standards review ticket 13 · 11 tool uses · 75.6k tokens
+   │ ⎿  Done
+   └ Spec review ticket 13 · 15 tool uses · 73.7k tokens
+     ⎿  Done
+
+› Message from general-purpose
+  **Standards review: uncommitted backend changes (HEAD 9cfbed2)**
+
+  **(a) Breaks of documented standards**
+  I found no hard violations. All of these are followed:
+  - Spanish comments and English identifiers.
+  - The service + repository + IUnitOfWork shape.
+  - Role checks use `EnsureAdmin` / `EnsureCanReadAgent` from
+  Auth/CurrentUser.cs.
+  - `SettlementSync` follows the trigger order in the spec (payment completed →
+  settlement paid → ledger → SMS).
+  - The rail read happens outside the transaction, and the rows are locked with
+  FOR UPDATE, as `OperationSync` does.
+  - `FeatureInDevelopmentException` is removed, as the spec asks.
+
+  Judgement calls against documented rules:
+  - **SettlementService.cs:104** `currentUser.Role == Role.Agent ?
+  currentUser.AgentId : query.AgentId` is an inline ownership rule. This is the
+  only service that does it; the pattern elsewhere is a rule in
+  Auth/CurrentUser.cs, so it could become a `CurrentUserAccess` helper.
+  - **docs/issues/backend-relia-api.md:204-205** is outdated. It still lists
+  `POST /agents/{agentId}/settlements` as a missing controller and talks about
+  the 501 stub.
+
+  **(b) Smells (all judgement calls)**
+  - **Duplicated Code**:
+    - **SettlementSync.RefreshAsync, lines 47-72** is nearly a line-for-line
+  copy of `OperationSync.RefreshFromRailAsync`: the try/catch that writes the
+  "sin respuesta" `PaymentEvent`, then lock, then Apply.
+    - **`SettlementSweepTask`** copies `OperationSweepTask` in Sweep.cs (loop
+  over ids, one scope each, catch).
+    - Both pairs could share a helper in RailPayments.cs / Sweep.cs.
+  - **Duplicated Code / Shotgun Surgery**: Bogota.cs pulls out the Bogotá
+  timezone, but ReceiptService.cs:23 still has its own
+  `FindSystemTimeZoneById("America/Bogota")`. The `es-CO` `Colombia` culture is
+  also declared in both SettlementSync and OperationSync.
+  - **Repeated Switches**: SettlementService.cs:110-116 and 155-160 map
+  `SettlementStatus` ↔ `SettlementState` in two separate inline switches. One
+  pair of mapping functions would cover both.
+  - **Divergent Change**: RailPayments.cs is a grab-bag static class. It hashes
+  ids, turns rail errors into HTTP errors, writes events to the repository, and
+  copies proxy data into the entity. These will change for unrelated reasons.
+  - **Feature Envy**: `LogReading` is an extension on `IPaymentRepository`, and
+  `CopyRailData` changes only `Payment`'s fields. This is acceptable given the
+  repo's anemic entities.
+
+  **Correctness**
+  - **SettlementSync.ApplyAsync, lines 82-88**: when the settlement is no longer
+  pending but the reading is new, the code runs `CopyRailData` but never
+  updates `payment.State`. The payment's rail fields then disagree with its
+  state. It is low impact, because only the rail closes a settlement.
+  - **SettlementService.CreateAsync** keeps the `agent_balances` FOR UPDATE lock
+  during the rail HTTP call. `OperationService` creation does the same, so it
+  is consistent, but every operation for that agent is blocked until the proxy
+  answers or times out.
+  - Things I checked that are fine:
+    - The lock order (balances → settlement on create, settlement → payment →
+  balances on refresh) cannot deadlock.
+    - EF identity resolution means `settlement` and `locked` are the same
+  tracked instance, so the `Forget` check at line 73 is valid.
+    - `Reference` is a stored computed column, so EF reads it back after
+  `SaveChanges` and `SIM-LQ-…` is filled in.
+
+› Message from general-purpose
+  I found no blocking defects. The diff matches nearly all of ticket 13. What's
+  left is one open checkbox and a few edge cases.
+
+  **(a) Missing or partial**
+  - "Verificado con la carpeta `settlements`: pago de la comisión de Rosa en la
+  red de prueba hasta `paid`…" This box is still unchecked. Testing so far was
+  only against a fake proxy. The collection already has the requests
+  (`agents/settlements`, `settlements`, `{settlementId}`), so this is a manual
+  step still to do.
+  - Parent story 110 ("El próximo pago falla" deje la siguiente … liquidación …
+  en `voided` sin llamar al riel) is not handled. `failNextPayment` doesn't
+  exist anywhere in the backend yet. It probably belongs to the demo ticket, but
+  nothing in SettlementService leaves a hook for it.
+
+  **(b) Scope creep** (all documented in the ticket notes, and behaviour is
+  unchanged)
+  - The shared rail code moved from OperationService and OperationSync into
+  `Services/RailPayments.cs`. It is a pure move.
+  - `Implementations.cs` and `FeatureInDevelopmentException` (the 501) were
+  deleted, and `Bogota.cs` was extracted.
+  - The untracked `.claude/` and `docs/jeff_claude/*.txt` should be left out of
+  the commit.
+
+  **(c) Implemented but questionable**
+  - **Period:** the spec says "desde el día siguiente a la última liquidación
+  pagada (o desde la primera operación)". The code uses the first *completed*
+  operation. It also clamps the start to today, so two settlements on the same
+  day overlap by one day. That clamp is forced by `ck_settlement_period`, and it
+  is documented.
+  - **from/to:** the contract says "La pantalla de inicio admin la usa con
+  `from` = hoy … para 'Pagos de comisión'". The filter runs on `created_at`, but
+  `commissionPaidToday` (v_admin_agent_summary) uses `paid_at`. A settlement
+  created yesterday and paid today counts in the panel but is missing from the
+  list. Inclusivity itself is correct: `[StartOfDay(from), StartOfDay(to+1))`.
+  - **Cursor:** it uses `created_at < cursor` with no id tiebreaker. The parent
+  spec uses "(`occurred_at`, id)" for history. Rows with the same `created_at`
+  would be skipped. This is unlikely in practice.
+  - **Idempotency after a 503:** the payment id is derived from the key, but the
+  request body holds the *current* commission. If commission accrues between
+  the 503 and the retry with the same key, the proxy sees a different body and
+  the API returns `409 idempotency_conflict`. The spec ties that error to "otro
+  cuerpo", but the API body didn't change. Also, retrying with a *new* key after
+  a timeout-503 (where the proxy did create the payment) would pay twice.
+  - **Checked and correct:**
+    - **Bogotá dates:** "hoy" comes from `TimeProvider` (`Bogota.DateOf`).
+    - **walletSimulated:** applies only with `DEMO_MODE`, which matches "En
+  demo".
+    - **voidReason:** failureDetail, then failureCode, then a fallback. This
+  satisfies `ck_settlement_voided`.
+    - **503:** a rollback through the joined idempotency transaction leaves
+  nothing behind.
+    - **Status order:** POST checks 403 before 404; GET returns 404 then 403,
+  and an agent's `agentId` overrides the filter.
+    - **Paying a settlement:** steps happen in the order the triggers require.
+  The ledger entry is −amount on commission only, matching
+  `validate_ledger_entry_payment`.
+
+  The main files are `/Users/admin/Documents/Hackathon_Interledger/relia/relia_h
+  ackaton_interledger/backend/API/Services/SettlementService.cs` and
+  `/Users/admin/Documents/Hackathon_Interledger/relia/relia_hackaton_interledger
+  /backend/API/Services/SettlementSync.cs`.
+⏺ Aplico el arreglo barato de la revisión: ReceiptService usa la zona de
+  Bogota.cs en vez de declarar la suya.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Bash(sed -n 22,23p Services/ReceiptService.cs && sed -i '' -e '23d' -e
+      's/Bogota\.GetUtcOffset(local)/Bogota.Zone.GetUtcOffset(local)/'
+      Services/ReceiptService.cs &&…)
+  ⎿  Updated backend/API/Services/ReceiptService.cs (+1 -2)
+      20      private static readonly CultureInfo Colombia = CultureInfo.
+          GetCultureInfo("es-CO");
+      21  
+      22      /// <summary>issue_receipt guarda la fecha en hora de Bogot
+          á, sin zona.</summary>
+      23 -    private static readonly TimeZoneInfo Bogota = TimeZoneInfo.
+         -FindSystemTimeZoneById("America/Bogota");                      
+      23  
+      24      public async Task<ReceiptDto> GetAsync(Guid operationId, Re
+          ceiptViewChannel channel, CancellationToken ct = default)
+      25      {
+     ...
+       96      private static ReceiptDataDto ToData(FrozenReceipt d)
+       97      {
+       98          var local = DateTime.ParseExact(d.Date, "yyyy-MM-dd'T'
+           HH:mm:ss", CultureInfo.InvariantCulture);
+      100 -        var date = new DateTimeOffset(local, Bogota.GetUtcOffs
+          -et(local));                                                   
+       99 +        var date = new DateTimeOffset(local, Bogota.Zone.GetUt
+          +cOffset(local));                                              
+      100          return new ReceiptDataDto(
+      101              d.Number,
+      102              d.Type switch
+
+⏺ Quedó un <summary> huérfano; lo llevo como comentario a donde se usa la zona.
+
+⏺ Bash(python3 - <<'EOF'
+      p='Services/ReceiptService.cs'; s=open(p).read()…)
+  ⎿  Updated backend/API/Services/ReceiptService.cs (+1 -2)
+      19  {
+      20      private static readonly CultureInfo Colombia = CultureInfo.
+          GetCultureInfo("es-CO");
+      21  
+      22 -    /// <summary>issue_receipt guarda la fecha en hora de Bogot
+         -á, sin zona.</summary>                                         
+      23 -                                                               
+      22      public async Task<ReceiptDto> GetAsync(Guid operationId, Re
+          ceiptViewChannel channel, CancellationToken ct = default)
+      23      {
+      24          var receipt = await GetReceiptAsync(operationId, ct);
+     ...
+       93  
+       94      private static ReceiptDataDto ToData(FrozenReceipt d)
+       95      {
+       96 +        // issue_receipt guarda la fecha en hora de Bogotá, si
+          +n zona.                                                       
+       97          var local = DateTime.ParseExact(d.Date, "yyyy-MM-dd'T'
+           HH:mm:ss", CultureInfo.InvariantCulture);
+       98          var date = new DateTimeOffset(local, Bogota.Zone.GetUt
+           cOffset(local));
+       99          return new ReceiptDataDto(
+
+⏺ Anoto en el ticket las dos decisiones abiertas que encontró la revisión de
+  spec.
+
+⏺ Update(docs/issues/backend-relia-api/13-liquidaciones.md)
+  ⎿  Added 4 lines
+      63  
+      64    Quedaron en la base local LQ-000001 (Luis), LQ-000003 y LQ-00
+          0004 (Rosa, contra el proxy falso) y OP-000075 a OP-000077 de R
+          osa. LQ-000002 se consumió en el 503: la secuencia no retrocede
+          .
+      65  - **Pendiente**: pagar la comisión de Rosa en la red de prueba 
+          con el permiso de Relia aprobado, y el 503 con el permiso sin a
+          probar en el proxy real.
+      66 +- **Por decidir**:                                             
+      67 +  - **`from`/`to` filtran por `created_at`.** El inicio admin u
+         +sa `from` = hoy para "Pagos de comisión", mientras `commissionP
+         +aidToday` de `GET /agents` cuenta por `paid_at`. Una liquidació
+         +n creada ayer y pagada hoy suma en el panel pero no sale en la 
+         +lista. Hoy no pasa: las simuladas se pagan al crearse y las del
+         + riel en segundos. Si importa, el filtro puede ir sobre `COALES
+         +CE(paid_at, created_at)`.                                      
+      68 +  - **Reintento tras un 503 con comisión nueva.** Si entre el 5
+         +03 y el reintento con la misma clave se completa un depósito, e
+         +l monto cambia. El proxy ve otro cuerpo con la misma `Idempoten
+         +cy-Key` y responde `409 idempotency_conflict`, aunque la petici
+         +ón al API sea idéntica. La salida es reintentar con otra clave.
+         + Es el mismo comportamiento que ya tienen las operaciones.     
+      69 +  - **Cursor sin desempate por id.** Dos liquidaciones con el m
+         +ismo `created_at` (microsegundos) podrían saltarse al paginar. 
+         +No lo cambié.                                                  
+
+⏺ Update(docs/issues/backend-relia-api/13-liquidaciones.md)
+  ⎿  Added 1 line, removed 1 line
+      65  - **Pendiente**: pagar la comisión de Rosa en la red de prueba 
+          con el permiso de Relia aprobado, y el 503 con el permiso sin a
+          probar en el proxy real.
+      66  - **Por decidir**:
+      67    - **`from`/`to` filtran por `created_at`.** El inicio admin u
+          sa `from` = hoy para "Pagos de comisión", mientras `commissionP
+          aidToday` de `GET /agents` cuenta por `paid_at`. Una liquidació
+          n creada ayer y pagada hoy suma en el panel pero no sale en la 
+          lista. Hoy no pasa: las simuladas se pagan al crearse y las del
+           riel en segundos. Si importa, el filtro puede ir sobre `COALES
+          CE(paid_at, created_at)`.
+      68 -  - **Reintento tras un 503 con comisión nueva.** Si entre el 5
+         -03 y el reintento con la misma clave se completa un depósito, e
+         -l monto cambia. El proxy ve otro cuerpo con la misma `Idempoten
+         -cy-Key` y responde `409 idempotency_conflict`, aunque la petici
+         -ón al API sea idéntica. La salida es reintentar con otra clave.
+         - Es el mismo comportamiento que ya tienen las operaciones.     
+      68 +  - **Reintento tras un 503 con comisión nueva.** Si entre el 5
+         +03 y el reintento con la misma clave se completa un depósito, e
+         +l monto cambia. El proxy ve otro cuerpo con la misma `Idempoten
+         +cy-Key` y responde `409 idempotency_conflict`, aunque la petici
+         +ón al API sea idéntica. La salida es reintentar con otra clave.
+         + En las operaciones no pasa, porque el monto viene en la petici
+         +ón.                                                            
+      69    - **Cursor sin desempate por id.** Dos liquidaciones con el m
+          ismo `created_at` (microsegundos) podrían saltarse al paginar. 
+          No lo cambié.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ El ticket 13: Liquidaciones (pago de comisión) está commiteado como d8201b1 en
+  dotnet-jeff. Lo probé contra un proxy falso; falta pagar la comisión de Rosa
+  en la red de prueba y correr la carpeta settlements de Postman. Por eso dejé
+  el ticket en ready-for-human.
+
+  Qué hace
+  - POST /agents/{agentId}/settlements: solo el admin, idempotente. Responde 202
+    con Location y paga toda la comisión acumulada a la billetera del
+    corresponsal con un pago outgoing.
+    - Responde 409 settlement_in_progress, 422 no_commission o 503
+      rail_unavailable; el 503 no deja nada en la base.
+  - Corresponsales con billetera simulada: con DEMO_MODE activo, la liquidación
+    se paga sin pasar por el riel y la respuesta ya llega como paid.
+  - Seguimiento: avanza a paid o voided al leer GET /settlements/{id} y también
+    en el barrido de fondo.
+    - Al pasar a paid baja la comisión acumulada, sube la liquidada, queda el
+      movimiento en el historial y sale el SMS de aviso.
+    - Si el pago falla, queda voided con el motivo que devuelve el proxy y la
+      comisión no se toca.
+  - GET /settlements: filtra por from/to (días en Bogotá), agentId y status, con
+    paginación. El agente solo ve las suyas aunque mande otro agentId.
+  - Período: va desde el día siguiente a la última liquidación pagada, o desde
+    la primera operación completada. Si se liquida dos veces el mismo día, el
+    inicio se recorta a hoy, porque la base no acepta un inicio posterior al
+    fin.
+
+  Cambios en código que ya existía
+  - Lo que operaciones y liquidaciones hacen igual con el riel ahora vive en
+    Services/RailPayments.cs: el id idempotente del pago, los errores al
+    crearlo, y el registro y la copia de cada lectura del proxy.
+  - Borré el stub Implementations.cs y el error 501 "en desarrollo", porque ya
+    no quedan servicios sin implementar.
+
+  Pruebas contra el proxy falso (con el barrido cada 3 s):
+  - Luis (billetera simulada): paid por $9.500. Repetir con la misma clave da el
+    mismo 202 y con otra clave da 422.
+  - Rosa por el riel:
+    - sin comisión → 422;
+    - con el proxy caído → 503 sin crear nada; la misma clave con el proxy
+      arriba → pending; otra liquidación → 409;
+    - el barrido la llevó sola a paid;
+    - otra con el pago fallido quedó voided.
+  - Permisos: el agente que intenta crear recibe 403, un corresponsal
+    inexistente da 404 y leer la liquidación de otro da 403.
+  - Listado: filtros, paginación y cursor inválido (422) responden bien.
+  - Saldos: los descuadres de v_agent_balance_check quedaron en 0 y el panel
+    admin muestra $10.500 pagados hoy.
+
+  Revisión de código
+  - Estándares: el código respeta las convenciones del repo. Arreglé un
+    duplicado (los recibos ahora usan la misma zona de Bogotá). Quedan sin tocar
+    unas repeticiones menores con el código de operaciones (el refresco y el
+    barrido).
+  - Spec: no encontró defectos que bloqueen.
+
+  Para que lo decidas tú (están anotados en el ticket):
+  - El listado filtra por fecha de creación y el panel cuenta por fecha de pago.
+    Una liquidación creada ayer y pagada hoy suma en "comisión pagada hoy" pero
+    no aparece en la lista de hoy. Hoy no pasa en la práctica, porque se pagan
+    en segundos.
+  - Reintento después de un 503. Si entre el 503 y el reintento con la misma
+    clave se completa un depósito, el monto cambia y el proxy responde 409
+    idempotency_conflict; hay que reintentar con otra clave.
+  - El paginado no desempata por id. Dos liquidaciones creadas en el mismo
+    microsegundo podrían saltarse; no lo cambié.
+
+  "El próximo pago falla" del Modo demo todavía no existe en el backend; queda
+  para el ticket 14.
+
+  El proxy falso que usé quedó en
+  /private/tmp/claude-501/-Users-admin-Documents-Hackathon-Interledger/35a1bf78-
+  f884-45b4-95b6-a930458ebbde/scratchpad/fake_proxy.py.
+
+❯ /mattpocock-skills:implement @relia/relia_hackaton_interledger/docs/issues/ba
+ckend-relia-api/14-modo-demo-fallos-vencer-reinicio.md
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Implementando 14: Modo demo: fallos forzados, "vencer ya" y reinicio. Leo el
+  contrato de esas rutas y la siembra.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Tengo el panorama. Empiezo por el interruptor en memoria.
+
+⏺ Write(backend/API/Services/DemoFaults.cs)
+  ⎿  Wrote 19 lines to backend/API/Services/DemoFaults.cs
+      1 namespace Relia.Api.Services;
+      2
+      3 /// <summary>
+      4 /// Fallos forzados del Modo demo, en memoria (singleton). "El pr
+        óximo pago falla" es de un solo uso: el primer
+        sume y queda fallido sin llamar al riel.
+      6 /// </summary>
+      7 public class DemoFaults
+      8 {
+      9     private int _failNextPayment;
+     … +13 lines (ctrl+o to expand)
+
+⏺ Ahora engancho el interruptor en las tres creaciones de operaciones.
+
+⏺ Bash(python3 - <<'EOF'
+      p='Services/DemoFaults.cs'; s=open(p).read()…)
+  ⎿  Updated backend/API/Services/DemoFaults.cs (+3 -0)
+       6  /// </summary>
+       7  public class DemoFaults
+       8  {
+       9 +    /// <summary>failureDetail de la operación o voidReason de 
+         +la liquidación que falló por el interruptor.</summary>         
+      10 +    public const string ForcedFailureDetail = "Fallo forzado de
+         +sde el Modo demo";                                             
+      11 +                                                               
+      12      private int _failNextPayment;
+      13  
+      14      public bool FailNextPayment
+  ⎿  Updated backend/API/Services/OperationService.cs (+23 -1)
+      18  public class OperationService(
+      19      IAgentRepository agents, IFeeRepository fees, IWalletKeyRep
+          ository keys, IOperationRepository operations,
+      20      IPaymentRepository payments, ILedgerRepository ledgerEntrie
+          s, ILedger ledger, IRailClient rail,
+      21 -    IOperationSync sync, ISimulatedInbox inbox, IUnitOfWork uni
+         -tOfWork, ICurrentUser currentUser,                             
+      21 +    IOperationSync sync, ISimulatedInbox inbox, DemoFaults faul
+         +ts, IUnitOfWork unitOfWork, ICurrentUser currentUser,          
+      22      IOptions<ReliaOptions> options, TimeProvider time, ILogger<
+          OperationService> logger) : IOperationService
+      23  {
+      24      /// <summary>Plazo para aprobar un cobro por Wallet (retiro
+           y carga).</summary>
+     ...
+      89              payments.Add(payment);
+      90              // Se guarda antes de llamar al riel: si la base re
+          chaza algo, no se llega a pedir el pago.
+      91              await unitOfWork.SaveChangesAsync(tx);
+      92 +            if (await FailIfForcedAsync(operation, payment, tx)
+         +) return await ToDtoAsync(operation, payment, tx);             
+      93  
+      94              var reading = await rail.CreateOrThrowAsync(payment
+          , new RailPaymentRequest(
+      95                  RailDirection.Outgoing, key.WalletAddress, Rail
+          Amount.FromCop(amounts.NetAmount),
+     ...
+      145              };
+      146              payments.Add(payment);
+      147              await unitOfWork.SaveChangesAsync(tx);
+      148 +            if (await FailIfForcedAsync(operation, payment, tx
+          +)) return await ToDtoAsync(operation, payment, tx);           
+      149  
+      150              var reading = await rail.CreateOrThrowAsync(paymen
+           t, new RailPaymentRequest(
+      151                  RailDirection.Incoming, key.WalletAddress, Rai
+           lAmount.FromCop(amounts.ChargedAmount), expiresAt,
+     ...
+      216              };
+      217              payments.Add(payment);
+      218              await unitOfWork.SaveChangesAsync(tx);
+      219 +            if (await FailIfForcedAsync(operation, payment, tx
+          +)) return await ToDtoAsync(operation, payment, tx);           
+      220  
+      221              if (breB)
+      222              {
+     ...
+      388          return new DateTimeOffset(ceiling, TimeSpan.Zero) + Wa
+           lletApprovalWindow;
+      389      }
+      390  
+      391 +    /// <summary>                                             
+      392 +    /// "El próximo pago falla" del Modo demo: si estaba encen
+          +dido, la operación queda failed/payment_failed sin llamar     
+      393 +    /// al riel (la reserva se libera sola) y el interruptor s
+          +e apaga.                                                      
+      394 +    /// </summary>                                            
+      395 +    private async Task<bool> FailIfForcedAsync(Operation opera
+          +tion, Payment payment, CancellationToken ct)                  
+      396 +    {                                                         
+      397 +        if (!faults.TryConsumeFailNextPayment()) return false;
+      398 +        payment.ErrorCode = "payment_failed";                 
+     … 14 more lines (ctrl+o to expand)
+
+⏺ Ahora "vencer ya" en OperationService y en su interfaz.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      p='Services/Abstractions.cs'; s=open(p).read()…)
+  ⎿  Updated backend/API/Services/Abstractions.cs (+7 -0)
+      67      /// </summary>
+      68      Task<OperationDto> SimulateBreBPaymentAsync(Guid operationI
+          d, CancellationToken ct = default);
+      69  
+      70 +    /// <summary>                                              
+      71 +    /// Modo demo, "La solicitud vence ya": cancela en el riel 
+         +un retiro o carga pendiente y lo deja                          
+      72 +    /// expired/request_expired. 409 operation_not_cancellable 
+         +si no está pendiente o el pagador ya aprobó;                   
+      73 +    /// 503 rail_unavailable si el riel no responde.           
+      74 +    /// </summary>                                             
+      75 +    Task<OperationDto> ExpireNowAsync(Guid operationId, Cancell
+         +ationToken ct = default);                                      
+      76 +                                                               
+      77      /// <summary>Solo retiros completed; idempotente; no cambia
+           saldos.</summary>
+      78      Task<OperationDto> ConfirmCashHandoverAsync(Guid operationI
+          d, CancellationToken ct = default);
+      79  }
+  ⎿  Updated backend/API/Services/OperationService.cs (+20 -0)
+      263          return await ToDtoAsync(completed, await payments.GetL
+           atestByOperationAsync(operationId, ct), ct);
+      264      }
+      265  
+      266 +    public async Task<OperationDto> ExpireNowAsync(Guid operat
+          +ionId, CancellationToken ct = default)                        
+      267 +    {                                                         
+      268 +        var operation = await operations.GetByIdAsync(operatio
+          +nId, ct) ?? throw ApiErrors.NotFound();                       
+      269 +        if (operation.Kind == OperationKind.Deposit || operati
+          +on.State != OperationState.Pending)                           
+      270 +            throw ApiErrors.OperationNotCancellable();        
+      271 +        bool expired;                                         
+      272 +        try                                                   
+      273 +        {                                                     
+      274 +            expired = await sync.ExpireAsync(operation, ct);  
+      275 +        }                                                     
+      276 +        catch (RailUnavailableException)                      
+      277 +        {                                                     
+      278 +            throw ApiErrors.RailUnavailable();                
+      279 +        }                                                     
+      280 +        if (!expired) throw ApiErrors.OperationNotCancellable(
+          +);                                                            
+      281 +                                                              
+      282 +        var current = await operations.GetByIdAsync(operation.
+          +Id, ct) ?? throw ApiErrors.NotFound();                        
+      283 +        return await ToDtoAsync(current, await payments.GetLat
+          +estByOperationAsync(operation.Id, ct), ct);                   
+      284 +    }                                                         
+      285 +                                                              
+      286      /// <summary>403 si es de otro corresponsal. Si está pendi
+           ente, refresca antes el pago desde el proxy.</summary>
+      287      public async Task<OperationDto> GetAsync(Guid operationId,
+            CancellationToken ct = default)
+      288      {
+
+⏺ Ahora la liquidación: extraigo VoidAsync en el sincronizador y lo uso para el
+  fallo forzado.
+
+⏺ Bash(python3 - <<'EOF'
+      p='Services/SettlementSync.cs'; s=open(p).read()…)
+  ⎿  Updated backend/API/Services/SettlementService.cs (+17 -1)
+      17  /// </summary>
+      18  public class SettlementService(
+      19      ISettlementRepository settlements, IAgentRepository agents,
+           IOperationRepository operations,
+      20 -    IPaymentRepository payments, ILedger ledger, IRailClient ra
+         -il, ISettlementSync sync, IUnitOfWork unitOfWork,              
+      20 +    IPaymentRepository payments, ILedger ledger, IRailClient ra
+         +il, ISettlementSync sync, DemoFaults faults,                   
+      21 +    IUnitOfWork unitOfWork,                                    
+      22      ICurrentUser currentUser, IOptions<ReliaOptions> options, T
+          imeProvider time, ILogger<SettlementService> logger)
+      23      : ISettlementService
+      24  {
+     ...
+      73              // Se guarda antes de llamar al riel: si la base re
+          chaza algo, no se llega a pedir el pago.
+      74              await unitOfWork.SaveChangesAsync(tx);
+      75  
+      76 +            // "El próximo pago falla" del Modo demo: voided si
+         +n llamar al riel, y el interruptor se apaga.                   
+      77 +            if (faults.TryConsumeFailNextPayment())            
+      78 +            {                                                  
+      79 +                payment.ErrorCode = "payment_failed";          
+      80 +                payment.ErrorMessage = DemoFaults.ForcedFailure
+         +Detail;                                                        
+      81 +                payments.AddEvent(new PaymentEvent             
+      82 +                {                                              
+      83 +                    PaymentId = payment.Id, Action = "simulate"
+         +, PreviousState = payment.State,                               
+      84 +                    NewState = OperationState.Failed, Origin = 
+         +EventOrigin.Simulator,                                         
+      85 +                    Detail = DemoFaults.ForcedFailureDetail, Cr
+         +eatedAt = now,                                                 
+      86 +                });                                            
+      87 +                await sync.VoidAsync(settlement, payment, Opera
+         +tionState.Failed, DemoFaults.ForcedFailureDetail, tx);         
+      88 +                return settlement.Id;                          
+      89 +            }                                                  
+      90 +                                                               
+      91              if (simulated)
+      92              {
+      93                  // La referencia LQ-xxxxxx la asigna la base al
+           insertar.
+  ⎿  Updated backend/API/Services/SettlementSync.cs (+16 -2)
+      24      /// </summary>
+      25      Task PayAsync(Settlement settlement, Payment payment, DateT
+          imeOffset paidAt, CancellationToken ct = default);
+      26  
+      27 +    /// <summary>                                              
+      28 +    /// Anula la liquidación sin movimiento: el pago queda en <
+         +paramref name="paymentState"/> (failed, expired o              
+      29 +    /// cancelled) y la comisión sigue acumulada. Solo dentro d
+         +e una transacción.                                             
+      30 +    /// </summary>                                             
+      31 +    Task VoidAsync(Settlement settlement, Payment payment, Oper
+         +ationState paymentState, string reason,                        
+      32 +        CancellationToken ct = default);                       
+      33 +                                                               
+      34      /// <summary>
+      35      /// Consulta el pago en el proxy y lo aplica, como máximo u
+          na vez por segundo por pago. Si el proxy no responde,
+      36      /// la liquidación sigue pendiente y se reintenta en la sig
+          uiente lectura o en el siguiente barrido.
+     ...
+       99              await PayAsync(settlement, payment, reading.Comple
+           tedAt ?? time.GetUtcNow(), ct);
+      100              return;
+      101          }
+       95 -        payment.State = state;                                
+      102 +        await VoidAsync(settlement, payment, state,           
+      103 +            reading.FailureDetail ?? reading.FailureCode ?? $"
+          +El pago terminó en {reading.Status}", ct);                    
+      104 +    }                                                         
+      105 +                                                              
+      106 +    public async Task VoidAsync(Settlement settlement, Payment
+          + payment, OperationState paymentState, string reason,         
+      107 +        CancellationToken ct = default)                       
+      108 +    {                                                         
+      109 +        payment.State = paymentState;                         
+      110          settlement.State = SettlementState.Voided;
+       97 -        settlement.VoidReason = reading.FailureDetail ?? readi
+          -ng.FailureCode ?? $"El pago terminó en {reading.Status}";     
+      111 +        settlement.VoidReason = reason;                       
+      112          await unitOfWork.SaveChangesAsync(ct);
+      113      }
+      114  
+
+⏺ Ahora el reinicio. En DemoSeeder separo la siembra de su transacción para que
+  vaciar y volver a sembrar sea atómico.
+
+⏺ Bash(python3 - <<'EOF'
+      p='Persistence/DemoSeeder.cs'; s=open(p).read()…)
+  ⎿  Updated backend/API/Persistence/DemoSeeder.cs (+28 -3)
+      10  /// <summary>
+      11  /// Datos iniciales de la demo: tarifa vigente, un admin, los 4
+           corresponsales de docs/prototype.md §9.4
+      12  /// (Rosa en ceros, los demás con historial de ejemplo) y la ll
+          ave 3000000001 → jeffdev; el 3000000002
+      13 -/// queda sin llave. Corre al arrancar con la base vacía y, más
+         - adelante, en POST /demo/reset.                                
+      13 +/// queda sin llave. Corre al arrancar con la base vacía y en P
+         +OST /demo/reset.                                               
+      14  /// </summary>
+      15  /// <remarks>
+      16  /// El historial de ejemplo pasa por las mismas reglas de la ba
+          se que una operación real: pago completado,
+     ...
+       63  
+       64      /// <summary>Siembra sobre tablas vacías, en una transacci
+           ón.</summary>
+       65      public async Task SeedAsync(CancellationToken ct = default
+           )
+       66 +    {                                                         
+       67 +        await using var tx = await db.Database.BeginTransactio
+          +nAsync(ct);                                                   
+       68 +        await SeedTablesAsync(ct);                            
+       69 +        await tx.CommitAsync(ct);                             
+       70 +    }                                                         
+       71 +                                                              
+       72 +    /// <summary>                                             
+       73 +    /// POST /demo/reset: vacía todas las tablas con TRUNCATE 
+          +… RESTART IDENTITY CASCADE (los triggers de                   
+       74 +    /// inmutabilidad son por fila y no lo bloquean; las refer
+          +encias OP-, LQ- y los códigos vuelven a empezar) y            
+       75 +    /// vuelve a sembrar, todo en una transacción. Los ids de 
+          +admin y corresponsales cambian: hay que volver a entrar.      
+       76 +    /// </summary>                                            
+       77 +    public async Task ResetAsync(CancellationToken ct = defaul
+          +t)                                                            
+       78 +    {                                                         
+       79 +        await using var tx = await db.Database.BeginTransactio
+          +nAsync(ct);                                                   
+       80 +        await db.Database.ExecuteSqlRawAsync("""              
+       81 +            TRUNCATE admins, agents, agent_balances, fees, wal
+          +let_keys, otp_challenges, operations, operation_events,       
+       82 +                     payments, payment_events, ledger_entries,
+          + receipts, receipt_issuances, settlements,                    
+       83 +                     simulated_messages, idempotency_records  
+       84 +            RESTART IDENTITY CASCADE                          
+       85 +            """, ct);                                         
+       86 +        // Lo que EF tenía cargado ya no existe.              
+       87 +        db.ChangeTracker.Clear();                             
+       88 +        await SeedTablesAsync(ct);                            
+       89 +        await tx.CommitAsync(ct);                             
+       90 +    }                                                         
+       91 +                                                              
+       92 +    private async Task SeedTablesAsync(CancellationToken ct)  
+       93      {
+       94          var reliaWallet = options.Value.WalletAddress;
+     … 14 more lines (ctrl+o to expand)
+
+⏺ Ahora el método para listar los cobros pendientes en el riel, el servicio del
+  Modo demo y los DTOs.
+
+⏺ Bash(python3 - <<'EOF'
+      p='Repositories/Abstractions.cs'; s=open(p).read()…)
+  ⎿  Updated backend/API/Contracts/Dtos.cs (+6 -0)
+      227  
+      228  public record DemoPaymentRequestListDto(IReadOnlyList<DemoPaym
+           entRequestDto> Items);
+      229  
+      230 +// ---- Modo demo: fallos forzados ----                       
+      231 +                                                              
+      232 +public record DemoFaultsDto(bool FailNextPayment);            
+      233 +                                                              
+      234 +public record SetDemoFaultsRequest([Required] bool? FailNextPa
+          +yment);                                                       
+      235 +                                                              
+      236  // ---- Modo demo: bandeja del teléfono simulado ----
+      237  
+      238  public enum DemoMessageChannel { Sms, [JsonStringEnumMemberNam
+           e("whatsapp")] WhatsApp }
+  ⎿  Updated backend/API/Controllers/DemoController.cs (+21 -2)
+      20  [DemoOnly]
+      21  [Tags("demo")]
+      22  public class DemoController(
+      23 -    ISimulatedInbox inbox, IOperationRepository operations, IOp
+         -erationService operationService, TimeProvider time)            
+      24 -    : ControllerBase                                           
+      23 +    ISimulatedInbox inbox, IOperationRepository operations, IOp
+         +erationService operationService, IDemoService demo,            
+      24 +    TimeProvider time) : ControllerBase                        
+      25  {
+      26 +    [HttpGet("faults")]                                        
+      27 +    public DemoFaultsDto GetFaults() => demo.GetFaults();      
+      28 +                                                               
+      29 +    /// <summary>failNextPayment: el próximo depósito, retiro, 
+         +carga o liquidación falla sin llamar al riel.</summary>        
+      30 +    [HttpPut("faults")]                                        
+      31 +    public DemoFaultsDto SetFaults(SetDemoFaultsRequest request
+         +) => demo.SetFaults(request);                                  
+      32 +                                                               
+      33 +    /// <summary>"La solicitud vence ya": retiros y cargas pend
+         +ientes.</summary>                                              
+      34 +    [HttpPost("operations/{operationId:guid}/expire")]         
+      35 +    public Task<OperationDto> ExpireOperation(Guid operationId,
+         + CancellationToken ct) =>                                      
+      36 +        operationService.ExpireNowAsync(operationId, ct);      
+      37 +                                                               
+      38 +    [HttpPost("reset")]                                        
+      39 +    public async Task<IActionResult> Reset(CancellationToken ct
+         +)                                                              
+      40 +    {                                                          
+      41 +        await demo.ResetAsync(ct);                             
+      42 +        return NoContent();                                    
+      43 +    }                                                          
+      44 +                                                               
+      45      /// <summary>Simulador Bre-B: "Simular pago recibido" de un
+          a carga pendiente.</summary>
+      46      [HttpPost("quota-top-ups/{operationId:guid}/breb-payment")]
+      47      public Task<OperationDto> SimulateBreBPayment(Guid operatio
+          nId, CancellationToken ct) =>
+  ⎿  Updated backend/API/Program.cs (+2 -0)
+      114  builder.Services.AddScoped<IKeyLinkService, KeyLinkService>();
+      115  builder.Services.AddScoped<IReceiptService, ReceiptService>();
+      116  builder.Services.AddScoped<ISettlementService, SettlementServi
+           ce>();
+      117 +builder.Services.AddSingleton<DemoFaults>();                  
+      118 +builder.Services.AddScoped<IDemoService, DemoService>();      
+      119  
+      120  // ---- Auth: JWT bearer con rol y agentId ----
+      121  var jwt = builder.Configuration.GetSection(JwtOptions.Section)
+           .Get<JwtOptions>() ?? new JwtOptions();
+  ⎿  Updated backend/API/Repositories/Abstractions.cs (+3 -0)
+      138      Task<Payment?> GetLatestByOperationForUpdateAsync(Guid ope
+           rationId, CancellationToken ct = default);
+      139      Task<Payment?> GetLatestBySettlementAsync(Guid settlementI
+           d, CancellationToken ct = default);
+      140  
+      141 +    /// <summary>Cobros (incoming) pendientes que pasaron por 
+          +el proxy: los que POST /demo/reset cancela en el riel.</summar
+          +y>                                                            
+      142 +    Task<IReadOnlyList<Payment>> ListPendingRailChargesAsync(C
+          +ancellationToken ct = default);                               
+      143 +                                                              
+      144      /// <summary>Como <see cref="GetLatestBySettlementAsync"/>
+           , con FOR UPDATE y los valores de la base.</summary>
+      145      Task<Payment?> GetLatestBySettlementForUpdateAsync(Guid se
+           ttlementId, CancellationToken ct = default);
+      146      void Add(Payment payment);
+  ⎿  Updated backend/API/Repositories/EfRepositories.cs (+6 -0)
+      205          db.Payments.Where(p => p.SettlementId == settlementId)
+      206              .OrderByDescending(p => p.CreatedAt).FirstOrDefaul
+           tAsync(ct);
+      207  
+      208 +    public async Task<IReadOnlyList<Payment>> ListPendingRailC
+          +hargesAsync(CancellationToken ct = default) =>                
+      209 +        await db.Payments.AsNoTracking()                      
+      210 +            .Where(p => p.Direction == PaymentDirection.Incomi
+          +ng && p.State == OperationState.Pending                       
+      211 +                        && p.RailPaymentId != null)           
+      212 +            .ToListAsync(ct);                                 
+      213 +                                                              
+      214      public async Task<Payment?> GetLatestBySettlementForUpdate
+           Async(Guid settlementId, CancellationToken ct = default)
+      215      {
+      216          var payment = await db.Payments
+  ⎿  (timeout 5m)
+
+⏺ La shell no puede crear archivos nuevos ahí; creo DemoService.cs con Write.
+
+⏺ Write(backend/API/Services/DemoService.cs)
+  ⎿  Wrote 56 lines to backend/API/Services/DemoService.cs
+       1 using Relia.Api.Contracts;
+       2 using Relia.Api.Persistence;
+       3 using Relia.Api.Rail;
+       4 using Relia.Api.Repositories;
+       5
+       7
+       8 /// <summary>Panel del Modo demo: fallos forzados y reinicio. "V
+         encer ya" vive en <see cref="IOperationService"/>.</summary>
+       9 public interface IDemoService
+      10 {
+     … +53 lines (ctrl+o to expand)
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Compila. Para probar "vencer ya" y el reinicio, le agrego al proxy falso los
+  cobros incoming (pending_approval) y la cancelación.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Arriba. Pruebo el interruptor sobre depósito, retiro, carga y liquidación,
+  contando las llamadas al proxy.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Las cinco fallan sin tocar el proxy y el interruptor se apaga solo. Ahora
+  "vencer ya".
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ "Vencer ya" responde bien en todos los casos. Ahora el reinicio, con ese
+  retiro pendiente y el interruptor encendido.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ El reinicio fue correcto: cancelé el retiro en el proxy, apagué el interruptor
+  y volví a sembrar las operaciones (OP-000001 a OP-000013), quedando OP-000014
+  como siguiente. Ahora reviso las rutas /demo/* sin DEMO_MODE.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ El 400 es de mi script: en zsh set -- $r no separa palabras. Lo repito con las
+  llamadas explícitas.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Todo verificado. Actualizo el ticket.
+
+⏺ Update(docs/issues/backend-relia-api/14-modo-demo-fallos-vencer-reinicio.md)
+  ⎿  Added 34 lines, removed 7 lines
+       6  
+       7  **Blocked by:** 10 (Carga de cupo por Bre-B y por Wallet), 13 (
+          Liquidaciones)
+       8  
+       9 -**Status:** ready-for-agent                                    
+       9 +**Status:** ready-for-human (implementado; probado contra un pr
+         +oxy falso. Falta correr la carpeta `demo` contra el proxy real)
+      10  
+      11 -- [ ] `GET /demo/faults` y `PUT /demo/faults` `{ failNextPaymen
+         -t }` funcionan, con el interruptor en memoria.                 
+      12 -- [ ] Con el interruptor activo, el próximo depósito, retiro, c
+         -arga o liquidación queda `failed`/`payment_failed` (o `voided`)
+         - sin llamar al riel, y el interruptor se apaga solo.           
+      13 -- [ ] `POST /demo/operations/{operationId}/expire` cancela en e
+         -l riel un retiro o una carga pendiente y lo deja `expired`/`req
+         -uest_expired`. Si no está pendiente responde `409`, y si el rie
+         -l no responde, `503`.                                          
+      14 -- [ ] `POST /demo/reset` responde `204` y:                     
+      11 +- [x] `GET /demo/faults` y `PUT /demo/faults` `{ failNextPaymen
+         +t }` funcionan, con el interruptor en memoria.                 
+      12 +- [x] Con el interruptor activo, el próximo depósito, retiro, c
+         +arga o liquidación queda `failed`/`payment_failed` (o `voided`)
+         + sin llamar al riel, y el interruptor se apaga solo.           
+      13 +- [x] `POST /demo/operations/{operationId}/expire` cancela en e
+         +l riel un retiro o una carga pendiente y lo deja `expired`/`req
+         +uest_expired`. Si no está pendiente responde `409`, y si el rie
+         +l no responde, `503`.                                          
+      14 +- [x] `POST /demo/reset` responde `204` y:                     
+      15    - cancela en el riel los cobros pendientes;
+      16    - vacía operaciones, pagos, liquidaciones, llaves, OTP, mensa
+          jes, recibos e idempotencia con `TRUNCATE … RESTART IDENTITY CA
+          SCADE`;
+      17    - vuelve a correr la siembra del ticket 01;
+      18    - apaga los fallos forzados.
+      19 -- [ ] Después del reinicio, la referencia de la siguiente opera
+         -ción vuelve a empezar y `v_agent_balance_check` está en 0.     
+      20 -- [ ] Todas las rutas `/demo/*` responden `404` sin `DEMO_MODE`
+         -.                                                              
+      19 +- [x] Después del reinicio, la referencia de la siguiente opera
+         +ción vuelve a empezar y `v_agent_balance_check` está en 0.     
+      20 +- [x] Todas las rutas `/demo/*` responden `404` sin `DEMO_MODE`
+         +.                                                              
+      21  - [ ] Verificado con la carpeta `demo`: cada botón y un reinici
+          o con un retiro pendiente, que queda cancelado en el proxy.
+      22 +                                                               
+      23 +## Notas de implementación                                     
+      24 +                                                               
+      25 +- **Interruptor** (`DemoFaults`, singleton): se apaga en el mis
+         +mo paso en que se lee (`Interlocked.Exchange`), así dos peticio
+         +nes simultáneas no lo usan las dos.                            
+      26 +  - Se consume en la creación, después de validar (cupo, efecti
+         +vo, comisión) y de guardar, justo antes de llamar al riel. Un 4
+         +xx no lo gasta.                                                
+      27 +  - La operación se cierra con `CloseWithoutMovementAsync` como
+         + `failed`/`payment_failed`, con origen `simulator`, un `payment
+         +_event` `simulate` y `failureDetail` "Fallo forzado desde el Mo
+         +do demo". La reserva se libera sola y el retiro no envía el SMS
+         + de cobro.                                                     
+      28 +  - Aplica también a la carga Bre-B, que no pasa por el riel, y
+         + a la liquidación con billetera simulada.                      
+      29 +  - La liquidación queda `voided` con ese texto como `voidReaso
+         +n`, mediante `ISettlementSync.VoidAsync` (extraído del camino d
+         +el riel).                                                      
+      30 +  - `PUT` sin `failNextPayment` responde `422`.                
+      31 +- **"Vencer ya"** (`IOperationService.ExpireNowAsync`): reutili
+         +za `IOperationSync.ExpireAsync` del ticket 11, sin esperar el p
+         +lazo. Un depósito, una operación que no está pendiente o una qu
+         +e el pagador ya aprobó (`payment_not_cancellable`) dan `409 ope
+         +ration_not_cancellable`. Si el riel no responde, `503` y la ope
+         +ración sigue `pending`. La carga Bre-B se vence solo en el back
+         +end.                                                           
+      32 +- **Reinicio** (`IDemoService.ResetAsync`):                    
+      33 +  1. cancela en el riel cada pago `incoming` `pending` con id d
+         +el proxy. Si uno falla (ya aprobado o riel caído), lo registra 
+         +y sigue: el reinicio no se bloquea por el riel;                
+      34 +  2. `DemoSeeder.ResetAsync` hace `TRUNCATE` de las 16 tablas c
+         +on `RESTART IDENTITY CASCADE` y vuelve a sembrar en la misma tr
+         +ansacción. `SeedAsync` y `ResetAsync` comparten la siembra (`Se
+         +edTablesAsync`);                                               
+      35 +  3. apaga el interruptor.                                     
+      36 +- **Después del reinicio cambian los ids de admin y corresponsa
+         +les** (la siembra usa `Guid.NewGuid()`): los tokens viejos apun
+         +tan a ids que ya no existen y hay que volver a iniciar sesión. 
+         +Si molesta en la demo, la siembra puede usar ids fijos.        
+      37 +- **Verificado contra el proxy falso del ticket 13** (ahora con
+         + cobros `pending_approval` y cancelación):                     
+      38 +  - **interruptor**: depósito, retiro, carga Bre-B, carga Walle
+         +t (Luis) y liquidación (Diana) quedaron `failed`/`payment_faile
+         +d` o `voided`, con 0 llamadas al proxy. Después de cada uno el 
+         +interruptor quedó en `false`. La comisión de Diana siguió en 1.
+         +500 y los descuadres en 0;                                     
+      39 +  - **vencer ya**:                                             
+      40 +    - un retiro → `200` `expired`/`request_expired` y `cancelle
+         +d` en el proxy; repetirlo → `409`;                             
+      41 +    - una carga Bre-B → `expired`;                             
+      42 +    - un depósito → `409`; un id inexistente → `404`;          
+      43 +    - con el proxy en 503 → `503` y el retiro sigue `pending`; 
+      44 +  - **reinicio** con ese retiro pendiente y el interruptor ence
+         +ndido → `204`:                                                 
+      45 +    - el retiro quedó `cancelled` en el proxy y el interruptor 
+         +en `false`;                                                    
+      46 +    - quedan 13 operaciones sembradas (OP-000001 a OP-000013), 
+         +0 liquidaciones, 0 mensajes, 0 registros de idempotencia, 1 lla
+         +ve y 4 corresponsales, con descuadres en 0;                    
+      47 +    - la siguiente operación fue OP-000014, con una clave de id
+         +empotencia ya usada antes del reinicio;                        
+      48 +  - **sin `DEMO_MODE`**: `GET`/`PUT /demo/faults`, `/demo/reset
+         +` y `/expire` → `404`.                                         
+
+⏺ Ahora la revisión de código: estándares y spec en paralelo.
+
+⏺ 2 agents finished (ctrl+o to expand)
+   ├ Standards review ticket 14 · 6 tool uses · 53.4k tokens
+   │ ⎿  Done
+   └ Spec review ticket 14 · 7 tool uses · 53.8k tokens
+     ⎿  Done
+
+› Message from general-purpose
+  I found no blocking defects. The diff matches ticket 14, story 110–112, and
+  the contract. Details below.
+
+  **(a) Missing or partial**
+  - One acceptance item is still open: "[ ] Verificado con la carpeta `demo`:
+  cada botón y un reinicio con un retiro pendiente, que queda cancelado en el
+  proxy." All verification so far ran against the fake proxy, so the ticket
+  status `ready-for-human` is right. Nothing else is missing.
+
+  **(b) Scope creep**
+  - None of substance. Moving `VoidAsync` out of the rail path in
+  `SettlementSync` is a small refactor that the forced-void path needs. The 422
+  on a `PUT` with no `failNextPayment` is in the contract (`'422':
+  ValidationError`).
+
+  **(c) Implemented but questionable**
+  1. **IDs change after reset.** The spec doesn't address this. Spec: "vuelve a
+  correr la siembra del ticket 01". `DemoSeeder.cs:104,109,117` uses
+  `Guid.NewGuid()`, so after a reset every JWT a presenter or agent holds points
+  at an admin or agent that no longer exists, and the demo script needs a fresh
+  login mid-presentation. I did not check whether endpoints answer such tokens
+  with a clean 401/404 or with a 500. Fixed seed GUIDs would fix this cheaply;
+  the implementation notes already suggest it.
+  2. **Reset continues when the rail fails.** Spec: "cancela en el riel los
+  cobros pendientes". `DemoService.ResetAsync` catches `RailException`, logs it
+  and carries on. This is defensible, but two side effects are worth knowing:
+     - With the rail down, each pending charge waits out the full HTTP timeout
+  one after another, so the reset can hang for a long time.
+     - A charge left alive in the rail can still be approved later and move real
+  money with no operation behind it.
+
+     The cancellations also run before the TRUNCATE transaction, so a charge
+  created between the listing and the TRUNCATE is not cancelled. Low risk in a
+  demo.
+  3. **Expire 409/503 semantics.** Spec: "Si no está pendiente responde `409`, y
+  si el riel no responde, `503`." This is correct: a deposit or non-pending
+  operation gives 409, `RailUnavailableException` gives 503 and the operation
+  stays pending, `payment_not_cancellable` gives 409. One wrinkle: any other
+  rail error (e.g. an unexpected 4xx/5xx code), or a rail that already closed
+  the payment as completed/failed, also comes back as `409
+  operation_not_cancellable`. In the error case the cause is hidden behind that
+  409. Minor.
+  4. **Which operations the switch covers.** Spec: "el próximo depósito, retiro,
+  carga o liquidación queda `failed`/`payment_failed` (o `voided`) sin llamar
+  al riel". It covers all four, including the Bre-B top-up and the
+  simulated-wallet settlement. It is consumed after validation and save, so a
+  4xx doesn't use it up. Correct.
+  5. **TRUNCATE coverage.** All 16 `CREATE TABLE`s in `db_ddl.sql` are listed.
+  The `OP-` and `LQ-` numbers come from `GENERATED ALWAYS AS IDENTITY` columns,
+  so `RESTART IDENTITY` resets them. Correct.
+  6. **Response codes and bodies vs contract.**
+     - `GET`/`PUT /demo/faults` return `200 {failNextPayment}`.
+     - `/expire` returns `200 Operation`.
+     - `/reset` returns `204`.
+
+     All four routes sit under `[DemoOnly]`. Everything matches.
+
+› Message from general-purpose
+  **Standards review: backend demo-mode diff (HEAD d8201b1)**
+
+  **Hard violations:** none found. The DTOs (`DemoFaultsDto`, and
+  `SetDemoFaultsRequest` with `[Required] bool?`, which matches `RoundAmount`)
+  and the endpoints `/demo/faults`, `/demo/operations/{id}/expire`
+  (200/404/409/503) and `/demo/reset` (204) match
+  `contracts/relia-api.openapi.yaml`. Reset follows every step of the "Modo
+  demo" bullet in `docs/issues/backend-relia-api.md`. Comments are in Spanish
+  and identifiers in English, as in the rest of the code.
+
+  **Correctness bugs**
+  1. **Switch is used up even when the transaction rolls back.**
+  `FailIfForcedAsync` (OperationService) and the settlement branch call
+  `faults.TryConsumeFailNextPayment()` inside `unitOfWork.InTransactionAsync`,
+  and that transaction may be the idempotency filter's outer one. If a later
+  `SaveChangesAsync` or the outer commit fails, the switch is already off but no
+  failed operation exists. Fix: take the switch only after commit, or put it
+  back in a `catch`.
+  2. **Reset is not atomic with the rail cancellations.**
+  `DemoService.ResetAsync` cancels rail charges outside the TRUNCATE
+  transaction. If the TRUNCATE or the seed fails, the charges are cancelled but
+  the data stays. The sweep should reconcile this, so it is low impact.
+  3. **Reset races with in-flight scoped requests and the sweeper.** TRUNCATE
+  takes an ACCESS EXCLUSIVE lock, so others wait. Once it commits, those
+  contexts hold stale entities and can hit FK or not-found errors. This is
+  acceptable for a demo but should be documented.
+  4. **`ExpireNowAsync` answers 409 for any `false` from `sync.ExpireAsync`.**
+  That includes the "unexpected rail error" branch, which arguably should be a
+  503 or 502. This is a judgement call.
+
+  `RESTART IDENTITY` is fine here: every sequence is an owned `GENERATED ALWAYS
+  AS IDENTITY` column in `db_ddl.sql`.
+
+  **Smells (judgement calls)**
+  - **Duplicated Code:** the forced-failure block appears twice. It sets
+  `payment.ErrorCode = "payment_failed"; payment.ErrorMessage =
+  DemoFaults.ForcedFailureDetail; payments.AddEvent(new PaymentEvent { … Action
+  = "simulate" … })` in both `OperationService.FailIfForcedAsync` and
+  `SettlementService` (around line 77). Pull it into one helper, e.g.
+  `payments.MarkForcedFailure(payment, now)`.
+  - **Primitive Obsession:** the literal `"payment_failed"` is repeated across
+  OperationService, SettlementService and OperationSync. Use a constant, or the
+  `FailureCode` enum mapping that already exists.
+  - **Divergent Change:** core `OperationService` and `SettlementService` now
+  take the concrete `DemoFaults` class. Every other dependency is an interface,
+  and the hook runs in production paths (it is inert there). Consider an
+  `IDemoFaults` interface or a check on `options.Value.DemoMode`.
+  - **Shotgun Surgery:** the hardcoded table list in `DemoSeeder.ResetAsync`
+  (`TRUNCATE admins, agents, … idempotency_records`) must be edited whenever a
+  table is added. Build it from `db.Model.GetEntityTypes()` or `pg_tables`.
+  - **Middle Man (minor):** `DemoService.GetFaults`/`SetFaults` only pass
+  through to `DemoFaults`. This is tolerable, since it keeps the
+  controller-to-service layering.
+  - `SettlementService` constructor: the parameter list wraps unevenly
+  (`IUnitOfWork unitOfWork,` sits alone on its line). Cosmetic.
+
+⏺ Aplico dos arreglos baratos: junto en un helper el bloque de fallo forzado que
+  estaba duplicado, y ordeno el salto de línea del constructor de
+  SettlementService.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      p='Services/DemoFaults.cs'; s=open(p).read()…)
+  ⎿  Updated backend/API/Services/DemoFaults.cs (+20 -0)
+      1 +using Relia.Api.Domain;                                         
+      2 +using Relia.Api.Repositories;                                   
+      3 +                                                                
+      4  namespace Relia.Api.Services;
+      5  
+      6  /// <summary>
+     ...
+      22  
+      23      /// <summary>true si estaba encendido; lo apaga en el mismo
+           paso, así dos peticiones no lo usan las dos.</summary>
+      24      public bool TryConsumeFailNextPayment() => Interlocked.Exch
+          ange(ref _failNextPayment, 0) == 1;
+      25 +                                                               
+      26 +    /// <summary>                                              
+      27 +    /// Si el interruptor estaba encendido, lo apaga y marca el
+         + pago fallido por el Modo demo (payment_failed y su            
+      28 +    /// evento simulate); quien llama cierra la operación o la 
+         +liquidación sin llamar al riel.                                
+      29 +    /// </summary>                                             
+      30 +    public bool TryFailPayment(IPaymentRepository payments, Pay
+         +ment payment, DateTimeOffset now)                              
+      31 +    {                                                          
+      32 +        if (!TryConsumeFailNextPayment()) return false;        
+      33 +        payment.ErrorCode = "payment_failed";                  
+      34 +        payment.ErrorMessage = ForcedFailureDetail;            
+      35 +        payments.AddEvent(new PaymentEvent                     
+      36 +        {                                                      
+      37 +            PaymentId = payment.Id, Action = "simulate", Previo
+         +usState = payment.State, NewState = OperationState.Failed,     
+      38 +            Origin = EventOrigin.Simulator, Detail = ForcedFail
+         +ureDetail, CreatedAt = now,                                    
+      39 +        });                                                    
+      40 +        return true;                                           
+      41 +    }                                                          
+      42  }
+  ⎿  Updated backend/API/Services/OperationService.cs (+1 -8)
+      414      /// </summary>
+      415      private async Task<bool> FailIfForcedAsync(Operation opera
+           tion, Payment payment, CancellationToken ct)
+      416      {
+      417 -        if (!faults.TryConsumeFailNextPayment()) return false;
+      418 -        payment.ErrorCode = "payment_failed";                 
+      419 -        payment.ErrorMessage = DemoFaults.ForcedFailureDetail;
+      420 -        payments.AddEvent(new PaymentEvent                    
+      421 -        {                                                     
+      422 -            PaymentId = payment.Id, Action = "simulate", Previ
+          -ousState = payment.State, NewState = OperationState.Failed,   
+      423 -            Origin = EventOrigin.Simulator, Detail = DemoFault
+          -s.ForcedFailureDetail, CreatedAt = time.GetUtcNow(),          
+      424 -        });                                                   
+      417 +        if (!faults.TryFailPayment(payments, payment, time.Get
+          +UtcNow())) return false;                                      
+      418          await sync.CloseWithoutMovementAsync(operation, paymen
+           t, OperationState.Failed, "payment_failed",
+      419              DemoFaults.ForcedFailureDetail, EventOrigin.Simula
+           tor, ct);
+      420          return true;
+  ⎿  Updated backend/API/Services/SettlementService.cs (+1 -9)
+      74              await unitOfWork.SaveChangesAsync(tx);
+      75  
+      76              // "El próximo pago falla" del Modo demo: voided si
+          n llamar al riel, y el interruptor se apaga.
+      77 -            if (faults.TryConsumeFailNextPayment())            
+      77 +            if (faults.TryFailPayment(payments, payment, now)) 
+      78              {
+      79 -                payment.ErrorCode = "payment_failed";          
+      80 -                payment.ErrorMessage = DemoFaults.ForcedFailure
+         -Detail;                                                        
+      81 -                payments.AddEvent(new PaymentEvent             
+      82 -                {                                              
+      83 -                    PaymentId = payment.Id, Action = "simulate"
+         -, PreviousState = payment.State,                               
+      84 -                    NewState = OperationState.Failed, Origin = 
+         -EventOrigin.Simulator,                                         
+      85 -                    Detail = DemoFaults.ForcedFailureDetail, Cr
+         -eatedAt = now,                                                 
+      86 -                });                                            
+      79                  await sync.VoidAsync(settlement, payment, Opera
+          tionState.Failed, DemoFaults.ForcedFailureDetail, tx);
+      80                  return settlement.Id;
+      81              }
+
+⏺ Update(backend/API/Services/SettlementService.cs)
+  ⎿  Added 2 lines, removed 2 lines
+      18  public class SettlementService(
+      19      ISettlementRepository settlements, IAgentRepository agents,
+           IOperationRepository operations,
+      20      IPaymentRepository payments, ILedger ledger, IRailClient ra
+          il, ISettlementSync sync, DemoFaults faults,
+      21 -    IUnitOfWork unitOfWork,                                    
+      22 -    ICurrentUser currentUser, IOptions<ReliaOptions> options, T
+         -imeProvider time, ILogger<SettlementService> logger)           
+      21 +    IUnitOfWork unitOfWork, ICurrentUser currentUser, IOptions<
+         +ReliaOptions> options, TimeProvider time,                      
+      22 +    ILogger<SettlementService> logger)                         
+      23      : ISettlementService
+      24  {
+      25      /// <summary>
+
+⏺ Hago privado TryConsumeFailNextPayment (ya solo se usa adentro), compilo y
+  repito la prueba del interruptor tras el refactor.
+
+⏺ Bash(S=/private/tmp/claude-501/-Users-admin-Documents-Hackathon-Interledger/35
+      a1bf78-f884-45b4-95b6-a930458ebbde/scratchpad; cd
+      /Users/admin/Documents/Hackathon_Inte…)
+  ⎿  Updated backend/API/Services/DemoFaults.cs (+1 -1)
+      21      }
+      22  
+      23      /// <summary>true si estaba encendido; lo apaga en el mismo
+           paso, así dos peticiones no lo usan las dos.</summary>
+      24 -    public bool TryConsumeFailNextPayment() => Interlocked.Exch
+         -ange(ref _failNextPayment, 0) == 1;                            
+      24 +    private bool TryConsumeFailNextPayment() => Interlocked.Exc
+         +hange(ref _failNextPayment, 0) == 1;                           
+      25  
+      26      /// <summary>
+      27      /// Si el interruptor estaba encendido, lo apaga y marca el
+           pago fallido por el Modo demo (payment_failed y su
+  ⎿  (timeout 5m)
+
+⏺ Sigue bien después del refactor; dejé la base reiniciada. Anoto en el ticket
+  lo que la revisión dejó abierto y commiteo.
+
+⏺ Update(docs/issues/backend-relia-api/14-modo-demo-fallos-vencer-reinicio.md)
+  ⎿  Added 6 lines
+      46      - quedan 13 operaciones sembradas (OP-000001 a OP-000013), 
+          0 liquidaciones, 0 mensajes, 0 registros de idempotencia, 1 lla
+          ve y 4 corresponsales, con descuadres en 0;
+      47      - la siguiente operación fue OP-000014, con una clave de id
+          empotencia ya usada antes del reinicio;
+      48    - **sin `DEMO_MODE`**: `GET`/`PUT /demo/faults`, `/demo/reset
+          ` y `/expire` → `404`.
+      49 +- **Por decidir** (de la revisión):                            
+      50 +  - **Ids fijos en la siembra.** Hoy, después de un reinicio, q
+         +uien presenta tiene que volver a iniciar sesión. Con ids fijos 
+         +los tokens sobrevivirían. No revisé si un token viejo da `401`/
+         +`404` limpio o `500` (por ejemplo, el FK del admin al liquidar)
+         +.                                                              
+      51 +  - **El interruptor se gasta aunque la transacción se deshaga.
+         +** Si después de consumirlo falla un `SaveChanges` o el commit,
+         + queda apagado sin operación fallida. Es poco probable; habría 
+         +que volver a encenderlo.                                       
+      52 +  - **Reinicio con el riel caído.** Cada cobro pendiente espera
+         + el timeout del proxy (10 s) antes de seguir, y los que no se c
+         +ancelan quedan vivos en el riel: podrían aprobarse después sin 
+         +operación. Las cancelaciones van antes del `TRUNCATE`; un cobro
+         + creado en medio no se cancela.                                
+      53 +  - **`/expire` responde `409` ante cualquier error inesperado 
+         +del riel** (que no sea indisponibilidad), igual que el vencimie
+         +nto del barrido.                                               
+      54 +  - **La lista de tablas del `TRUNCATE` está escrita a mano**: 
+         +hay que actualizarla si se agrega una tabla.                   
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ El ticket 14: Modo demo: fallos forzados, "vencer ya" y reinicio está
+  commiteado como 15e027a en dotnet-jeff. Lo probé contra el proxy falso; falta
+  correr la carpeta demo de Postman contra el proxy real, así que dejé el ticket
+  en ready-for-human.
+
+  Qué hace
+  - GET/PUT /demo/faults: el interruptor "el próximo pago falla" vive en memoria
+    y se apaga en cuanto se usa. Se gasta recién cuando la petición ya pasó las
+    validaciones, así que un error de cupo o efectivo no lo consume.
+  - Con el interruptor encendido: el siguiente depósito, retiro, carga (Bre-B o
+    Wallet) o liquidación queda failed/payment_failed (la liquidación, voided)
+    sin llamar al riel, con el motivo "Fallo forzado desde el Modo demo".
+  - POST /demo/operations/{id}/expire: cancela en el riel un retiro o una carga
+    pendiente y lo deja expired/request_expired. Si la operación no está
+    pendiente o ya fue aprobada responde 409; si el riel no responde, 503 y la
+    operación sigue pendiente.
+  - POST /demo/reset: cancela en el riel los cobros pendientes y vacía las 16
+    tablas reiniciando las numeraciones. Luego vuelve a sembrar en la misma
+    transacción, apaga el interruptor y responde 204.
+
+  Pruebas contra el proxy falso
+  - Interruptor: depósito, retiro, las dos cargas y una liquidación fallaron con
+    0 llamadas al proxy, y el interruptor quedó apagado después de cada una.
+    Repetí la prueba después del último ajuste de código.
+  - Vencer ya:
+    - un retiro quedó expired y cancelado en el proxy; repetirlo da 409;
+    - una carga Bre-B queda expired;
+    - un depósito da 409 y un id inexistente, 404;
+    - con el proxy caído, 503 y el retiro sigue pendiente.
+  - Reinicio con un retiro pendiente y el interruptor encendido:
+    - el retiro quedó cancelado en el proxy y el interruptor apagado;
+    - quedaron las 13 operaciones sembradas y la siguiente fue OP-000014;
+    - los descuadres de saldos quedaron en 0.
+  - Sin DEMO_MODE: las cuatro rutas responden 404.
+
+  Revisión de código
+  - Estándares: el código respeta las convenciones y coincide con el contrato.
+    Junté en un solo helper el bloque de fallo forzado que estaba duplicado
+    entre operaciones y liquidaciones.
+  - Spec: no encontró defectos que bloqueen.
+
+  Para que lo decidas tú (todo anotado en el ticket)
+  - Después de un reinicio hay que volver a iniciar sesión. La siembra genera
+    ids nuevos para el admin y los corresponsales, así que los tokens viejos
+    dejan de servir. No revisé si un token viejo da un error limpio o un 500
+    (por ejemplo, el admin al liquidar). Con ids fijos en la siembra se
+    evitaría; es un cambio chico si lo quieres para la demo.
+  - Reinicio con el riel caído. El reinicio no se bloquea por el riel: si no
+    puede cancelar un cobro, lo registra y sigue. Ese cobro queda vivo en el
+    riel y podría aprobarse después sin operación detrás. Además, cada cobro
+    espera hasta 10 s de timeout del proxy.
+  - El interruptor puede quedar gastado sin efecto. Si la transacción falla
+    después de consumirlo, se apaga sin que quede una operación fallida; habría
+    que volver a encenderlo. Es poco probable.
+
+  Quedan sin commitear archivos que no son de estos tickets:
+  backend/API/Domain/Entities.cs.new, .claude/ y las transcripciones de
+  docs/jeff_claude/.
+
+❯ /mattpocock-skills:implement @relia/relia_hackaton_interledger/docs/issues/ba
+ckend-relia-api/15-ensayo-del-guion-completo.md
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ El ticket 15 requiere aprobación/rechazo humano en la wallet de prueba, así
+  que no puedo cerrarlo solo. Primero reviso el guion y verifico si el proxy
+  real se puede levantar aquí para adelantar lo posible.
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ Este ticket requiere intervención humana: aprobar/rechazar en la wallet de
+  prueba y el permiso permanente de Relia solo puede autorizarlos alguien con
+  acceso. Avanzaré con lo que sí puedo resolver, pero esa decisión queda
+  pendiente de tu confirmación.
+⏺ User answered Claude's questions:
+  ⎿  · El ensayo necesita a una persona en la wallet de prueba. ¿Qué quieres que
+     haga yo? → Ensayo real conmigo
+
+⏺ Vamos con el ensayo real. Primero veo cómo se arranca el proxy y qué variables
+  usa, sin mostrar los valores.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ El proxy tiene su .env completo. Antes de arrancar, compruebo que la billetera
+  de Relia del proxy sea la misma que usa el backend, sin imprimir valores.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Coinciden. Arranque en limpio: borro el volumen de la base local (como pide el
+  ticket), levanto Postgres y arranco el proxy real.
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+⏺ El proxy está arriba con la billetera de Relia, pero el permiso permanente
+  está en missing. Arranco el backend (siembra la base vacía) y pido el permiso.
+
+  Ran 4 shell commands (ctrl+o to expand)
+
+⏺ El dist/ del proxy está desactualizado: se compiló antes de que existiera la
+  ruta del permiso. Lo recompilo y reinicio el proxy.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Background command "Run the real rail proxy in background" completed (exit
+code 0)
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Necesito que apruebes el permiso permanente de Relia abriendo el enlace de
+  autenticación y aprobándolo con la cuenta relia-test1 (tope de $1.000.000/día
+  desde hoy). Mientras tanto, seguiré con los pasos que no dependen del riel
+  (reinicio y pasos 1-3), guardando cada respuesta para comparar luego con el
+  contrato.
+
+  Made 1 scratchpad edit +37, ran 1 shell command (ctrl+o to expand)
+
+⏺ zsh no separa la variable en palabras; uso una función.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Paso 1 bien (Rosa en ceros). Pasos 2 y 3: asignar efectivo y cargar cupo por
+  Bre-B.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Pasos 2 y 3 bien. El permiso sigue en awaiting_approval. Aprovecho la espera:
+  un depósito ahora debería dar 503 rail_unavailable. Además reviso los code de
+  error del contrato para cubrirlos.
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+⏺ Ya tengo el rail_unavailable. Mientras apruebas, recorro los demás code de
+  error que no necesitan el riel ni aprobaciones.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Voy a cancelar el retiro real de $1.001 que quedó pendiente, y luego
+  reintentaré la invitación agregando el header Idempotency-Key que exige el
+  contrato.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+❯ necesito el link para aprovar
+
+⏺ Reviso si el link sigue vigente antes de pasártelo.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Este es el link del permiso. Sigue vigente: lo pedí hace unos 3 minutos y dura
+  unos 10.
+
+  https://auth.interledger-test.dev/interact/6bfee296-1159-4752-96a7-7ddc3ebe5b5
+  b/B1B4BB267CFC2F0A?clientName=relia-test1&clientUri=https%3A%2F%2Filp.interled
+  ger-test.dev%2Frelia-test1
+
+  1. Inicia sesión en la wallet de prueba con la cuenta de Relia (relia-test1),
+     no con la de Rosa ni con jeffdev.
+  2. Aprueba. La wallet queda en una página en blanco; es normal.
+  3. Avísame cuando lo hayas aprobado. Confirmo que el permiso quedó active y
+     sigo con el paso 4, el depósito real de $50.000 a jeffdev. Si el link
+     venció, pido otro.
+
+  Mientras esperaba avancé esto:
+  - Pasos 1 a 3: pasaron. Rosa empezó en ceros, se le asignaron $300.000 de
+    efectivo y la carga Bre-B de $500.000 quedó completed.
+  - Depósito sin permiso: respondió 503 rail_unavailable sin crear nada.
+  - Errores: de los 25 code del contrato ya vi 20.
+    - amount_too_low no se puede provocar al crear: el cuerpo exige más de
+      $1.000, así que antes responde validation_error. Solo aparece en el
+      desglose, y ahí sí lo vi.
+    - Al probarlo se creó un retiro real de $1.001 que quedó pendiente en el
+      riel. Ya lo cancelé (OP-000016).
+
+❯ aprovado
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Permiso activo. Paso 4: desglose, llave y depósito real de $50.000 a jeffdev.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ El depósito real se completó en unos 3 s con recibo OP-000017. Ahora crearé
+  tres retiros simultáneos: $100.000 para aprobar, $5.000 para rechazar y $3.000
+  que dejaremos vencer solo.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Los tres retiros están pendientes. Esta vez inicia sesión con la cuenta de
+  jeffdev (el usuario 3000000001), que es quien paga. Tienes hasta las 00:13
+  hora Bogotá (unos 6 min):
+
+  1. Aprueba el de $100.000 (OP-000018):
+     https://auth.interledger-test.dev/interact/6bbba233-3c7e-4a57-8520-56c91904
+     e885/C708963CFDCA7016?clientName=relia-test1&clientUri=https%3A%2F%2Filp.in
+     terledger-test.dev%2Frelia-test1
+  2. Rechaza el de $5.000 (OP-000019):
+     https://auth.interledger-test.dev/interact/6e365491-5c42-48e1-8929-3d965435
+     a2c3/187A0051AC5D61CC?clientName=relia-test1&clientUri=https%3A%2F%2Filp.in
+     terledger-test.dev%2Frelia-test1
+  3. No abras el de $3.000 (OP-000020): lo dejamos vencer solo.
+
+  Avísame cuando hayas aprobado y rechazado.
+
+❯ listo
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Aprobado → completed; rechazado → failed/customer_rejected. Confirmo la
+  entrega del efectivo del retiro de $100.000 y reviso los saldos.
+
+  Ran 1 shell command (ctrl+o to expand)
+⏺ Confirmo que la entrega es idempotente y los saldos cuadran: el efectivo
+  reservado de $2.000 corresponde al retiro de $3.000 aún pendiente. Mientras
+  llega la hora de vencimiento (00:13 Bogotá), ejecutaré el paso 7,
+  failNextPayment y "vencer ya" con el proxy real.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Lo que falló es mi script: recorta lo impreso a 1.500 caracteres. Leo el
+  historial desde el registro guardado y confirmo en el proxy que el retiro
+  vencido quedó cancelado.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Paso 7, failNextPayment y "vencer ya" funcionan con el proxy real (OP-000022
+  quedó cancelled en el riel). Mientras vence el retiro de $3.000, una pregunta
+  para el paso 6.
+
+⏺ User answered Claude's questions:
+  ⎿  · El paso 6 (vincular el 3000000002 con OTP y retirar) necesita una
+     billetera COP de la wallet de prueba que no esté vinculada ni reservada (no
+     sirven jeffdev, rosa-test ni relia-test1). ¿Tienes una? → Sí, te paso el
+     pointer
+
+⏺ Elegiste pasarme el pointer pero no me llegó. Mientras me lo escribes, corro
+  la parte del paso 6 que no necesita billetera.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ La parte sin billetera funciona: 404 para el celular sin llave, invitación 201
+  y el mensaje de WhatsApp en la bandeja simulada del 3000000002.
+
+  Escríbeme el payment pointer de la billetera libre, por ejemplo
+  $ilp.interledger-test.dev/xxxx. Con él inicio la vinculación del 3000000002.
+  Antes de pedir el código correcto pruebo un OTP incorrecto para ver
+  invalid_otp, y después hacemos un retiro desde esa billetera, que tendrás que
+  aprobar.
+
+  El retiro de $3.000 vence a las 00:13 hora Bogotá; lo reviso en cuanto me
+  respondas.
+
+❯ $ilp.interledger-test.dev/jeffdev1
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ jeffdev1 ya está en el riel y el OTP llegó a la bandeja simulada. Ahora
+  probaré los tres casos de error (código incorrecto, desafío anulado por
+  reenvío, intentos agotados) antes de vincular con el código correcto.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Los tres errores de OTP aparecen y el 3000000002 quedó vinculado a jeffdev1.
+  Para cerrar el paso 6 creo un retiro de $20.000 que paga jeffdev1.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ El retiro está creado (el error es solo de mi script al leer la bandeja).
+  Inicia sesión con jeffdev1 en la wallet de prueba y aprueba este retiro de
+  $20.000 (OP-000023). Vence a las 00:16 hora Bogotá:
+
+  https://auth.interledger-test.dev/interact/b1a39568-189c-4423-ab51-a7ddf007b68
+  e/585E5B5A0E6A0184?clientName=relia-test1&clientUri=https%3A%2F%2Filp.interled
+  ger-test.dev%2Frelia-test1
+
+  Avísame cuando lo hayas aprobado.
+
+❯ ya
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Paso 6 completado: el retiro de jeffdev1 quedó completed con entrega
+  confirmada, y el de $3.000 vence a las 05:13 UTC. Ahora ejecuto el paso 8 como
+  admin con dos liquidaciones casi simultáneas para intentar capturar el estado
+  settlement_in_progress.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Llegó settlement_in_progress con la segunda petición. Sigo la liquidación de
+  Rosa ($1.500, por el riel real) hasta paid.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Liquidación de Rosa paid por el riel real, con el SMS de aviso. Completo la
+  tabla de liquidaciones: una con billetera simulada (Luis) y una voided con
+  failNextPayment (Diana).
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Todo bien. Falta provocar rate_limited (límite de 20 por minuto en /key-links)
+  y esperar el vencimiento natural.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Ya aparecieron los 25 códigos del contrato, con amount_too_low solo en el
+  desglose. Ahora validaré las respuestas guardadas contra
+  relia-api.openapi.yaml, empezando por revisar qué librerías de Python están
+  disponibles.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ No están. Creo un entorno virtual en el scratchpad con pyyaml y jsonschema.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Escribo el validador: por cada llamada guardada busca la operación del
+  contrato, comprueba que el estado esté documentado, el content-type y la forma
+  del cuerpo.
+
+  Made 1 scratchpad edit +58, ran 1 shell command (ctrl+o to expand)
+
+⏺ Encontré una discrepancia: POST /keys/{phone}/invitations sin Idempotency-Key
+  devuelve 422, código que el contrato no documenta. Antes de modificar nada,
+  voy a revisar la ruta en el contrato y el retiro pendiente de vencimiento.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ El header es obligatorio y un celular mal formado también produce 422, así que
+  el contrato está incompleto porque no documenta ese caso. Antes de editarlo,
+  voy a revisar si el admin recibe 403 en esa ruta, ya que tampoco aparece
+  documentado.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Confirmo que admin y agente pueden invitar sin necesidad de un 403, y que un
+  celular mal formado da 404 por la restricción de ruta, dejando la
+  Idempotency-Key ausente o inválida como único caso de 422. Voy a agregar eso
+  al contrato.
+
+⏺ Update(contracts/relia-api.openapi.yaml)
+  ⎿  Added 2 lines
+      504            $ref: '#/components/responses/Unauthorized'
+      505          '409':
+      506            $ref: '#/components/responses/Conflict'
+      507 +        '422':                                                
+      508 +          $ref: '#/components/responses/ValidationError'      
+      509  
+      510    /key-links:
+      511      post:
+⏺ Vuelvo a validar y reviso el vencimiento natural, que ya pasó la hora.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Vencimiento natural observado: OP-000020 quedó expired/request_expired y el
+  proxy también lo reporta expired. El contrato ya no tiene diferencias. Último
+  criterio: los descuadres.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Todo cuadra: descuadres en 0 para los cuatro corresponsales, y ningún error en
+  los logs del backend ni del proxy. Anoto los resultados en el ticket.
+
+⏺ Update(docs/issues/backend-relia-api/15-ensayo-del-guion-completo.md)
+  ⎿  Added 63 lines, removed 9 lines
+       6  
+       7  **Blocked by:** 08 (Recibos de depósito y retiro), 14 (Modo dem
+          o: fallos forzados, "vencer ya" y reinicio)
+       8  
+       9 -**Status:** ready-for-agent                                    
+       9 +**Status:** done (ensayado el 2026-10-17 contra la red de prueb
+         +a. Las llamadas se hicieron con un script, no con la colección 
+         +de Postman: ver notas)                                         
+      10  
+      11 -- [ ] Arranque en limpio: borrar el volumen, `docker compose up
+         -`, arrancar el backend con `DEMO_MODE=true` e iniciar sesión co
+         -mo Rosa.                                                       
+      12 -- [ ] El permiso permanente de Relia está aprobado en el proxy 
+         -(FLUJOS §0).                                                   
+      13 -- [ ] Los 8 pasos del guion pasan, de `POST /demo/reset` al pag
+         -o de comisión de Rosa, o cada falla queda anotada con su ticket
+         -.                                                              
+      14 -- [ ] Cada fila de la tabla de traducción de estados se observó
+         - al menos una vez: aprobar, rechazar, dejar vencer, cancelar y 
+         -`failNextPayment`.                                             
+      15 -- [ ] Cada `code` de error del contrato se vio al menos una vez
+         - o queda anotado como no alcanzable a mano.                    
+      16 -- [ ] Las respuestas coinciden con `relia-api.openapi.yaml` (es
+         -tado, `content-type` y forma del cuerpo). Las diferencias se co
+         -rrigen en el código o abren un cambio al contrato.             
+      17 -- [ ] `v_agent_balance_check` da los tres descuadres en 0 al fi
+         -nal del guion.                                                 
+      18 -- [ ] Queda anotado si el paso 6 se pudo correr: necesita una b
+         -illetera COP libre (ticket 11 de contratos-api).               
+      11 +- [x] Arranque en limpio: borrar el volumen, `docker compose up
+         +`, arrancar el backend con `DEMO_MODE=true` e iniciar sesión co
+         +mo Rosa.                                                       
+      12 +- [x] El permiso permanente de Relia está aprobado en el proxy 
+         +(FLUJOS §0).                                                   
+      13 +- [x] Los 8 pasos del guion pasan, de `POST /demo/reset` al pag
+         +o de comisión de Rosa, o cada falla queda anotada con su ticket
+         +.                                                              
+      14 +- [x] Cada fila de la tabla de traducción de estados se observó
+         + al menos una vez: aprobar, rechazar, dejar vencer, cancelar y 
+         +`failNextPayment`.                                             
+      15 +- [x] Cada `code` de error del contrato se vio al menos una vez
+         + o queda anotado como no alcanzable a mano.                    
+      16 +- [x] Las respuestas coinciden con `relia-api.openapi.yaml` (es
+         +tado, `content-type` y forma del cuerpo). Las diferencias se co
+         +rrigen en el código o abren un cambio al contrato.             
+      17 +- [x] `v_agent_balance_check` da los tres descuadres en 0 al fi
+         +nal del guion.                                                 
+      18 +- [x] Queda anotado si el paso 6 se pudo correr: necesita una b
+         +illetera COP libre (ticket 11 de contratos-api).               
+      19 +                                                               
+      20 +## Resultado del ensayo (2026-10-17, ~05:00–05:15 UTC)         
+      21 +                                                               
+      22 +**Montaje**: volumen borrado y `docker compose up` (16 tablas, 
+         +base vacía). El backend arrancó con `DEMO_MODE=true` y sembró l
+         +a base. El proxy real corrió sobre `$ilp.interledger-test.dev/r
+         +elia-test1`, la misma billetera que `Relia:WalletAddress`. Las 
+         +llamadas se hicieron con un script que guarda cada respuesta; l
+         +a colección de Postman no se corrió.                           
+      23 +                                                               
+      24 +**Hallazgo de montaje**: el `dist/` del proxy estaba compilado 
+         +antes de la ruta `/relia-grant` (`POST /relia-grant` → `404`). 
+         +Hubo que hacer `npm run build` antes de `npm start`. Antes de p
+         +resentar, compilar siempre el proxy (o usar `npm run dev`).    
+      25 +                                                               
+      26 +**Permiso de Relia**: `POST /relia-grant` (tope $1.000.000 por 
+         +día, desde el 2026-10-17 en Bogotá) → aprobado por el operador 
+         +→ `active`. Antes de aprobarlo, un depósito respondió `503 rail
+         +_unavailable` sin crear nada.                                  
+      27 +                                                               
+      28 +**Guion** (todo contra el riel real, salvo Bre-B y los fallos f
+         +orzados):                                                      
+      29 +                                                               
+      30 +| # | Resultado |                                              
+      31 +|---|---|                                                      
+      32 +| 0 | `POST /demo/reset` → `204` |                             
+      33 +| 1 | Rosa en ceros; historial vacío |                         
+      34 +| 2 | Efectivo +$300.000 → `201` |                             
+      35 +| 3 | Carga Bre-B $500.000 (OP-000014) → simulada → `completed`
+         +, cupo 500.000 |                                               
+      36 +| 4 | Depósito $50.000 a `jeffdev` (OP-000017) → `completed` en
+         + ~3 s, recibo congelado `FCD6860A5F0F` |                       
+      37 +| 5 | Retiro $100.000 (OP-000018) aprobado por `jeffdev` → `com
+         +pleted`; entrega confirmada (repetirla → `200`) |              
+      38 +| 6 | 3000000002 → `404`; invitación `201` y WhatsApp en la ban
+         +deja; vinculado a `$ilp.interledger-test.dev/jeffdev1` con OTP;
+         + retiro $20.000 (OP-000023) aprobado por `jeffdev1` → `complete
+         +d` |                                                           
+      39 +| 7 | Historial completo; recibo del retiro; reimpresión del de
+         +pósito (`isCopy: true`) y envío por SMS → `202` |              
+      40 +| 8 | Admin: `GET /agents`, `GET /settlements?from=hoy`, detall
+         +e de Rosa. Liquidación de Rosa $1.500 (LQ-000001) por el riel →
+         + `paid` en segundos, comisión 0, liquidada 1.500, SMS `aviso_co
+         +mision` |                                                      
+      41 +                                                               
+      42 +**Paso 6**: se pudo correr con la billetera libre `jeffdev1`, q
+         +ue aportó quien ensayó. Sigue abierto el ticket 11 de contratos
+         +-api: falta decidir qué billetera fija usa la demo para el 3000
+         +000002.                                                        
+      43 +                                                               
+      44 +**Tabla de traducción de estados** (todas observadas):         
+      45 +- `processing` → `pending`: depósito.                          
+      46 +- `pending_approval` → `pending`: retiros.                     
+      47 +- aprobar → `completed`: OP-000018 y OP-000023.                
+      48 +- rechazar → `failed`/`customer_rejected`: OP-000019.          
+      49 +- dejar vencer → `expired`/`request_expired`: OP-000020, por el
+         + barrido; el proxy lo reporta `expired`.                       
+      50 +- cancelar → `cancelled`/`request_cancelled`: OP-000016, cancel
+         +ado en el proxy.                                               
+      51 +- "vencer ya" → `expired`: OP-000022, con el pago `cancelled` e
+         +n el proxy.                                                    
+      52 +- `failNextPayment` → `failed`/`payment_failed`: OP-000021.    
+      53 +- liquidaciones: `paid` por el riel (LQ-000001), `paid` simulad
+         +a para Luis (LQ-000002) y `voided` forzada para Diana (LQ-00000
+         +3).                                                            
+      54 +- **No observado**: un `failed` real del riel (`payment_failed`
+         + sin forzar). No hay forma de provocarlo a mano.               
+      55 +                                                               
+      56 +**Códigos de error**: los 25 del enum `ErrorCode` aparecieron, 
+         +cada uno con su estado y `problem+json`.                       
+      57 +- `amount_too_low` solo se ve en `violations` del desglose. Al 
+         +crear no se alcanza: el DTO exige `requestedAmount` ≥ 1001, así
+         + que antes responde `validation_error`, y la regla corta en ≤ $
+         +1.000.                                                         
+      58 +  - Al probarlo con $1.001 se creó un retiro real (OP-000016), 
+         +que se canceló.                                                
+      59 +- `otp_expired` apareció al verificar un desafío que el reenvío
+         + había anulado.                                                
+      60 +- `otp_attempts_exceeded`: el quinto código malo responde `inva
+         +lid_otp` con `attemptsRemaining: 0`; el sexto, `otp_attempts_ex
+         +ceeded`.                                                       
+      61 +- `settlement_in_progress` salió con dos `POST` simultáneos.   
+      62 +- `rate_limited` salió en el intento 21 a `/key-links`, con `Re
+         +try-After: 60`.                                                
+      63 +                                                               
+      64 +**Contrato**: 105 respuestas validadas contra `relia-api.openap
+         +i.yaml` (estado documentado, `content-type`, esquema del cuerpo
+         + y `Location`), 51 combinaciones de ruta y estado. Hubo una dif
+         +erencia, que se corrigió en el contrato: `POST /keys/{phone}/in
+         +vitations` responde `422 validation_error` sin `Idempotency-Key
+         +` y el contrato no lo documentaba. Se agregó el `422`.         
+      65 +                                                               
+      66 +**Cierre**: `v_agent_balance_check` en 0 para los cuatro corres
+         +ponsales. Ni el backend ni el proxy registraron errores (`fail:
+         +` / nivel 50).                                                 
+      67 +                                                               
+      68 +**Se gastó en la red de prueba**:                              
+      69 +- de Relia a `jeffdev`: $49.000 (depósito);                    
+      70 +- de Relia a `rosa-test`: $1.500 (comisión);                   
+      71 +- de `jeffdev` a Relia: $100.000 (retiro);                     
+      72 +- de `jeffdev1` a Relia: $20.000 (retiro).                     
+
+⏺ Commiteo el cambio al contrato y el ticket.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ El ensayo del guion completo pasó contra la red de prueba y quedó commiteado
+  como 4df9f0e en dotnet-jeff. Dejé el ticket 15 en done. Lo único que no se
+  cumplió al pie de la letra: hice las llamadas con un script, no con la
+  colección de Postman.
+
+  Qué pasó en el ensayo
+  - Guion: los 8 pasos pasaron, desde el reinicio hasta la liquidación de Rosa
+    ($1.500, pagada por el riel real en segundos). El paso 6 se pudo correr
+    gracias a jeffdev1.
+  - Estados: los vi todos en el riel real:
+    - aprobar → completed; rechazar → customer_rejected;
+    - dejar vencer → expired por el barrido; cancelar y "vencer ya" → cancelados
+      también en el proxy;
+    - failNextPayment → failed, sin llamar al riel;
+    - liquidaciones paid (por el riel y simulada) y voided.
+  - Lo único no observado: un fallo real del riel (payment_failed sin forzarlo);
+    no hay forma de provocarlo a mano.
+  - Errores: aparecieron los 25 code del contrato. amount_too_low solo sale en
+    el desglose: al crear, la validación del cuerpo responde antes con
+    validation_error.
+  - Contrato: validé las 105 respuestas contra relia-api.openapi.yaml (estado,
+    content-type, cuerpo y Location). Hubo una diferencia y la corregí en el
+    contrato: la invitación sin Idempotency-Key responde 422, que no estaba
+    documentado.
+  - Saldos: los descuadres quedaron en 0 para los cuatro corresponsales, y ni el
+    backend ni el proxy registraron errores.
+
+  Lo que conviene revisar antes de presentar
+  - El proxy estaba compilado con código viejo. Su dist/ era anterior a la ruta
+    del permiso, y pedirlo daba 404 hasta que hice npm run build. Antes de la
+    demo, compila el proxy o arráncalo con npm run dev.
+  - Al probar amount_too_low creé un retiro real de $1.001, que cancelé
+    enseguida (OP-000016).
+  - El paso 6 depende de jeffdev1. Sigue abierto el ticket 11 de contratos-api:
+    falta decidir qué billetera fija usa la demo para el 3000000002.
+  - otp_attempts_exceeded llega un intento después. El quinto código malo
+    todavía responde invalid_otp con attemptsRemaining: 0; si te parece raro, se
+    cambia.
+
+  Movimientos en la red de prueba
+  - De Relia: $49.000 a jeffdev (depósito) y $1.500 a rosa-test (comisión).
+  - Hacia Relia: $100.000 desde jeffdev y $20.000 desde jeffdev1 (retiros).
+
+  El proxy real y el backend siguen corriendo en segundo plano, con el permiso
+  de Relia activo por hoy. Avísame si los apago.
+
+  No lancé la revisión de código con subagentes: el cambio de código son dos
+  líneas del contrato.
+
+  En rail-proxy/ hay una carpeta suelta llamada $S, sin seguimiento en git, que
+  parece sobrante de otra sesión; no la toqué.
+
+❯ <ide_opened_file>The user opened the file
+  /Users/admin/Documents/Hackathon_Interledger/relia/relia_hackaton_interledger
+  /docs/issues/backend-relia-api/15-ensayo-del-guion-completo.md in the IDE.
+  This may or may not be related to the current task.</ide_opened_file>
+
+❯ apagalos
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Background command "Restart the rebuilt rail proxy in background" completed
+(exit code 0)
+
+⏺ Background command "Run backend against the real proxy in background"
+completed (exit code 0)
+
+⏺ Apagué el proxy de riel y el backend; los puertos 4000 y 5080 quedaron libres.
+
+  El contenedor de Postgres (relia-db) sigue corriendo con los datos del ensayo.
+  Si quieres apagarlo también, corre docker compose stop en backend/; sin -v,
+  para conservar los datos.
