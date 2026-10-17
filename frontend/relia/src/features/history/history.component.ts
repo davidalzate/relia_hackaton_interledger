@@ -1,25 +1,23 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { Subscription } from 'rxjs';
 
 import { AgentService } from '../../core/services/agent.service';
 import { ReceiptService } from '../../core/services/receipt.service';
-import {
-  OPERATION_LABEL,
-  OperationType,
-  STATUS_BADGE,
-  STATUS_LABEL,
-} from '../../shared/types/agent';
+import { HistoryKind } from '../../shared/schemas/agent.schema';
+import { OPERATION_LABEL, STATUS_BADGE, STATUS_LABEL } from '../../shared/types/agent';
 
-type Filter = 'all' | 'deposit' | 'withdrawal' | 'cupo' | 'cash' | 'commission';
-
-const FILTER_TYPES: Record<Exclude<Filter, 'all'>, OperationType[]> = {
-  deposit: ['deposit'],
-  withdrawal: ['withdrawal'],
-  cupo: ['cupo'],
-  cash: ['cash', 'cash-set'],
-  commission: ['commission'],
-};
+type Filter = 'all' | HistoryKind;
 
 // B8: auditoría completa de saldos, más reciente primero
 @Component({
@@ -38,16 +36,43 @@ export class HistoryComponent {
     { value: 'all', label: 'Todas' },
     { value: 'deposit', label: 'Depósito' },
     { value: 'withdrawal', label: 'Retiro' },
-    { value: 'cupo', label: 'Carga de cupo' },
-    { value: 'cash', label: 'Efectivo' },
-    { value: 'commission', label: 'Pago de comisión' },
+    { value: 'quotaTopUp', label: 'Carga de cupo' },
+    { value: 'cashAdjustment', label: 'Efectivo' },
+    { value: 'settlement', label: 'Pago de comisión' },
   ];
   protected readonly filter = signal<Filter>('all');
-  protected readonly operations = computed(() => {
-    const f = this.filter();
-    const ops = this.agent.operations();
-    return f === 'all' ? ops : ops.filter((op) => FILTER_TYPES[f].includes(op.type));
-  });
+  protected readonly operations = computed(() => this.agent.history().items);
+  protected readonly hasMore = computed(() => this.agent.history().nextCursor !== null);
+  protected readonly loading = signal(false);
+  protected readonly loadError = signal(false);
+  private request?: Subscription;
+
+  constructor() {
+    // Cada filtro pide su primera página al API (`?kind=`)
+    effect(() => {
+      const filter = this.filter();
+      untracked(() => this.load(filter));
+    });
+    inject(DestroyRef).onDestroy(() => this.request?.unsubscribe());
+  }
+
+  protected loadMore(): void {
+    this.load(this.filter(), true);
+  }
+
+  private load(filter: Filter, more = false): void {
+    // Solo cuenta la última petición: cambiar de filtro cancela la anterior
+    this.request?.unsubscribe();
+    this.loading.set(true);
+    this.loadError.set(false);
+    this.request = this.agent.loadHistory(filter === 'all' ? null : filter, more).subscribe({
+      next: () => this.loading.set(false),
+      error: () => {
+        this.loading.set(false);
+        this.loadError.set(true);
+      },
+    });
+  }
 
   protected readonly typeLabel = OPERATION_LABEL;
   protected readonly statusLabel = STATUS_LABEL;

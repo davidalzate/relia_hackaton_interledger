@@ -14,8 +14,19 @@ import {
 } from 'rxjs';
 
 import { environment } from '../../environments/environment';
-import { Agent, AgentSchema } from '../../shared/schemas/agent.schema';
-import { AgentBalances, Operation, OperationDetails } from '../../shared/types/agent';
+import {
+  Agent,
+  AgentSchema,
+  HistoryEntry,
+  HistoryKind,
+  HistoryPageSchema,
+} from '../../shared/schemas/agent.schema';
+import {
+  AgentBalances,
+  Operation,
+  OperationDetails,
+  OperationType,
+} from '../../shared/types/agent';
 import { AuthService } from './auth.service';
 
 /** Por debajo de este valor (COP) la Caja muestra avisos de cupo/efectivo bajo */
@@ -147,6 +158,49 @@ const WITHDRAWAL_ERROR_STATUS: Record<WithdrawalErrorKind, Operation['status']> 
   cash: 'failed',
 };
 
+const KIND_TYPE: Record<HistoryKind, OperationType> = {
+  deposit: 'deposit',
+  withdrawal: 'withdrawal',
+  quotaTopUp: 'cupo',
+  cashAdjustment: 'cash',
+  settlement: 'commission',
+};
+
+/** Tipos locales que cubre cada `kind` del API (filtro de B8) */
+export const KIND_TYPES: Record<HistoryKind, OperationType[]> = {
+  deposit: ['deposit'],
+  withdrawal: ['withdrawal'],
+  quotaTopUp: ['cupo'],
+  cashAdjustment: ['cash', 'cash-set'],
+  settlement: ['commission'],
+};
+
+export interface HistoryPage {
+  items: Operation[];
+  nextCursor: string | null;
+}
+
+// Fila del historial del API → modelo que ya usan B1, B8 y el comprobante
+function toOperation(entry: HistoryEntry): Operation {
+  const { quota, accruedCommission, cashOnHand } = entry.balances;
+  const pending = entry.status === 'pending';
+  return {
+    id: entry.operationId ?? entry.settlementId ?? entry.id,
+    reference: entry.reference ?? undefined,
+    type: KIND_TYPE[entry.kind],
+    amount: entry.amount,
+    createdAt: entry.occurredAt,
+    status: entry.status,
+    before: pending
+      ? undefined
+      : { cupo: quota.before, commission: accruedCommission.before, cash: cashOnHand.before },
+    after: pending
+      ? undefined
+      : { cupo: quota.after, commission: accruedCommission.after, cash: cashOnHand.after },
+    details: entry.reason ? { reason: entry.reason } : undefined,
+  };
+}
+
 // shortcut: saldos iniciales del API; operaciones, historial y llaves siguen en memoria y
 // mueven los saldos localmente hasta integrar su endpoint (docs/wayfinder/integracion-api)
 @Injectable({ providedIn: 'root' })
@@ -167,7 +221,24 @@ export class AgentService {
   readonly agent = this._agent.asReadonly();
   readonly balances = this._balances.asReadonly();
   readonly operations = this._operations.asReadonly();
-  readonly recentOperations = computed(() => this._operations().slice(0, 3));
+  /** Del API; `_operations` guarda solo las creadas en memoria (aún no están en el servidor) */
+  private readonly _recent = signal<Operation[]>([]);
+  private readonly _history = signal<HistoryPage & { kind: HistoryKind | null }>({
+    kind: null,
+    items: [],
+    nextCursor: null,
+  });
+  readonly recentOperations = computed(() =>
+    [...this._operations(), ...this._recent()].slice(0, 3),
+  );
+  /** B8: las de memoria del filtro actual y luego las páginas cargadas del API */
+  readonly history = computed(() => {
+    const { kind, items, nextCursor } = this._history();
+    const local = kind
+      ? this._operations().filter((op) => KIND_TYPES[kind].includes(op.type))
+      : this._operations();
+    return { items: [...local, ...items], nextCursor };
+  });
   readonly withdrawal = this._withdrawal.asReadonly();
   readonly cupoLoad = this._cupoLoad.asReadonly();
 
@@ -175,7 +246,14 @@ export class AgentService {
     // Al iniciar o restaurar la sesión del corresponsal
     effect(() => {
       const id = this.auth.agentId();
-      if (id) untracked(() => this.refresh(id).subscribe({ error: () => undefined }));
+      if (!id) return;
+      untracked(() => {
+        this.refresh(id).subscribe({ error: () => undefined });
+        this.fetchHistory({ limit: 3 }).subscribe({
+          next: ({ items }) => this._recent.set(items),
+          error: () => undefined,
+        });
+      });
     });
   }
 
@@ -192,13 +270,50 @@ export class AgentService {
     );
   }
 
+  /** B8: primera página de `kind` (null = todas), o la siguiente con `more` */
+  loadHistory(kind: HistoryKind | null, more = false): Observable<HistoryPage> {
+    const current = this._history();
+    const cursor = more ? current.nextCursor : null;
+    return this.fetchHistory({ kind, cursor }).pipe(
+      tap((page) =>
+        this._history.set({
+          kind,
+          items: more ? [...current.items, ...page.items] : page.items,
+          nextCursor: page.nextCursor,
+        }),
+      ),
+    );
+  }
+
+  private fetchHistory(query: {
+    kind?: HistoryKind | null;
+    cursor?: string | null;
+    limit?: number;
+  }): Observable<HistoryPage> {
+    const params = Object.fromEntries(Object.entries(query).filter(([, v]) => v != null)) as Record<
+      string,
+      string | number
+    >;
+    return this.http
+      .get(`${environment.apiUrl}/agents/${this.auth.agentId()}/history`, { params })
+      .pipe(
+        timeout(environment.httpTimeoutMs),
+        map((res) => HistoryPageSchema.parse(res)),
+        map(({ items, nextCursor }) => ({
+          items: items.map(toOperation),
+          nextCursor: nextCursor ?? null,
+        })),
+      );
+  }
+
   /** Verifica que el celular tenga billetera. `simulateMissing` fuerza "no existe" (demo) */
   validateKey(_phone: string, simulateMissing: boolean): Observable<boolean> {
     return of(!simulateMissing).pipe(delay(600), timeout(environment.httpTimeoutMs));
   }
 
   operation(id: string): Operation | undefined {
-    return this._operations().find((op) => op.id === id);
+    const all = [...this._operations(), ...this._recent(), ...this._history().items];
+    return all.find((op) => op.id === id);
   }
 
   deposit(request: DepositRequest): Observable<DepositReceipt> {

@@ -54,7 +54,7 @@
                 >
                   {{ typeLabel[op.type] }}
                 </button>
-                <span class="op-id">{{ op.id }}</span>
+                <span class="op-id">{{ op.reference ?? op.id }}</span>
               </td>
               <td class="num strong">
                 {{ op.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
@@ -89,7 +89,9 @@
             <div class="op-head">
               <div>
                 <p class="op-type">{{ typeLabel[op.type] }}</p>
-                <p class="op-meta">{{ op.createdAt | date: 'd MMM, h:mm a' }} · {{ op.id }}</p>
+                <p class="op-meta">
+                  {{ op.createdAt | date: 'd MMM, h:mm a' }} · {{ op.reference ?? op.id }}
+                </p>
               </div>
               <div class="op-end">
                 <p class="strong">{{ op.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
@@ -124,7 +126,16 @@
         </li>
       }
     </ul>
-  } @else {
+  } @else if (!loading() && !loadError()) {
     <p class="card empty">No hay operaciones de este tipo. Cuando hagas una, aparecerá aquí.</p>
+  }
+
+  @if (loadError()) {
+    <p class="card empty" role="alert">No pudimos cargar el historial. Intenta de nuevo.</p>
+  }
+  @if (hasMore()) {
+    <button type="button" class="pill more" [disabled]="loading()" (click)="loadMore()">
+      {{ loading() ? 'Cargando…' : 'Ver más' }}
+    </button>
   }
 </main>
