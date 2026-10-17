@@ -1066,6 +1066,393 @@
                     }
                 },
                 {
+                    "id": "7debe830-a799-4c59-b433-ce987d71651a",
+                    "name": "Relia paga a otra moneda (outgoing entre monedas)",
+                    "request": {
+                        "name": "Relia paga a otra moneda (outgoing entre monedas)",
+                        "description": {
+                            "content": "Depósito a un usuario con billetera en otra moneda (`{{counterpartyForeign}}`, p. ej. USD).\n\nEsperado: `201` en `processing` y luego, con `GET /payments/{paymentId}`, `completed` con:\n- `debitAmount` en COP igual a `receiveAmount` (Relia envía exacto).\n- `quotedReceiveAmount` y `receivedAmount` en la moneda del receptor.\n- El incoming payment del receptor cerrado (`rail.incomingPaymentUrl`).\n",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "payments"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "disabled": false,
+                                "description": {
+                                    "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                    "type": "text/plain"
+                                },
+                                "key": "Idempotency-Key",
+                                "value": "{{$guid}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "POST",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"{{counterpartyForeign}}\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito entre monedas · Postman\"\n}",
+                            "options": {
+                                "raw": {
+                                    "headerFamily": "json",
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "0de7cf40-54dc-471c-b4bc-f9df043f7e6b",
+                            "name": "Pago creado.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"{{counterpartyForeign}}\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito entre monedas · Postman\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Created",
+                            "code": 201,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                },
+                                {
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "",
+                                        "type": "text/plain"
+                                    },
+                                    "key": "Location",
+                                    "value": "string"
+                                }
+                            ],
+                            "body": "{\n  \"id\": \"6f1c2a9e-3b4d-4e5f-8a7b-1c2d3e4f5a6b\",\n  \"idempotencyKey\": \"0b8e7d6c-5a4b-4c3d-9e2f-1a0b9c8d7e6f\",\n  \"direction\": \"outgoing\",\n  \"status\": \"processing\",\n  \"sender\": \"$ilp.interledger-test.dev/relia\",\n  \"receiver\": \"$ilp.interledger-test.dev/usuario-usd\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"debitAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"receivedAmount\": null,\n  \"quotedReceiveAmount\": {\n    \"value\": \"1190\",\n    \"assetCode\": \"USD\",\n    \"assetScale\": 2\n  },\n  \"approval\": null,\n  \"expiresAt\": null,\n  \"failureCode\": null,\n  \"failureDetail\": null,\n  \"rail\": {\n    \"incomingPaymentUrl\": null,\n    \"quoteUrl\": null,\n    \"outgoingPaymentUrl\": null\n  },\n  \"createdAt\": \"2026-10-17T15:00:00Z\",\n  \"updatedAt\": \"2026-10-17T15:00:00Z\",\n  \"completedAt\": null,\n  \"version\": 1\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "id": "0747274f-0e21-4d83-8755-65407ff8985c",
+                    "name": "Relia cobra desde otra moneda (incoming entre monedas)",
+                    "request": {
+                        "name": "Relia cobra desde otra moneda (incoming entre monedas)",
+                        "description": {
+                            "content": "Retiro a un usuario con billetera en otra moneda (`{{counterpartyForeign}}`, p. ej. USD).\n\nEsperado: `201` en `pending_approval` con `approval.url` y `debitAmount` en la moneda del pagador. Tras aprobar\nen la billetera, `completed` con `receivedAmount` en COP igual a `receiveAmount`.\n",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "payments"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "disabled": false,
+                                "description": {
+                                    "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                    "type": "text/plain"
+                                },
+                                "key": "Idempotency-Key",
+                                "value": "{{$guid}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "POST",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"direction\": \"incoming\",\n  \"counterparty\": \"{{counterpartyForeign}}\",\n  \"receiveAmount\": {\n    \"value\": \"5000000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"expiresAt\": \"2026-10-17T15:05:00Z\",\n  \"description\": \"Retiro entre monedas · Postman\"\n}",
+                            "options": {
+                                "raw": {
+                                    "headerFamily": "json",
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "7af98bea-eae3-4ceb-82cb-3c649de567b2",
+                            "name": "Pago creado.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"incoming\",\n  \"counterparty\": \"{{counterpartyForeign}}\",\n  \"receiveAmount\": {\n    \"value\": \"5000000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"expiresAt\": \"2026-10-17T15:05:00Z\",\n  \"description\": \"Retiro entre monedas · Postman\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Created",
+                            "code": 201,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                },
+                                {
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "",
+                                        "type": "text/plain"
+                                    },
+                                    "key": "Location",
+                                    "value": "string"
+                                }
+                            ],
+                            "body": "{\n  \"id\": \"6f1c2a9e-3b4d-4e5f-8a7b-1c2d3e4f5a6b\",\n  \"idempotencyKey\": \"0b8e7d6c-5a4b-4c3d-9e2f-1a0b9c8d7e6f\",\n  \"direction\": \"incoming\",\n  \"status\": \"pending_approval\",\n  \"sender\": \"$ilp.interledger-test.dev/usuario-usd\",\n  \"receiver\": \"$ilp.interledger-test.dev/relia\",\n  \"receiveAmount\": {\n    \"value\": \"5000000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"debitAmount\": {\n    \"value\": \"1225\",\n    \"assetCode\": \"USD\",\n    \"assetScale\": 2\n  },\n  \"receivedAmount\": null,\n  \"quotedReceiveAmount\": {\n    \"value\": \"5000000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"approval\": {\n    \"method\": \"redirect\",\n    \"url\": \"https://auth.interledger-test.dev/interact/abc\"\n  },\n  \"expiresAt\": \"2026-10-17T15:05:00Z\",\n  \"failureCode\": null,\n  \"failureDetail\": null,\n  \"rail\": {\n    \"incomingPaymentUrl\": null,\n    \"quoteUrl\": null,\n    \"outgoingPaymentUrl\": null\n  },\n  \"createdAt\": \"2026-10-17T15:00:00Z\",\n  \"updatedAt\": \"2026-10-17T15:00:00Z\",\n  \"completedAt\": null,\n  \"version\": 1\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "id": "94afeb74-225c-4b93-83de-e61b18c05dbd",
+                    "name": "Contraparte sin ruta de conversión (unsupported_asset)",
+                    "request": {
+                        "name": "Contraparte sin ruta de conversión (unsupported_asset)",
+                        "description": {
+                            "content": "Contraparte en una moneda que el riel no cotiza desde o hacia COP (`{{counterpartyNoRoute}}`).\n\nEsperado: `422 unsupported_asset`, sin incoming payment huérfano en la billetera de la contraparte. Un 5xx\ndel riel al cotizar no es este caso: responde `503 rail_unavailable`.\n",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "payments"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "disabled": false,
+                                "description": {
+                                    "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                    "type": "text/plain"
+                                },
+                                "key": "Idempotency-Key",
+                                "value": "{{$guid}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "POST",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"{{counterpartyNoRoute}}\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito sin ruta · Postman\"\n}",
+                            "options": {
+                                "raw": {
+                                    "headerFamily": "json",
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "ea51dcbc-e697-4337-bb9c-8b801e344e3e",
+                            "name": "Cuerpo inválido (`validation_error`), contraparte igual a la billetera de Relia (`same_wallet`) o moneda\nno soportada (`unsupported_asset`). Ver la respuesta `ValidationError`.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "disabled": false,
+                                        "description": {
+                                            "content": "(Required) Id del pago en el backend (`pagos.id`).",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "Idempotency-Key",
+                                        "value": "52ea5069-d7ff-e1c5-4018-8aa29e45b9af"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/problem+json"
+                                    },
+                                    {
+                                        "description": {
+                                            "content": "Added as a part of security scheme: apikey",
+                                            "type": "text/plain"
+                                        },
+                                        "key": "X-Api-Key",
+                                        "value": "<API Key>"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"direction\": \"outgoing\",\n  \"counterparty\": \"{{counterpartyNoRoute}}\",\n  \"receiveAmount\": {\n    \"value\": \"4900000\",\n    \"assetCode\": \"COP\",\n    \"assetScale\": 2\n  },\n  \"description\": \"Depósito sin ruta · Postman\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Unprocessable Entity (WebDAV) (RFC 4918)",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/problem+json"
+                                }
+                            ],
+                            "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"Moneda no soportada\",\n  \"status\": 422,\n  \"code\": \"unsupported_asset\",\n  \"detail\": \"El riel no cotiza entre COP y XYZ ($ilp.interledger-test.dev/usuario-sin-ruta). Riel: ...\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
                     "name": "{paymentId}",
                     "description": "",
                     "item": [
@@ -2170,6 +2557,14 @@
         {
             "key": "baseUrl",
             "value": "http://localhost:4000"
+        },
+        {
+            "key": "counterpartyForeign",
+            "value": "$ilp.interledger-test.dev/usuario-usd"
+        },
+        {
+            "key": "counterpartyNoRoute",
+            "value": "$ilp.interledger-test.dev/usuario-sin-ruta"
         }
     ],
     "info": {

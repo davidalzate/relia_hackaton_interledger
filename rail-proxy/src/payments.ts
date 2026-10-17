@@ -851,10 +851,7 @@ export class PaymentService {
     const incoming = await this.readIncoming(row);
     const changes = receivedChanges(row, incoming);
     if (incoming && BigInt(incoming.receivedAmount.value) >= BigInt(row.receive_value)) {
-      if (this.transition(row, 'processing', { ...changes, status: 'completed', completed_at: iso(now), next_poll_at: null }, now)) {
-        this.deps.log.info({ paymentId: row.id }, 'pago completado');
-        await this.releasePayerGrant(row);
-      }
+      if (this.complete(row, changes, now)) await this.releasePayerGrant(row);
       return;
     }
 
@@ -887,7 +884,7 @@ export class PaymentService {
   /**
    * `outgoing` entre monedas (Relia debita exacto). Éxito: el outgoing de Relia envió todo su `debitAmount` sin
    * fallar, o el receptor ya recibió lo que prometió el quote (respaldo si no se puede leer el outgoing).
-   * `receivedAmount` sale del incoming del receptor, en su moneda. Al terminar se cierra ese incoming, que sin
+   * `receivedAmount` sale del incoming del receptor, en su moneda: si no se pudo leer, no se completa en esa vuelta. Al terminar se cierra ese incoming, que sin
    * monto no se cierra solo.
    */
   private async confirmFixedDebit(row: PaymentRow, now: number): Promise<void> {
@@ -908,20 +905,28 @@ export class PaymentService {
       return;
     }
 
+    // Sin leer el incoming del receptor no se completa: `receivedAmount` quedaría vacío. Se reintenta.
+    if (incoming === undefined) {
+      this.reschedule(row, changes, now);
+      return;
+    }
+
     const sentAll = outgoing !== undefined && BigInt(outgoing.sentAmount.value) >= BigInt(outgoing.debitAmount.value);
     const deliveredQuote =
-      incoming !== undefined &&
-      row.quoted_receive_value !== null &&
-      BigInt(incoming.receivedAmount.value) >= BigInt(row.quoted_receive_value);
+      row.quoted_receive_value !== null && BigInt(incoming.receivedAmount.value) >= BigInt(row.quoted_receive_value);
     if (sentAll || deliveredQuote) {
-      if (this.transition(row, 'processing', { ...changes, status: 'completed', completed_at: iso(now), next_poll_at: null }, now)) {
-        this.deps.log.info({ paymentId: row.id }, 'pago completado');
-        await this.closeIncoming(row.incoming_auth_server!, row.incoming_payment_url!);
-      }
+      if (this.complete(row, changes, now)) await this.closeIncoming(row.incoming_auth_server!, row.incoming_payment_url!);
       return;
     }
 
     this.reschedule(row, changes, now);
+  }
+
+  /** Pasa el pago de `processing` a `completed` con lo recibido. Devuelve false si otro proceso ya lo movió. */
+  private complete(row: PaymentRow, changes: PaymentUpdate, now: number): boolean {
+    const done = this.transition(row, 'processing', { ...changes, status: 'completed', completed_at: iso(now), next_poll_at: null }, now);
+    if (done) this.deps.log.info({ paymentId: row.id }, 'pago completado');
+    return done;
   }
 
   /** Lee el incoming payment del pago (el de Relia en `incoming`, el del receptor en `outgoing`). */
@@ -1102,14 +1107,17 @@ function receivedChanges(row: PaymentRow, incoming: IncomingPayment | undefined)
 }
 
 /**
- * El quote falló porque el riel no cotiza entre las dos monedas (Rafiki: 4xx al crear el quote, o un mensaje de
- * tasa o moneda). Un 401/403/429 o un 5xx genérico se tratan como riel no disponible.
+ * El quote falló porque el riel no cotiza entre las dos monedas: solo un 4xx de Rafiki cuya descripción o código
+ * apunta a la tasa, la moneda o la conversión (p. ej. "Rate probe failed", "Could not get rates", "unsupported
+ * asset"). Cualquier 5xx, 401/403/408/429 o un 4xx sin esa pista sigue el camino de error del riel. Solo se usa
+ * en pagos entre monedas distintas.
  */
 function isUnsupportedConversion(error: unknown): boolean {
   if (!(error instanceof OpenPaymentsClientError)) return false;
   const status = error.status;
-  if (status !== undefined && status >= 400 && status < 500 && ![401, 403, 408, 429].includes(status)) return true;
-  return /\b(rates?|asset|convert|conversion|currency)\b/i.test(error.description);
+  if (status === undefined || status < 400 || status >= 500 || [401, 403, 408, 429].includes(status)) return false;
+  const hint = /\b(rates?|rate[ _-]?probe|assets?|conver(t|sion)|currenc(y|ies)|exchange)\b/i;
+  return hint.test(error.description ?? '') || hint.test(error.code ?? '') || hint.test(error.message ?? '');
 }
 
 function unsupportedConversion(relia: ResolvedWallet, counterparty: ResolvedWallet, error: unknown): ProblemError {

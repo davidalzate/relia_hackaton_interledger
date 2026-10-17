@@ -18,7 +18,7 @@ import { InputText } from 'primeng/inputtext';
 import { ProgressSpinner } from 'primeng/progressspinner';
 import { catchError, debounceTime, distinctUntilChanged, filter, map, of, switchMap } from 'rxjs';
 
-import { ApiError, newIdempotencyKey } from '../../core/http/api';
+import { createErrorKind, newIdempotencyKey } from '../../core/http/api';
 import { AgentService, DepositReceipt } from '../../core/services/agent.service';
 import { OperationsService } from '../../core/services/operations.service';
 import { ReceiptService } from '../../core/services/receipt.service';
@@ -233,7 +233,7 @@ export class DepositComponent {
         error: (err: unknown) =>
           this.step.set({
             kind: 'error',
-            error: (err instanceof ApiError && err.code && CREATE_ERROR[err.code]) || 'network',
+            error: createErrorKind(err, CREATE_ERROR),
             reference: null,
             amount: cashIn,
           }),

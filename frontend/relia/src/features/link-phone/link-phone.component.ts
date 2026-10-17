@@ -25,7 +25,6 @@ const LINK_ERROR: Partial<Record<ErrorCode, string>> = {
   wallet_already_linked: 'Esta billetera ya está vinculada a otro celular.',
   phone_reserved: 'Este celular o esta billetera pertenecen a una tienda o a Relia.',
   wallet_not_found: 'No encontramos ese payment pointer en la red de prueba.',
-  wallet_currency_unsupported: 'La red de pagos no convierte pesos a la moneda de esta billetera.',
   rate_limited: 'Demasiados intentos. Espera un momento y vuelve a intentar.',
   rail_unavailable: 'La red de pagos no responde. Intenta en un momento.',
 };
@@ -75,8 +74,12 @@ export class LinkPhoneComponent {
   protected readonly walletAddress = computed(() => (this.value().walletAddress ?? '').trim());
   protected readonly phoneInvalid = computed(() => this.phone().length !== 10);
   protected readonly pointerInvalid = computed(() => !POINTER.test(this.walletAddress()));
+  /** Vinculación recién verificada: el servicio limpia `pending()` al verificar y la pantalla final la sigue mostrando */
+  private readonly linked = signal<PendingLink | null>(null);
   /** "Billetera en USD": solo si la billetera no es COP (`walletAssetCode` de `POST /key-links`) */
-  protected readonly walletCurrency = signal<string | null>(foreignCurrency(this.pending));
+  protected readonly walletCurrency = computed(() =>
+    foreignCurrency(this.keyLinks.pending() ?? this.linked()),
+  );
 
   protected formatPhone(): void {
     const formatted = formatPhone(this.form.controls.phone.value);
@@ -96,7 +99,6 @@ export class LinkPhoneComponent {
       .subscribe({
         next: () => {
           this.linking.set(false);
-          this.walletCurrency.set(foreignCurrency(this.keyLinks.pending()));
           this.form.controls.code.reset();
           this.step.set('code');
         },
@@ -110,12 +112,14 @@ export class LinkPhoneComponent {
     this.codeError.set(null);
     this.linkError.set(null);
     this.linking.set(true);
+    const link = this.keyLinks.pending();
     this.keyLinks
       .verify(this.form.controls.code.value.trim())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
           this.linking.set(false);
+          this.linked.set(link);
           this.step.set('done');
         },
         error: (err: unknown) => this.fail(err),
@@ -146,6 +150,7 @@ export class LinkPhoneComponent {
 
   protected changeData(): void {
     this.keyLinks.reset();
+    this.linked.set(null);
     this.step.set('form');
     this.linkError.set(null);
   }

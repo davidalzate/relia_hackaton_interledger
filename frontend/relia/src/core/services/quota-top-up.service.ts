@@ -4,8 +4,9 @@ import { Subscription, map, switchMap, tap, timeout } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import { ApiOperation, FailureCode, OperationSchema } from '../../shared/schemas/operation.schema';
+import { ErrorCode } from '../../shared/schemas/problem.schema';
 import { AgentBalances, Operation } from '../../shared/types/agent';
-import { ApiError, IDEMPOTENCY_HEADER } from '../http/api';
+import { IDEMPOTENCY_HEADER, createErrorKind } from '../http/api';
 import { AgentService } from './agent.service';
 import { AuthService } from './auth.service';
 import { OperationsService } from './operations.service';
@@ -55,6 +56,10 @@ export type CupoLoad =
       retryKey: string | null;
     };
 
+const CREATE_ERROR: Partial<Record<ErrorCode, CupoLoadErrorKind>> = {
+  wallet_currency_unsupported: 'currency',
+};
+
 const FAILURE_KIND: Partial<Record<FailureCode, CupoLoadErrorKind>> = {
   customer_rejected: 'rejected',
   request_expired: 'expired',
@@ -103,10 +108,7 @@ export class QuotaTopUpService {
             status: 'error',
             request,
             operation: null,
-            error:
-              err instanceof ApiError && err.code === 'wallet_currency_unsupported'
-                ? 'currency'
-                : 'network',
+            error: createErrorKind(err, CREATE_ERROR),
             retryKey: idempotencyKey,
           });
         },

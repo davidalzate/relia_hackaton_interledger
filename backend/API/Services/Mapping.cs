@@ -74,6 +74,8 @@ public static class Mapping
     /// <summary>
     /// Monto en la moneda de la billetera de la contraparte, o null si es COP o el riel aún no lo informa. Relia paga
     /// (outgoing): lo recibido o, mientras procesa, lo cotizado. Relia cobra (incoming): lo debitado al pagador.
+    /// Misma regla que la función del recibo en backend/db/db_ddl.sql (bloque wallet_amount): si cambia una, cambiar
+    /// la otra.
     /// </summary>
     public static WalletAmountDto? WalletAmount(this Payment payment) => payment.Direction == PaymentDirection.Outgoing
         ? ToWalletAmount(payment.ReceivedValue, payment.ReceivedAssetCode, payment.ReceivedAssetScale)

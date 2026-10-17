@@ -6,7 +6,7 @@ import { environment } from '../../environments/environment';
 import { ApiOperation, FailureCode, OperationSchema } from '../../shared/schemas/operation.schema';
 import { ErrorCode } from '../../shared/schemas/problem.schema';
 import { AgentBalances, Operation } from '../../shared/types/agent';
-import { ApiError, IDEMPOTENCY_HEADER } from '../http/api';
+import { IDEMPOTENCY_HEADER, createErrorKind } from '../http/api';
 import { AgentService } from './agent.service';
 import { AuthService } from './auth.service';
 import { OperationsService } from './operations.service';
@@ -106,7 +106,7 @@ export class WithdrawalService {
             status: 'error',
             request,
             operation: null,
-            error: (err instanceof ApiError && err.code && CREATE_ERROR[err.code]) || 'network',
+            error: createErrorKind(err, CREATE_ERROR),
             retryKey: idempotencyKey,
           });
         },

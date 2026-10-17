@@ -668,10 +668,16 @@ BEGIN
     END IF;
 
     -- Lo que entró (depósito) o salió (retiro) de la billetera del usuario, solo si no es COP. Va en unidades
-    -- mínimas con su escala, como lo dio el riel.
+    -- mínimas con su escala, como lo dio el riel. En el depósito, si el riel aún no informó lo recibido, se usa lo
+    -- cotizado (quoted_receive_*). Misma regla que Mapping.WalletAmount (backend/API/Services/Mapping.cs):
+    -- si cambia una, cambiar la otra.
     IF o.type = 'deposit' AND p.received_asset_code IS DISTINCT FROM 'COP' AND p.received_value IS NOT NULL THEN
         wallet_amount := jsonb_build_object(
             'value', p.received_value, 'asset_code', p.received_asset_code, 'asset_scale', p.received_asset_scale);
+    ELSIF o.type = 'deposit' AND p.quoted_receive_asset_code IS DISTINCT FROM 'COP' AND p.quoted_receive_value IS NOT NULL THEN
+        wallet_amount := jsonb_build_object(
+            'value', p.quoted_receive_value, 'asset_code', p.quoted_receive_asset_code,
+            'asset_scale', p.quoted_receive_asset_scale);
     ELSIF o.type = 'withdrawal' AND p.debit_asset_code IS DISTINCT FROM 'COP' AND p.debit_value IS NOT NULL THEN
         wallet_amount := jsonb_build_object(
             'value', p.debit_value, 'asset_code', p.debit_asset_code, 'asset_scale', p.debit_asset_scale);
