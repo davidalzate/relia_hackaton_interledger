@@ -54,48 +54,6 @@ describe('AgentService depósito (API)', () => {
   });
 });
 
-describe('AgentService carga de cupo', () => {
-  let agent: AgentService;
-  beforeEach(() => {
-    vi.useFakeTimers();
-    agent = TestBed.inject(AgentService);
-  });
-  afterEach(() => vi.useRealTimers());
-
-  it('confirmar suma el monto al cupo y completa la operación', () => {
-    agent.requestCupoLoad({ method: 'breb', amount: 300_000 });
-    expect(agent.operations()[0]).toMatchObject({ type: 'cupo', status: 'pending' });
-    agent.confirmCupoLoad();
-    expect(agent.cupoLoad()).toMatchObject({
-      status: 'done',
-      before: { cupo: 0 },
-      after: { cupo: 300_000 },
-    });
-    expect(agent.balances().cupo).toBe(300_000);
-    expect(agent.operations()[0].status).toBe('completed');
-  });
-
-  it('Bre-B vence a los 10 min y Wallet a los 5', () => {
-    agent.requestCupoLoad({ method: 'breb', amount: 1 });
-    vi.advanceTimersByTime(5 * 60_000);
-    expect(agent.cupoLoad()?.status).toBe('waiting');
-    vi.advanceTimersByTime(5 * 60_000);
-    expect(agent.cupoLoad()).toMatchObject({ status: 'error', error: 'expired' });
-
-    agent.clearCupoLoad();
-    agent.requestCupoLoad({ method: 'wallet', amount: 1, key: '3105550101' });
-    vi.advanceTimersByTime(5 * 60_000);
-    expect(agent.cupoLoad()).toMatchObject({ status: 'error', error: 'expired' });
-  });
-
-  it('rechazar no cambia el cupo', () => {
-    agent.requestCupoLoad({ method: 'wallet', amount: 50_000, key: '3105550101' });
-    agent.failCupoLoad('rejected');
-    expect(agent.cupoLoad()).toMatchObject({ status: 'error', error: 'rejected' });
-    expect(agent.balances().cupo).toBe(0);
-  });
-});
-
 describe('AgentService efectivo en caja', () => {
   it('POST cash-adjustments con Idempotency-Key; actualiza solo el efectivo', async () => {
     TestBed.configureTestingModule({
@@ -150,9 +108,7 @@ describe('AgentService saldos por operación (B8)', () => {
       after: { cupo: 50_000, cash: 30_000, commission: 500 },
     });
 
-    agent.requestCupoLoad({ method: 'breb', amount: 10 });
-    agent.failCupoLoad('rejected');
-    const failed = agent.operations()[0];
+    const failed = agent['record'](10, 'failed', 'cupo');
     expect(failed.before).toEqual(failed.after);
     vi.useRealTimers();
   });

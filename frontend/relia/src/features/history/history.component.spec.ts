@@ -36,7 +36,7 @@ describe('HistoryComponent', () => {
       before: { cupo: 0, commission: 0, cash: 0 },
       after: { cupo: 0, commission: 0, cash: 100_000 },
     });
-    agent.requestCupoLoad({ method: 'breb', amount: 300_000 });
+    agent['record'](300_000, 'pending', 'cupo');
     render();
 
     const rows = [...el.querySelectorAll('tbody tr')];
@@ -48,7 +48,6 @@ describe('HistoryComponent', () => {
     expect(rows[1].textContent).toContain('100.000');
     expect(el.querySelectorAll('.cards li').length).toBe(2);
     expect(el.querySelector('.summary')?.textContent).toContain('Efectivo');
-    agent.clearCupoLoad();
   });
 
   it('filtra por tipo y muestra el vacío', () => {

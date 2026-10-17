@@ -1,9 +1,10 @@
 import { CurrencyPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 
-import { AgentService } from '../../../core/services/agent.service';
+import { QuotaTopUpService } from '../../../core/services/quota-top-up.service';
 
-// shortcut: panel Modo demo mínimo (confirmar/rechazar cargas de cupo) hasta tener su especificación
+// shortcut: panel Modo demo mínimo (simulador Bre-B de cargas de cupo); el resto de E1 llega con la
+// feature Modo demo
 @Component({
   selector: 'app-demo-panel',
   imports: [CurrencyPipe],
@@ -12,19 +13,16 @@ import { AgentService } from '../../../core/services/agent.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DemoPanelComponent {
-  private readonly agent = inject(AgentService);
+  private readonly topUps = inject(QuotaTopUpService);
 
   protected readonly open = signal(false);
   protected readonly cupoLoad = computed(() => {
-    const l = this.agent.cupoLoad();
+    const l = this.topUps.load();
     return l?.status === 'waiting' ? l : null;
   });
 
-  protected confirm(): void {
-    this.agent.confirmCupoLoad();
-  }
-
-  protected reject(): void {
-    this.agent.failCupoLoad('rejected');
+  /** `POST /demo/quota-top-ups/{operationId}/breb-payment` */
+  protected simulateBreB(): void {
+    this.topUps.simulateBreBPayment();
   }
 }

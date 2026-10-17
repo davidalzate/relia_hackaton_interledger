@@ -12,21 +12,30 @@
   @if (l && l.status === 'waiting') {
     <!-- B6.3 -->
     <section class="card waiting" aria-labelledby="waiting-title">
-      <span class="badge-sim">Simulación {{ methodLabel[l.request.method] }}</span>
       @if (l.request.method === 'breb') {
+        <span class="badge-sim">Simulación Bre-B</span>
         <h2 id="waiting-title" class="sr-only">Paga el QR Bre-B</h2>
         <div class="qr" role="img" aria-label="Código QR de ejemplo">
           <i class="pi pi-qrcode" aria-hidden="true"></i>
         </div>
+        @if (l.qrPayload) {
+          <p class="hint qr-payload">{{ l.qrPayload }}</p>
+        }
       } @else {
         <h2 id="waiting-title">Aprueba la solicitud en tu billetera</h2>
-        <p class="hint">Llave {{ phoneText(l.request.key ?? '') }}</p>
+        @if (l.approvalUrl) {
+          <a class="btn-primary" [href]="l.approvalUrl" target="_blank" rel="noopener">
+            Abrir mi wallet de prueba
+          </a>
+        }
       }
       <p class="amount">{{ l.request.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}</p>
       <p class="countdown" role="status">
         <span class="dot" aria-hidden="true"></span> Esperando pago · {{ countdown() }}
       </p>
-      <p class="hint">Confirma el pago desde el panel Modo demo.</p>
+      @if (l.request.method === 'breb') {
+        <p class="hint">Confirma el pago desde el panel Modo demo.</p>
+      }
       <button type="button" class="btn-secondary" (click)="cancel()">Cancelar</button>
     </section>
   } @else if (l && l.status === 'done') {
@@ -45,7 +54,7 @@
         </div>
         <div>
           <dt>Operación</dt>
-          <dd>{{ l.operation.id }}</dd>
+          <dd>{{ l.operation.reference ?? l.operation.id }}</dd>
         </div>
       </dl>
       <div class="result-actions">
@@ -64,13 +73,23 @@
           <h2 id="error-title">La solicitud venció</h2>
           <p>Se acabó el tiempo. Tu cupo no cambió.</p>
         }
+        @case ('failed') {
+          <h2 id="error-title">El pago falló</h2>
+          <p>La billetera no completó el pago. Tu cupo no cambió.</p>
+        }
+        @case ('network') {
+          <h2 id="error-title">No se pudo crear la solicitud</h2>
+          <p>El simulador no respondió. No se movió dinero.</p>
+        }
         @default {
           <h2 id="error-title">Solicitud cancelada</h2>
           <p>Cancelaste la solicitud. Tu cupo no cambió.</p>
         }
       }
       <p class="hint">
-        Operación {{ l.operation.id }} ·
+        @if (l.operation) {
+          Operación {{ l.operation.reference ?? l.operation.id }} ·
+        }
         {{ l.request.amount | currency: 'COP' : 'symbol-narrow' : '1.0-0' }}
       </p>
       <div class="result-actions">
@@ -100,26 +119,15 @@
       </div>
 
       @if (m === 'wallet') {
-        <div class="field">
-          <label for="key">Tu llave (celular)</label>
-          <input
-            pInputText
-            id="key"
-            type="tel"
-            inputmode="numeric"
-            maxlength="12"
-            formControlName="key"
-            aria-describedby="key-hint"
-            (input)="formatKey()"
-          />
-          <p id="key-hint" class="hint">
-            Enviaremos la solicitud a la billetera vinculada a esta llave.
-          </p>
-        </div>
+        <p class="hint">
+          Enviaremos la solicitud a tu billetera registrada{{
+            walletAddress() ? ' (' + walletAddress() + ')' : ''
+          }}.
+        </p>
       }
 
       <button class="btn-primary" type="submit" [disabled]="!canSubmit()">
-        {{ m === 'breb' ? 'Generar QR' : 'Enviar solicitud' }}
+        {{ creating() ? 'Enviando…' : m === 'breb' ? 'Generar QR' : 'Enviar solicitud' }}
       </button>
     </form>
   } @else {
@@ -133,8 +141,7 @@
       </button>
       <button type="button" class="card method" (click)="choose('wallet')">
         <strong>Wallet</strong>
-        <span>Envía una solicitud a la billetera de tu llave y apruébala allí.</span>
-        <span class="badge-sim">Simulación</span>
+        <span>Envía una solicitud a tu billetera registrada y apruébala allí.</span>
       </button>
     </fieldset>
   }
