@@ -53,6 +53,7 @@ public class AgentsController(
     [HttpPost("deposits")]
     [Tags("operations")]
     [Authorize(Roles = Roles.Agent)]
+    [Idempotent]
     public async Task<ActionResult<OperationDto>> CreateDeposit(
         Guid agentId,
         [FromHeader(Name = "Idempotency-Key"), Required, StringLength(128, MinimumLength = 8)] string idempotencyKey,

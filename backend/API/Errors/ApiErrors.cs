@@ -57,6 +57,14 @@ public static class ApiErrors
     public static ApiException OtpAttemptsExceeded() =>
         new(StatusCodes.Status422UnprocessableEntity, "otp_attempts_exceeded", "Se agotaron los intentos");
 
+    /// <summary>422 insufficient_quota con lo que falta (depósitos).</summary>
+    public static ApiException InsufficientQuota(long shortfall) =>
+        new(StatusCodes.Status422UnprocessableEntity, "insufficient_quota", "Cupo insuficiente",
+            new Dictionary<string, object?> { ["shortfall"] = shortfall });
+
+    public static ApiException AmountTooLow() =>
+        new(StatusCodes.Status422UnprocessableEntity, "amount_too_low", "El monto no alcanza a cubrir la comisión");
+
     /// <summary>422 insufficient_cash con lo que falta (ajustes por debajo de lo reservado, retiros).</summary>
     public static ApiException InsufficientCash(long shortfall) =>
         new(StatusCodes.Status422UnprocessableEntity, "insufficient_cash", "Efectivo insuficiente",

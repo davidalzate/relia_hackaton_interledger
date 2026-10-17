@@ -144,9 +144,11 @@ public record KeyLinkDto(string Phone, string WalletAddress, DateTimeOffset Link
 
 public record CreateDepositRequest(
     [Required, RegularExpression(Patterns.Phone)] string Phone,
-    [Range(1001, Patterns.MaxCop)] long RequestedAmount,
-    bool RoundAmount,
-    bool CashReceivedConfirmed);
+    [Required, Range(1001, Patterns.MaxCop)] long? RequestedAmount,
+    [Required] bool? RoundAmount,
+    // const true en el contrato: crear el depósito es confirmar que se recibió el efectivo.
+    [Required, Range(typeof(bool), "true", "true", ErrorMessage = "Debe confirmar que recibió el efectivo.")]
+    bool? CashReceivedConfirmed);
 
 public record CreateWithdrawalRequest(
     [Required, RegularExpression(Patterns.Phone)] string Phone,

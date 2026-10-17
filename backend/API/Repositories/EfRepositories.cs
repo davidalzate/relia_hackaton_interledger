@@ -74,6 +74,9 @@ public class EfWalletKeyRepository(ReliaDbContext db) : IWalletKeyRepository
     public Task<WalletKey?> GetByPhoneAsync(string phone, CancellationToken ct = default) =>
         db.WalletKeys.FirstOrDefaultAsync(k => k.Phone == phone, ct);
 
+    public Task<WalletKey?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
+        db.WalletKeys.FirstOrDefaultAsync(k => k.Id == id, ct);
+
     public Task<bool> IsWalletLinkedAsync(string walletAddress, CancellationToken ct = default)
     {
         var wallet = walletAddress.TrimEnd('/').ToLowerInvariant();
@@ -111,6 +114,15 @@ public class EfOperationRepository(ReliaDbContext db) : IOperationRepository
         CancellationToken ct = default) =>
         db.Operations.FirstOrDefaultAsync(o => o.AgentId == agentId && o.IdempotencyKey == idempotencyKey, ct);
 
+    public async Task<Operation?> GetForUpdateAsync(Guid id, CancellationToken ct = default)
+    {
+        var operation = await db.Operations
+            .FromSqlInterpolated($"SELECT * FROM operations WHERE id = {id} FOR UPDATE")
+            .SingleOrDefaultAsync(ct);
+        if (operation is not null) await db.Entry(operation).ReloadAsync(ct);
+        return operation;
+    }
+
     public async Task<Reservations> GetReservationsAsync(Guid agentId, CancellationToken ct = default)
     {
         var pending = db.Operations.Where(o => o.AgentId == agentId && o.State == OperationState.Pending);
@@ -133,6 +145,18 @@ public class EfPaymentRepository(ReliaDbContext db) : IPaymentRepository
         db.Payments.Where(p => p.OperationId == operationId)
             .OrderByDescending(p => p.CreatedAt).FirstOrDefaultAsync(ct);
 
+    public async Task<Payment?> GetLatestByOperationForUpdateAsync(Guid operationId, CancellationToken ct = default)
+    {
+        var payment = await db.Payments
+            .FromSqlInterpolated($"""
+                SELECT * FROM payments WHERE operation_id = {operationId}
+                ORDER BY created_at DESC LIMIT 1 FOR UPDATE
+                """)
+            .SingleOrDefaultAsync(ct);
+        if (payment is not null) await db.Entry(payment).ReloadAsync(ct);
+        return payment;
+    }
+
     public Task<Payment?> GetLatestBySettlementAsync(Guid settlementId, CancellationToken ct = default) =>
         db.Payments.Where(p => p.SettlementId == settlementId)
             .OrderByDescending(p => p.CreatedAt).FirstOrDefaultAsync(ct);
@@ -150,8 +174,10 @@ public class EfLedgerRepository(ReliaDbContext db) : ILedgerRepository
     public Task<LedgerEntry?> GetBySettlementAsync(Guid settlementId, CancellationToken ct = default) =>
         db.LedgerEntries.FirstOrDefaultAsync(l => l.SettlementId == settlementId, ct);
 
-    public Task<LedgerEntry?> GetLatestByAgentAsync(Guid agentId, CancellationToken ct = default) =>
-        db.LedgerEntries.Where(l => l.AgentId == agentId).OrderByDescending(l => l.Id).FirstOrDefaultAsync(ct);
+    public Task<LedgerEntry?> GetLatestByAgentAsync(Guid agentId, DateTimeOffset atOrBefore,
+        CancellationToken ct = default) =>
+        db.LedgerEntries.Where(l => l.AgentId == agentId && l.CreatedAt <= atOrBefore)
+            .OrderByDescending(l => l.Id).FirstOrDefaultAsync(ct);
 
     public void Add(LedgerEntry entry) => db.LedgerEntries.Add(entry);
 }

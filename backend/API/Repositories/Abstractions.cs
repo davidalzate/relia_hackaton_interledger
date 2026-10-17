@@ -47,6 +47,7 @@ public interface IFeeRepository
 public interface IWalletKeyRepository
 {
     Task<WalletKey?> GetByPhoneAsync(string phone, CancellationToken ct = default);
+    Task<WalletKey?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>¿Hay una llave con esta billetera? Payment pointer sin mayúsculas ni "/" final de ningún lado.</summary>
     Task<bool> IsWalletLinkedAsync(string walletAddress, CancellationToken ct = default);
@@ -73,6 +74,9 @@ public interface IOperationRepository
     Task<Operation?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<Operation?> GetByIdempotencyKeyAsync(Guid agentId, string idempotencyKey, CancellationToken ct = default);
 
+    /// <summary>SELECT ... FOR UPDATE de la operación, con los valores de la base. Solo dentro de una transacción.</summary>
+    Task<Operation?> GetForUpdateAsync(Guid id, CancellationToken ct = default);
+
     /// <summary>Depósitos pendientes reservan cupo (cobrado); retiros pendientes reservan efectivo (neto).</summary>
     Task<Reservations> GetReservationsAsync(Guid agentId, CancellationToken ct = default);
 
@@ -84,6 +88,9 @@ public interface IPaymentRepository
 {
     Task<Payment?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<Payment?> GetLatestByOperationAsync(Guid operationId, CancellationToken ct = default);
+
+    /// <summary>Como <see cref="GetLatestByOperationAsync"/>, con FOR UPDATE y los valores de la base.</summary>
+    Task<Payment?> GetLatestByOperationForUpdateAsync(Guid operationId, CancellationToken ct = default);
     Task<Payment?> GetLatestBySettlementAsync(Guid settlementId, CancellationToken ct = default);
     void Add(Payment payment);
     void AddEvent(PaymentEvent paymentEvent);
@@ -93,7 +100,8 @@ public interface ILedgerRepository
 {
     Task<LedgerEntry?> GetByOperationAsync(Guid operationId, CancellationToken ct = default);
     Task<LedgerEntry?> GetBySettlementAsync(Guid settlementId, CancellationToken ct = default);
-    Task<LedgerEntry?> GetLatestByAgentAsync(Guid agentId, CancellationToken ct = default);
+    /// <summary>Último movimiento del corresponsal hasta <paramref name="atOrBefore"/>: el "último saldo conocido".</summary>
+    Task<LedgerEntry?> GetLatestByAgentAsync(Guid agentId, DateTimeOffset atOrBefore, CancellationToken ct = default);
 
     void Add(LedgerEntry entry);
 }

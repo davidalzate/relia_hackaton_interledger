@@ -11,49 +11,6 @@ namespace Relia.Api.Services;
 // Implementaciones en desarrollo: reciben ya sus repositorios y responden 501 "En desarrollo".
 // Cada una se implementa en el ticket indicado de docs/issues/backend-relia-api/.
 
-/// <summary>Tickets 04 (desglose), 07 (depósito), 09 (retiro) y 10 (carga de cupo).</summary>
-public class OperationService(
-    IAgentRepository agents, IFeeRepository fees, IWalletKeyRepository keys, IOperationRepository operations,
-    IPaymentRepository payments, ILedgerRepository ledger, ISimulatedMessageRepository messages,
-    IUnitOfWork unitOfWork, ICurrentUser currentUser) : IOperationService
-{
-    /// <summary>Siempre 200: lo que impide crear la operación va en violations.</summary>
-    public async Task<OperationPreviewDto> PreviewAsync(Guid agentId, OperationPreviewRequest request,
-        CancellationToken ct = default)
-    {
-        currentUser.EnsureCanOperateAgent(agentId);
-        var agent = await agents.GetByIdAsync(agentId, ct) ?? throw ApiErrors.NotFound();
-        var balance = agent.Balance
-                      ?? throw new InvalidOperationException($"El corresponsal {agent.Id} no tiene agent_balances");
-        var fee = await fees.GetCurrentAsync(ct);
-        var reserved = await operations.GetReservationsAsync(agentId, ct);
-        // [Required] en el DTO garantiza los tres valores.
-        return OperationRules.Preview(
-            request.Type!.Value, request.RequestedAmount!.Value, request.RoundAmount!.Value, fee, balance, reserved);
-    }
-
-    public Task<OperationDto> CreateDepositAsync(Guid agentId, string idempotencyKey, CreateDepositRequest request,
-        CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("createDeposit");
-
-    public Task<OperationDto> CreateWithdrawalAsync(Guid agentId, string idempotencyKey,
-        CreateWithdrawalRequest request, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("createWithdrawal");
-
-    public Task<OperationDto> CreateQuotaTopUpAsync(Guid agentId, string idempotencyKey,
-        CreateQuotaTopUpRequest request, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("createQuotaTopUp");
-
-    public Task<OperationDto> GetAsync(Guid operationId, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("getOperation");
-
-    public Task<OperationDto> CancelAsync(Guid operationId, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("cancelOperation");
-
-    public Task<OperationDto> ConfirmCashHandoverAsync(Guid operationId, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("confirmCashHandover");
-}
-
 /// <summary>Ticket 08.</summary>
 public class ReceiptService(
     IOperationRepository operations, IReceiptRepository receipts, ISimulatedMessageRepository messages,

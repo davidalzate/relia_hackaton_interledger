@@ -25,15 +25,6 @@ public class AgentService(
     private static readonly Dictionary<string, HistoryEntryKind> KindsByLabel =
         KindLabels.ToDictionary(p => p.Value, p => p.Key);
 
-    private static readonly Dictionary<string, FailureCode> FailureCodes = new()
-    {
-        ["customer_rejected"] = FailureCode.CustomerRejected,
-        ["request_expired"] = FailureCode.RequestExpired,
-        ["request_cancelled"] = FailureCode.RequestCancelled,
-        ["payment_failed"] = FailureCode.PaymentFailed,
-        ["rail_unavailable"] = FailureCode.RailUnavailable,
-    };
-
     public async Task<AgentDto> GetAgentAsync(Guid agentId, CancellationToken ct = default)
     {
         currentUser.EnsureCanReadAgent(agentId);
@@ -73,7 +64,7 @@ public class AgentService(
             new BalancePairDto(row.CommissionBefore, row.CommissionAfter),
             new BalancePairDto(row.CashBefore, row.CashAfter)),
         row.Reason,
-        row.FailureCode is null ? null : FailureCodes[row.FailureCode],
+        row.FailureCode is null ? null : Mapping.FailureCodes[row.FailureCode],
         row.OperationId,
         row.SettlementId);
 

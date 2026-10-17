@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Numerics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Relia.Api.Rail;
 
@@ -33,6 +34,31 @@ public record RailAmount(string Value, string AssetCode, int AssetScale)
     }
 }
 
+/// <summary>Visto desde Relia: outgoing = Relia paga (depósito, liquidación); incoming = Relia cobra.</summary>
+public static class RailDirection
+{
+    public const string Outgoing = "outgoing";
+    public const string Incoming = "incoming";
+}
+
+/// <summary>Cuerpo de POST /payments. La otra punta es siempre la billetera de Relia.</summary>
+public record RailPaymentRequest(
+    string Direction, string Counterparty, RailAmount ReceiveAmount, DateTimeOffset? ExpiresAt = null,
+    string? Description = null);
+
+public record RailApproval(string Method, string? Url, string? Payload);
+
+public record RailReferences(string? IncomingPaymentUrl, string? QuoteUrl, string? OutgoingPaymentUrl);
+
+/// <summary>
+/// Pago de riel según el proxy. <see cref="Status"/>: pending_approval, processing, completed, failed, rejected,
+/// expired o cancelled. <see cref="Version"/> crece con cada cambio.
+/// </summary>
+public record RailPayment(
+    Guid Id, string Direction, string Status, string Sender, string Receiver, RailAmount ReceiveAmount,
+    RailAmount? DebitAmount, RailAmount? ReceivedAmount, RailApproval? Approval, DateTimeOffset? ExpiresAt,
+    string? FailureCode, string? FailureDetail, RailReferences? Rail, DateTimeOffset? CompletedAt, int Version);
+
 /// <summary>Error del proxy con su <c>code</c> (unsupported_asset, same_wallet, idempotency_conflict…).</summary>
 public class RailException(string code, string message, Exception? inner = null) : Exception(message, inner)
 {
@@ -53,6 +79,15 @@ public interface IRailClient
 {
     /// <summary>GET /wallet-addresses. Lanza RailWalletNotFoundException o RailUnavailableException.</summary>
     Task<RailWallet> ResolveWalletAddressAsync(string pointer, CancellationToken ct = default);
+
+    /// <summary>
+    /// POST /payments con <paramref name="paymentId"/> (payments.id del backend) como Idempotency-Key: repetirlo
+    /// devuelve el mismo pago. Sin permiso de Relia (relia_grant_unavailable) lanza RailUnavailableException.
+    /// </summary>
+    Task<RailPayment> CreatePaymentAsync(Guid paymentId, RailPaymentRequest request, CancellationToken ct = default);
+
+    /// <summary>GET /payments/{railPaymentId}: último estado conocido por el proxy.</summary>
+    Task<RailPayment> GetPaymentAsync(Guid railPaymentId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -61,11 +96,27 @@ public interface IRailClient
 /// </summary>
 public class RailClient(HttpClient http, ILogger<RailClient> logger) : IRailClient
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
 
     public Task<RailWallet> ResolveWalletAddressAsync(string pointer, CancellationToken ct = default) =>
         SendAsync<RailWallet>(
             new HttpRequestMessage(HttpMethod.Get, $"wallet-addresses?pointer={Uri.EscapeDataString(pointer)}"), ct);
+
+    // 201 (creado) y 200 (ya existía con esta clave) se tratan igual.
+    public Task<RailPayment> CreatePaymentAsync(Guid paymentId, RailPaymentRequest request,
+        CancellationToken ct = default) =>
+        SendAsync<RailPayment>(
+            new HttpRequestMessage(HttpMethod.Post, "payments")
+            {
+                Content = JsonContent.Create(request, options: Json),
+                Headers = { { "Idempotency-Key", paymentId.ToString() } },
+            }, ct);
+
+    public Task<RailPayment> GetPaymentAsync(Guid railPaymentId, CancellationToken ct = default) =>
+        SendAsync<RailPayment>(new HttpRequestMessage(HttpMethod.Get, $"payments/{railPaymentId}"), ct);
 
     private async Task<T> SendAsync<T>(HttpRequestMessage request, CancellationToken ct)
     {

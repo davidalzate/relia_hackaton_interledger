@@ -102,6 +102,8 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<ILedger, Ledger>();
 builder.Services.AddScoped<ICashAdjustmentService, CashAdjustmentService>();
+builder.Services.AddSingleton<RailRefreshThrottle>();
+builder.Services.AddScoped<IOperationSync, OperationSync>();
 builder.Services.AddScoped<IOperationService, OperationService>();
 builder.Services.AddScoped<ISimulatedInbox, SimulatedInbox>();
 builder.Services.AddScoped<IKeyService, KeyService>();
