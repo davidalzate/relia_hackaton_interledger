@@ -11,6 +11,12 @@
 
 ## Correr todo en local
 
+```sh
+./dev.sh
+```
+
+Levanta en orden el Rail Proxy, PostgreSQL y el backend, y por último el frontend. Espera a que cada uno responda antes de seguir. Ctrl+C detiene los tres; PostgreSQL sigue en Docker. Requiere Node 22.12+, el SDK de .NET 10, Docker abierto y `rail-proxy/.env`. Sin ese `.env` arranca sin proxy.
+
 | Pieza | URL | Cómo |
 |---|---|---|
 | Rail Proxy | `http://localhost:4000` | [rail-proxy/README.md](./rail-proxy/README.md) |
