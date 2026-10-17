@@ -6,32 +6,70 @@ import { provideRouter } from '@angular/router';
 import { ConfirmationService } from 'primeng/api';
 import { Observable, Subject, of, throwError } from 'rxjs';
 
-import { AgentService, DepositError, DepositReceipt } from '../../core/services/agent.service';
+import { ApiError } from '../../core/http/api';
+import { AgentService } from '../../core/services/agent.service';
+import { OperationsService } from '../../core/services/operations.service';
+import { ApiOperation, OperationPreview } from '../../shared/schemas/operation.schema';
 import { Operation } from '../../shared/types/agent';
 import { DepositComponent } from './deposit.component';
 
 registerLocaleData(localeEsCo);
 
-const op: Operation = {
-  id: 'RL-0001',
+const preview = (violations: OperationPreview['violations'] = []): OperationPreview => ({
+  type: 'deposit',
+  requestedAmount: 50_000,
+  roundAmount: true,
+  fee: { total: 1_000, relia: 500, agent: 500 },
+  netAmount: 50_000,
+  chargedAmount: 51_000,
+  quotaAfter: 49_000,
+  cashOnHandAfter: 51_000,
+  accruedCommissionAfter: 500,
+  violations,
+});
+
+const apiOp = (status: ApiOperation['status'], failureCode: ApiOperation['failureCode'] = null) =>
+  ({
+    id: 'op-1',
+    reference: 'OP-000001',
+    status,
+    failureCode,
+    netAmount: 50_000,
+    chargedAmount: 51_000,
+    fee: { total: 1_000, relia: 500, agent: 500 },
+  }) as ApiOperation;
+
+const recorded: Operation = {
+  id: 'op-1',
+  reference: 'OP-000001',
   type: 'deposit',
   amount: 51_000,
   status: 'completed',
   createdAt: '',
+  before: { cupo: 100_000, cash: 0, commission: 0 },
+  after: { cupo: 49_000, cash: 51_000, commission: 500 },
 };
 
-function setup(cupo: number, keyExists = true) {
+function setup(previewResult: OperationPreview = preview(), keyExists = true) {
+  vi.useFakeTimers();
   const agent = {
-    balances: signal({ cupo, commission: 0, cash: 0 }),
-    validateKey: vi.fn(() => of(keyExists)),
-    deposit: vi.fn((): Observable<DepositReceipt> => new Subject<DepositReceipt>()),
+    balances: signal({ cupo: 100_000, commission: 0, cash: 0 }),
+    validateKey: vi.fn(() =>
+      of(keyExists ? { phone: '3000000001', walletAddressMasked: '$ilp...test.dev/je***' } : null),
+    ),
+    previewOperation: vi.fn(() => of(previewResult)),
+    createDeposit: vi.fn((): Observable<ApiOperation> => of(apiOp('pending'))),
+    recordApiOperation: vi.fn((op: ApiOperation) => ({ ...recorded, status: op.status })),
   };
+  const watch = new Subject<ApiOperation>();
+  const operations = { watch: vi.fn(() => watch) };
   TestBed.configureTestingModule({
     providers: [
       provideRouter([]),
       ConfirmationService,
       { provide: LOCALE_ID, useValue: 'es-CO' },
       { provide: AgentService, useValue: agent },
+      { provide: OperationsService, useValue: operations },
     ],
   });
   // Acepta B4 de inmediato y guarda el mensaje mostrado
@@ -41,97 +79,109 @@ function setup(cupo: number, keyExists = true) {
   const fixture = TestBed.createComponent(DepositComponent);
   fixture.detectChanges();
   const c = fixture.componentInstance as unknown as Record<string, any>;
-  const button = () =>
-    (fixture.nativeElement as HTMLElement).querySelector(
-      'button[type=submit]',
-    ) as HTMLButtonElement;
+  const el = fixture.nativeElement as HTMLElement;
+  const button = () => el.querySelector('button[type=submit]') as HTMLButtonElement;
   const fill = (phone: string, amount: number, roundForUser = false) => {
     c['form'].patchValue({ phone, amount, roundForUser });
+    vi.advanceTimersByTime(300);
     fixture.detectChanges();
   };
-  return { fixture, c, agent, button, fill, confirm };
+  return { fixture, c, el, agent, operations, watch, button, fill, confirm };
 }
 
 describe('DepositComponent', () => {
-  it('valida la llave y confirma el depósito con el desglose', () => {
-    const { fixture, c, agent, button, fill, confirm } = setup(100_000);
+  afterEach(() => vi.useRealTimers());
+
+  it('pide el desglose al API, valida la llave y crea el depósito', () => {
+    const { fixture, c, el, agent, operations, button, fill, confirm } = setup();
     fill('300 000 0001', 50_000, true);
+    expect(agent.previewOperation).toHaveBeenCalledWith('deposit', 50_000, true);
+    expect(el.querySelector('.tell')?.textContent).toContain('51.000');
     expect(button().textContent).toContain('Validar llave');
-    expect(button().disabled).toBe(false);
 
     c['submit']();
     fixture.detectChanges();
-    expect(agent.validateKey).toHaveBeenCalledWith('3000000001', false);
+    expect(agent.validateKey).toHaveBeenCalledWith('3000000001');
+    expect(el.textContent).toContain('$ilp...test.dev/je***');
     expect(button().textContent).toContain('Confirmar depósito');
 
     c['submit']();
-    // es-CO separa el símbolo con espacio no separable
     expect(confirm.mock.calls[0][0].message).toMatch(
       /^¿Confirmas que recibiste en efectivo un total de \$\s51\.000 por parte del usuario\?$/,
     );
-    expect(agent.deposit).toHaveBeenCalledWith({
-      phone: '3000000001',
-      roundForUser: true,
-      cashIn: 51_000,
-      walletOut: 50_000,
-      commission: 500,
-    });
+    expect(agent.createDeposit).toHaveBeenCalledWith(
+      { phone: '3000000001', requestedAmount: 50_000, roundAmount: true },
+      expect.any(String),
+    );
+    expect(operations.watch).toHaveBeenCalledWith('op-1');
   });
 
-  it('muestra Enviando y luego Completado con el resumen', () => {
-    const { fixture, c, agent, fill } = setup(100_000);
-    const result = new Subject<DepositReceipt>();
-    agent.deposit.mockReturnValue(result);
+  it('muestra Enviando mientras está pending y luego Completado', () => {
+    const { fixture, c, el, watch, fill } = setup();
     fill('300 000 0001', 50_000, true);
     c['submit']();
     c['submit']();
+    watch.next(apiOp('pending'));
     fixture.detectChanges();
-    const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('Enviando a la billetera');
     expect(el.textContent).toContain('No cierres esta pantalla.');
 
-    result.next({
-      operation: { ...op, status: 'completed' },
-      walletOut: 50_000,
-      before: { cupo: 100_000, cash: 0, commission: 0 },
-      after: { cupo: 49_000, cash: 51_000, commission: 500 },
-    });
+    watch.next(apiOp('completed'));
     fixture.detectChanges();
     expect(el.textContent).toContain('Depósito completado');
-    expect(el.textContent).toContain('llegaron a la billetera del usuario');
+    expect(el.textContent).toContain('OP-000001');
     expect(el.querySelector('.sms')?.textContent).toContain('Recibiste');
-    expect(el.querySelector('button.btn-outline-light')?.textContent?.trim()).toBe(
-      'Ver comprobante',
-    );
   });
 
-  it('error de cupo muestra B2.6 e Intentar de nuevo conserva los datos', () => {
-    const { fixture, c, agent, fill } = setup(100_000);
-    agent.deposit.mockReturnValue(
-      throwError(() => new DepositError('cupo', { ...op, status: 'failed' })),
+  it('422 insufficient_quota → Cupo insuficiente; reintentar usa la misma clave', () => {
+    const { fixture, c, el, agent, fill } = setup();
+    agent.createDeposit.mockReturnValue(
+      throwError(
+        () => new ApiError(422, { title: 'Cupo', status: 422, code: 'insufficient_quota' }),
+      ),
     );
     fill('300 000 0001', 50_000, true);
     c['submit']();
     c['submit']();
     fixture.detectChanges();
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.textContent).toContain(
-      'No hay cupo para este depósito. Carga cupo y vuelve a intentar.',
-    );
-    expect(el.textContent).toContain('Operación RL-0001');
+    expect(el.textContent).toContain('No hay cupo para este depósito.');
 
     c['retry']();
     fixture.detectChanges();
-    expect(c['form'].getRawValue()).toMatchObject({
-      phone: '300 000 0001',
-      amount: 50_000,
-      roundForUser: true,
-    });
-    expect(el.textContent).toContain('Confirmar depósito');
+    expect(c['form'].getRawValue()).toMatchObject({ phone: '300 000 0001', amount: 50_000 });
+    c['submit']();
+    const keys = agent.createDeposit.mock.calls.map((call) => (call as unknown[])[1]);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('pago fallido → B2.6 y el reintento usa una clave nueva', () => {
+    const { fixture, c, el, agent, watch, fill } = setup();
+    fill('300 000 0001', 50_000, true);
+    c['submit']();
+    c['submit']();
+    watch.next(apiOp('failed', 'payment_failed'));
+    fixture.detectChanges();
+    expect(el.textContent).toContain('El pago falló');
+    expect(el.textContent).toContain('Operación OP-000001');
+
+    c['retry']();
+    c['submit']();
+    const keys = agent.createDeposit.mock.calls.map((call) => (call as unknown[])[1]);
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it('503 rail_unavailable → El simulador no respondió', () => {
+    const { fixture, c, el, agent, fill } = setup();
+    agent.createDeposit.mockReturnValue(throwError(() => new ApiError(503, null)));
+    fill('300 000 0001', 50_000, true);
+    c['submit']();
+    c['submit']();
+    fixture.detectChanges();
+    expect(el.textContent).toContain('El simulador no respondió. No se movió dinero.');
   });
 
   it('cambiar el celular borra la validación', () => {
-    const { c, fill, button } = setup(100_000);
+    const { c, fill, button } = setup();
     fill('300 000 0001', 50_000);
     c['submit']();
     fill('300 000 0002', 50_000);
@@ -139,7 +189,7 @@ describe('DepositComponent', () => {
   });
 
   it('si la llave no existe abre B5 y al enviar marca la invitación', () => {
-    const { fixture, c, fill } = setup(100_000, false);
+    const { fixture, c, el, fill } = setup(preview(), false);
     fill('300 000 0002', 50_000);
     c['submit']();
     fixture.detectChanges();
@@ -148,26 +198,29 @@ describe('DepositComponent', () => {
     c['inviteSent'].set(true);
     c['inviteOpen'].set(false);
     fixture.detectChanges();
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
-      'Invitación enviada por WhatsApp.',
-    );
+    expect(el.textContent).toContain('Invitación enviada por WhatsApp.');
   });
 
   it('formatea el celular a 300 000 0001 con máximo 10 dígitos', () => {
-    const { c } = setup(0);
+    const { c } = setup();
     c['form'].controls.phone.setValue('300-000a00019999');
     c['formatPhone']();
     expect(c['form'].controls.phone.value).toBe('300 000 0001');
   });
 
-  it('bloquea con cupo insuficiente y monto bajo', () => {
-    const { fixture, fill, button } = setup(10_000);
-    fill('300 000 0001', 20_000);
-    const el = fixture.nativeElement as HTMLElement;
+  it('violaciones del preview bloquean el botón', () => {
+    const { el, fill, button } = setup(
+      preview([{ code: 'insufficient_quota', shortfall: 10_000 }]),
+    );
+    fill('300 000 0001', 50_000);
     expect(el.textContent).toContain('Cupo insuficiente, faltan');
     expect(button().disabled).toBe(true);
+  });
 
+  it('amount_too_low muestra el aviso sin desglose', () => {
+    const { el, fill } = setup(preview([{ code: 'amount_too_low' }]));
     fill('300 000 0001', 900);
     expect(el.textContent).toContain('El monto debe ser mayor a $1.000.');
+    expect(el.querySelector('.tell')).toBeNull();
   });
 });

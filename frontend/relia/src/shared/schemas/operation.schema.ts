@@ -50,3 +50,25 @@ export const FAILURE_TEXT: Record<FailureCode, string> = {
   payment_failed: 'El pago falló',
   rail_unavailable: 'El simulador no respondió. No se movió dinero.',
 };
+
+export const OperationPreviewSchema = z.object({
+  type: z.enum(['deposit', 'withdrawal']),
+  requestedAmount: z.number(),
+  roundAmount: z.boolean(),
+  fee: z.object({ total: z.number(), relia: z.number(), agent: z.number() }),
+  netAmount: z.number(),
+  chargedAmount: z.number(),
+  quotaAfter: z.number(),
+  cashOnHandAfter: z.number(),
+  accruedCommissionAfter: z.number(),
+  violations: z.array(
+    z.object({
+      code: z.enum(['amount_too_low', 'insufficient_quota', 'insufficient_cash']),
+      shortfall: z.optional(z.number()),
+    }),
+  ),
+});
+export type OperationPreview = z.infer<typeof OperationPreviewSchema>;
+
+export const KeyLookupSchema = z.object({ phone: z.string(), walletAddressMasked: z.string() });
+export type KeyLookup = z.infer<typeof KeyLookupSchema>;

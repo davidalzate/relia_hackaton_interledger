@@ -17,7 +17,9 @@ function setup(cash: number) {
   });
   const agent = TestBed.inject(AgentService);
   agent['_balances'].set({ cupo: 0, cash, commission: 0 });
-  vi.spyOn(agent, 'validateKey').mockReturnValue(of(true));
+  vi.spyOn(agent, 'validateKey').mockReturnValue(
+    of({ phone: '3000000001', walletAddressMasked: '$ilp...test.dev/je***' }),
+  );
   const confirm = vi
     .spyOn(TestBed.inject(ConfirmationService), 'confirm')
     .mockImplementation((c) => (c.accept?.(), TestBed.inject(ConfirmationService)));

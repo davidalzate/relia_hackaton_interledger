@@ -239,12 +239,6 @@
         </button>
       } @else {
         <button class="btn-primary" type="submit" [disabled]="!canValidate()">Validar llave</button>
-
-        <div class="check">
-          <p-checkbox inputId="simulate" formControlName="simulateMissing" [binary]="true" />
-          <label for="simulate">Simular que la llave no existe</label>
-          <span class="badge-sim">Simulación</span>
-        </div>
       }
     </form>
   </main>
