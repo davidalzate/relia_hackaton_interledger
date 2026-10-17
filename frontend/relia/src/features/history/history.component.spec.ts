@@ -32,7 +32,10 @@ function setup() {
 describe('HistoryComponent', () => {
   it('lista más reciente primero con saldos y "Pendiente" en operaciones pendientes', () => {
     const { agent, el, render } = setup();
-    agent.updateCash('add', 100_000);
+    agent['record'](100_000, 'completed', 'cash', {
+      before: { cupo: 0, commission: 0, cash: 0 },
+      after: { cupo: 0, commission: 0, cash: 100_000 },
+    });
     agent.requestCupoLoad({ method: 'breb', amount: 300_000 });
     render();
 
@@ -50,7 +53,7 @@ describe('HistoryComponent', () => {
 
   it('filtra por tipo y muestra el vacío', () => {
     const { agent, c, el, render, http } = setup();
-    agent.updateCash('set', 50_000);
+    agent['record'](50_000, 'completed', 'cash-set');
     render();
     c['filter'].set('cashAdjustment');
     render();

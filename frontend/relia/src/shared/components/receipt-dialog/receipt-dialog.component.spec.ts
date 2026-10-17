@@ -89,7 +89,13 @@ describe('ReceiptDialogComponent (B9)', () => {
   });
 
   it('ajuste de efectivo muestra "nuevo total en caja"', async () => {
-    const { card, rows } = await open((agent) => agent.updateCash('set', 70_000).operation.id);
+    const { card, rows } = await open(
+      (agent) =>
+        agent['record'](70_000, 'completed', 'cash-set', {
+          before: { cupo: 0, commission: 0, cash: 0 },
+          after: { cupo: 0, commission: 0, cash: 70_000 },
+        }).id,
+    );
     expect(card().textContent).toContain('nuevo total en caja');
     expect(rows()['Efectivo después']).toBe('$ 70.000');
   });

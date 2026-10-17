@@ -129,20 +129,33 @@ describe('AgentService carga de cupo', () => {
 });
 
 describe('AgentService efectivo en caja', () => {
-  it('sumar agrega al efectivo y fijar lo reemplaza, sin tocar cupo ni comisión', () => {
+  it('POST cash-adjustments con Idempotency-Key; actualiza solo el efectivo', async () => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
     const agent = TestBed.inject(AgentService);
     agent['_balances'].set({ cupo: 10, commission: 5, cash: 20_000 });
 
-    expect(agent.updateCash('add', 30_000)).toMatchObject({ before: 20_000, after: 50_000 });
-    expect(agent.operations()[0]).toMatchObject({
-      type: 'cash',
-      amount: 30_000,
-      status: 'completed',
+    const done = firstValueFrom(agent.updateCash('set', 0, 'clave-123'));
+    const req = TestBed.inject(HttpTestingController).expectOne((r) =>
+      r.url.endsWith('/cash-adjustments'),
+    );
+    expect(req.request.body).toEqual({ mode: 'set', amount: 0 });
+    expect(req.request.headers.get('Idempotency-Key')).toBe('clave-123');
+    req.flush({
+      id: 'adj-1',
+      agentId: 'a',
+      mode: 'set',
+      variation: -20_000,
+      reason: 'Ajuste de efectivo',
+      cashOnHand: { before: 20_000, after: 0 },
+      createdAt: '2026-10-16T15:00:00Z',
     });
 
-    expect(agent.updateCash('set', 0)).toMatchObject({ before: 50_000, after: 0 });
-    expect(agent.operations()[0].type).toBe('cash-set');
+    expect(await done).toMatchObject({ before: 20_000, after: 0 });
     expect(agent.balances()).toEqual({ cupo: 10, commission: 5, cash: 0 });
+    expect(agent.recentOperations()[0]).toMatchObject({ id: 'adj-1', type: 'cash-set' });
+    expect(agent.operations()).toEqual([]);
   });
 });
 

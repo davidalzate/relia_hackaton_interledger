@@ -47,14 +47,21 @@
       </div>
     </dl>
 
-    <button class="btn-primary" type="submit" [disabled]="!canSave()">Guardar efectivo</button>
+    @if (error(); as e) {
+      <p class="error" role="alert">{{ e }}</p>
+    }
+
+    <button class="btn-primary" type="submit" [disabled]="!canSave() || saving()">
+      {{ saving() ? 'Guardando…' : 'Guardar efectivo' }}
+    </button>
 
     @if (saved(); as s) {
       <div class="saved" role="status">
         <p>
           <strong>Efectivo actualizado</strong> ·
           {{ s.before | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} →
-          {{ s.after | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} · {{ s.operation.id }}
+          {{ s.after | currency: 'COP' : 'symbol-narrow' : '1.0-0' }} ·
+          {{ s.operation.reference ?? s.operation.id }}
         </p>
         <a routerLink="/caja">Volver a la caja</a>
       </div>
