@@ -3,7 +3,8 @@
 Type: task
 Status: open
 Blocked by: [07](07-operations-get.md), [10](10-keys-get.md), [09](09-operations-preview.md)
-Labels: wayfinder:task, frontend
+Labels: wayfinder:task, frontend, feature:depositar
+Feature: Depositar (B2)
 
 ## Question
 

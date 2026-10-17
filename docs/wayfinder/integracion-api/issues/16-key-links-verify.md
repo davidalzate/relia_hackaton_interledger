@@ -3,7 +3,8 @@
 Type: task
 Status: open
 Blocked by: [15](15-key-links.md)
-Labels: wayfinder:task, frontend
+Labels: wayfinder:task, frontend, feature:llaves
+Feature: Llave inexistente y vinculación (B5, C1)
 
 ## Question
 

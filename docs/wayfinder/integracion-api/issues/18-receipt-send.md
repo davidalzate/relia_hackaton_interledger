@@ -3,7 +3,8 @@
 Type: task
 Status: open
 Blocked by: [17](17-receipt.md)
-Labels: wayfinder:task, frontend
+Labels: wayfinder:task, frontend, feature:comprobante
+Feature: Comprobante (B9)
 
 ## Question
 

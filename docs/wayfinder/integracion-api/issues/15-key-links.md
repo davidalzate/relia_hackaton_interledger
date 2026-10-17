@@ -3,7 +3,8 @@
 Type: task
 Status: open
 Blocked by: [00](00-base-http.md)
-Labels: wayfinder:task, frontend
+Labels: wayfinder:task, frontend, feature:llaves
+Feature: Llave inexistente y vinculación (B5, C1)
 
 ## Question
 

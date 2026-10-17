@@ -3,7 +3,8 @@
 Type: task
 Status: open
 Blocked by: [12](12-withdrawals.md)
-Labels: wayfinder:task, frontend
+Labels: wayfinder:task, frontend, feature:retirar
+Feature: Retirar (B3)
 
 ## Question
 

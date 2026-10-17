@@ -3,7 +3,8 @@
 Type: task
 Status: open
 Blocked by: [06](06-quota-top-ups.md)
-Labels: wayfinder:task, frontend
+Labels: wayfinder:task, frontend, feature:cargar-cupo
+Feature: Cargar cupo (B6)
 
 ## Question
 

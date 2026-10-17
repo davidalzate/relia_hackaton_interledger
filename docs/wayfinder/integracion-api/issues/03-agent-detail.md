@@ -1,9 +1,11 @@
 # Integrar GET /agents/{agentId}
 
 Type: task
-Status: open
+Status: claimed
+PR: [#22](https://github.com/davidalzate/relia_hackaton_interledger/pull/22)
 Blocked by: [00](00-base-http.md)
-Labels: wayfinder:task, frontend
+Labels: wayfinder:task, frontend, feature:base
+Feature: Base y sesión
 
 ## Question
 
@@ -20,3 +22,7 @@ Conectar el frontend (`frontend/relia`) al endpoint real de la Relia API y retir
 - [ ] Avisos de bajo (< $50.000) calculados en el front con `LOW_BALANCE_THRESHOLD`.
 - [ ] Se refresca tras cada operación terminal.
 - [ ] Test unitario del servicio con `HttpTestingController` (éxito y error principal).
+
+## Notas
+
+- D2 (admin) queda para la feature Admin: necesita los ids reales de `GET /agents` (ticket 20). `refresh()` no se llama al entrar a cada pantalla mientras haya operaciones en mock.

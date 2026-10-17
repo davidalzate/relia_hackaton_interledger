@@ -3,7 +3,8 @@
 Type: task
 Status: open
 Blocked by: [07](07-operations-get.md)
-Labels: wayfinder:task, frontend
+Labels: wayfinder:task, frontend, feature:comprobante
+Feature: Comprobante (B9)
 
 ## Question
 
