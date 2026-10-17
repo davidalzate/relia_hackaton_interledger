@@ -27,6 +27,12 @@ public static class ApiErrors
     public static ApiException NotFound() =>
         new(StatusCodes.Status404NotFound, "not_found", "No existe");
 
+    public static ApiException KeyNotFound() =>
+        new(StatusCodes.Status404NotFound, "key_not_found", "El celular no tiene llave");
+
+    public static ApiException KeyAlreadyLinked() =>
+        new(StatusCodes.Status409Conflict, "key_already_linked", "El celular ya tiene llave");
+
     /// <summary>422 insufficient_cash con lo que falta (ajustes por debajo de lo reservado, retiros).</summary>
     public static ApiException InsufficientCash(long shortfall) =>
         new(StatusCodes.Status422UnprocessableEntity, "insufficient_cash", "Efectivo insuficiente",

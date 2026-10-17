@@ -183,3 +183,27 @@ public record SettlementPageDto(IReadOnlyList<SettlementDto> Items, string? Next
 
 public record SettlementQuery(
     DateOnly? From, DateOnly? To, Guid? AgentId, SettlementStatus? Status, string? Cursor, int Limit);
+
+// ---- Modo demo: bandeja del teléfono simulado ----
+
+public enum DemoMessageChannel { Sms, [JsonStringEnumMemberName("whatsapp")] WhatsApp }
+
+/// <summary>Nombres del contrato; la base usa otros (wallet_invitation, deposit_notice…), ver SimulatedInbox.</summary>
+public enum DemoMessageType
+{
+    [JsonStringEnumMemberName("otp")] Otp,
+    [JsonStringEnumMemberName("invitacion_wallet")] WalletInvitation,
+    [JsonStringEnumMemberName("aviso_deposito")] DepositNotice,
+    [JsonStringEnumMemberName("solicitud_pago")] PaymentRequest,
+    [JsonStringEnumMemberName("comprobante")] Receipt,
+    [JsonStringEnumMemberName("aviso_comision")] CommissionNotice,
+}
+
+public record DemoMessageDto(
+    string Id, string Phone, DemoMessageChannel Channel, DemoMessageType Type, string Content, string? Link,
+    Guid? OperationId, bool Read, DateTimeOffset CreatedAt);
+
+public record DemoMessagePageDto(IReadOnlyList<DemoMessageDto> Items, int UnreadCount, string? NextCursor);
+
+/// <summary>Sin celular, marca todos.</summary>
+public record MarkDemoMessagesReadRequest([RegularExpression(Patterns.Phone)] string? Phone);

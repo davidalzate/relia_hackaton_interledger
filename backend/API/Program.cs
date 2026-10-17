@@ -89,6 +89,7 @@ builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<ILedger, Ledger>();
 builder.Services.AddScoped<ICashAdjustmentService, CashAdjustmentService>();
 builder.Services.AddScoped<IOperationService, OperationService>();
+builder.Services.AddScoped<ISimulatedInbox, SimulatedInbox>();
 builder.Services.AddScoped<IKeyService, KeyService>();
 builder.Services.AddScoped<IReceiptService, ReceiptService>();
 builder.Services.AddScoped<ISettlementService, SettlementService>();

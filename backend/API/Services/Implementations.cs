@@ -54,17 +54,6 @@ public class OperationService(
         throw new FeatureInDevelopmentException("confirmCashHandover");
 }
 
-/// <summary>Ticket 05.</summary>
-public class KeyService(IWalletKeyRepository keys, ISimulatedMessageRepository messages, IUnitOfWork unitOfWork)
-    : IKeyService
-{
-    public Task<KeyLookupDto> LookupAsync(string phone, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("getKey");
-
-    public Task<KeyInvitationDto> InviteAsync(string phone, string idempotencyKey, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("createKeyInvitation");
-}
-
 /// <summary>Ticket 08.</summary>
 public class ReceiptService(
     IOperationRepository operations, IReceiptRepository receipts, ISimulatedMessageRepository messages,

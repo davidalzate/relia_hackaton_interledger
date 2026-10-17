@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Relia.Api.Contracts;
+using Relia.Api.Idempotency;
 using Relia.Api.Services;
 
 namespace Relia.Api.Controllers;
@@ -16,6 +17,7 @@ public class KeysController(IKeyService keys) : ControllerBase
     public Task<KeyLookupDto> Lookup(string phone, CancellationToken ct) => keys.LookupAsync(phone, ct);
 
     [HttpPost("invitations")]
+    [Idempotent]
     public async Task<ActionResult<KeyInvitationDto>> Invite(
         string phone,
         [FromHeader(Name = "Idempotency-Key"), Required, StringLength(128, MinimumLength = 8)] string idempotencyKey,

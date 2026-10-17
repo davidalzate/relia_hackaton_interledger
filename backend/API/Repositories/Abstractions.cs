@@ -142,4 +142,16 @@ public interface ISettlementRepository
 public interface ISimulatedMessageRepository
 {
     void Add(SimulatedMessage message);
+
+    /// <summary>
+    /// El más reciente primero (id descendente). <paramref name="phone"/> null = todos los celulares;
+    /// <paramref name="beforeId"/> = id del último mensaje de la página anterior.
+    /// </summary>
+    Task<IReadOnlyList<SimulatedMessage>> ListAsync(string? phone, long? beforeId, int limit,
+        CancellationToken ct = default);
+
+    Task<int> CountUnreadAsync(string? phone, CancellationToken ct = default);
+
+    /// <summary>Marca como leídos los no leídos del celular, o de todos si es null. Escribe de inmediato.</summary>
+    Task MarkReadAsync(string? phone, CancellationToken ct = default);
 }

@@ -208,4 +208,22 @@ public class EfSettlementRepository(ReliaDbContext db) : ISettlementRepository
 public class EfSimulatedMessageRepository(ReliaDbContext db) : ISimulatedMessageRepository
 {
     public void Add(SimulatedMessage message) => db.SimulatedMessages.Add(message);
+
+    public async Task<IReadOnlyList<SimulatedMessage>> ListAsync(string? phone, long? beforeId, int limit,
+        CancellationToken ct = default)
+    {
+        var q = ForPhone(phone);
+        if (beforeId is not null) q = q.Where(m => m.Id < beforeId);
+        return await q.OrderByDescending(m => m.Id).Take(limit).ToListAsync(ct);
+    }
+
+    public Task<int> CountUnreadAsync(string? phone, CancellationToken ct = default) =>
+        ForPhone(phone).CountAsync(m => !m.Read, ct);
+
+    public Task MarkReadAsync(string? phone, CancellationToken ct = default) =>
+        ForPhone(phone).Where(m => !m.Read).ExecuteUpdateAsync(s => s.SetProperty(m => m.Read, true), ct);
+
+    private IQueryable<SimulatedMessage> ForPhone(string? phone) =>
+        phone is null ? db.SimulatedMessages.AsNoTracking()
+            : db.SimulatedMessages.AsNoTracking().Where(m => m.Recipient == phone);
 }
