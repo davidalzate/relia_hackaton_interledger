@@ -5,9 +5,9 @@ namespace Relia.Api.Services;
 /// </summary>
 public static class Masking
 {
-    /// <summary>"3000000001" → "300 *** 0001".</summary>
+    /// <summary>"+573000000001" → "+57300 *** 0001": oculta los 3 dígitos antes de los últimos 4.</summary>
     public static string Phone(string phone) =>
-        phone.Length < 7 ? "***" : $"{phone[..3]} *** {phone[^4..]}";
+        phone.Length < 9 ? "***" : $"{phone[..^7]} *** {phone[^4..]}";
 
     /// <summary>
     /// "$ilp.interledger-test.dev/usuario" → "$ilp...test.dev/us***": primera etiqueta y últimos 8 caracteres del

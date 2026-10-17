@@ -9,7 +9,7 @@ namespace Relia.Api.Persistence;
 
 /// <summary>
 /// Datos iniciales de la demo: tarifa vigente, un admin, los 4 corresponsales de docs/prototype.md §9.4
-/// (Rosa en ceros, los demás con historial de ejemplo) y la llave 3000000001 → jeffdev; el 3000000002
+/// (Rosa en ceros, los demás con historial de ejemplo) y la llave +573000000001 → jeffdev; el +573000000002
 /// queda sin llave. Corre al arrancar con la base vacía y en POST /demo/reset.
 /// </summary>
 /// <remarks>
@@ -23,7 +23,7 @@ public class DemoSeeder(
     public const string AgentPassword = "demo1234";
     public const string AdminEmail = "admin@relia.co";
     public const string AdminPassword = "admin1234";
-    public const string LinkedCustomerPhone = "3000000001";
+    public const string LinkedCustomerPhone = "+573000000001";
     public const string LinkedCustomerWallet = "$ilp.interledger-test.dev/jeffdev";
 
     private const long FeeTotal = 1000;
@@ -32,22 +32,22 @@ public class DemoSeeder(
     private static readonly DemoAgent[] Agents =
     [
         new("rosa@demo.relia", "Tienda Doña Rosa", "Rosa Gómez", "Bogotá", "Calle 45 # 13-20",
-            "3105550101", "$ilp.interledger-test.dev/rosa-test", WalletSimulated: false, []),
+            "+573105550101", "$ilp.interledger-test.dev/rosa-test", WalletSimulated: false, []),
         new("luis@demo.relia", "Droguería San José", "Luis Pérez", "Medellín", "Carrera 70 # 44-12",
-            "3105550102", "$ilp.interledger-test.dev/drogueria-san-jose", WalletSimulated: true,
+            "+573105550102", "$ilp.interledger-test.dev/drogueria-san-jose", WalletSimulated: true,
             [
                 new CashStep(400_000), new TopUpStep(1_500_000), new DepositStep(120_000, Round: false),
                 new DepositStep(50_000, Round: true), new WithdrawalStep(80_000, Round: false),
                 new DepositStep(200_000, Round: false), new WithdrawalStep(60_000, Round: true),
             ]),
         new("diana@demo.relia", "Minimercado El Paisa", "Diana Ríos", "Cali", "Calle 5 # 38-40",
-            "3105550103", "$ilp.interledger-test.dev/minimercado-el-paisa", WalletSimulated: true,
+            "+573105550103", "$ilp.interledger-test.dev/minimercado-el-paisa", WalletSimulated: true,
             [
                 new CashStep(250_000), new TopUpStep(800_000), new DepositStep(70_000, Round: true),
                 new WithdrawalStep(150_000, Round: false), new DepositStep(30_000, Round: false),
             ]),
         new("jorge@demo.relia", "Papelería La 70", "Jorge Mora", "Bogotá", "Calle 70 # 11-25",
-            "3105550104", "$ilp.interledger-test.dev/papeleria-la-70", WalletSimulated: true,
+            "+573105550104", "$ilp.interledger-test.dev/papeleria-la-70", WalletSimulated: true,
             [
                 new CashStep(150_000), new TopUpStep(500_000), new WithdrawalStep(40_000, Round: false),
                 new DepositStep(90_000, Round: true),

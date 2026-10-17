@@ -8,7 +8,7 @@ namespace Relia.Api.Contracts;
 
 internal static class Patterns
 {
-    public const string Phone = "^3[0-9]{9}$";
+    public const string Phone = @"^\+[1-9][0-9]{7,14}$";
 
     /// <summary>Payment pointer ($dominio/ruta).</summary>
     public const string WalletAddress = @"^\$[^\s/]+(/\S*)?$";

@@ -18,8 +18,6 @@ public class KeyService(
     /// <summary>Ruta de la página pública de vinculación en el frontend; lee el celular de ?phone=.</summary>
     private const string KeyLinkPath = "/vincular";
 
-    /// <summary>Indicativo de Colombia para wa.me.</summary>
-    private const string CountryCode = "57";
 
     public async Task<KeyLookupDto> LookupAsync(string phone, CancellationToken ct = default)
     {
@@ -32,10 +30,10 @@ public class KeyService(
         {
             if (await keys.GetByPhoneAsync(phone, tx) is not null) throw ApiErrors.KeyAlreadyLinked();
 
-            var link = $"{options.Value.PublicBaseUrl.TrimEnd('/')}{KeyLinkPath}?phone={phone}";
+            var link = $"{options.Value.PublicBaseUrl.TrimEnd('/')}{KeyLinkPath}?phone={Uri.EscapeDataString(phone)}";
             var text = $"Hola, te invito a vincular tu wallet en {link}";
             var message = inbox.Send(MessageChannel.WhatsApp, MessageKind.WalletInvitation, phone, text, link);
-            var waLink = $"https://wa.me/{CountryCode}{phone}?text={Uri.EscapeDataString(text)}";
+            var waLink = $"https://wa.me/{phone.TrimStart('+')}?text={Uri.EscapeDataString(text)}";
             return new KeyInvitationDto(phone, waLink, text, message.CreatedAt);
         }, ct);
 }
