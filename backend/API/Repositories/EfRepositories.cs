@@ -11,6 +11,15 @@ public class EfUnitOfWork(ReliaDbContext db) : IUnitOfWork
 
     public async Task<T> InTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken ct = default)
     {
+        // Si ya hay una transacción abierta (la del filtro de idempotencia), se trabaja dentro de ella:
+        // quien la abrió decide si confirma, para que la creación y su registro sean atómicos.
+        if (db.Database.CurrentTransaction is not null)
+        {
+            var joined = await work(ct);
+            await db.SaveChangesAsync(ct);
+            return joined;
+        }
+
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var result = await work(ct);
         await db.SaveChangesAsync(ct);
@@ -27,10 +36,16 @@ public class EfAgentRepository(ReliaDbContext db) : IAgentRepository
     public Task<Agent?> GetByEmailAsync(string email, CancellationToken ct = default) =>
         db.Agents.FirstOrDefaultAsync(a => a.Email.ToLower() == email.ToLower(), ct);
 
-    public Task<AgentBalance> GetBalanceForUpdateAsync(Guid agentId, CancellationToken ct = default) =>
-        db.AgentBalances
+    public async Task<AgentBalance?> GetBalanceForUpdateAsync(Guid agentId, CancellationToken ct = default)
+    {
+        // Si la fila ya estaba en el change tracker, EF devuelve esa instancia sin pisar sus valores:
+        // se recarga para decidir sobre lo que hay en la base después de tomar el bloqueo.
+        var balance = await db.AgentBalances
             .FromSqlInterpolated($"SELECT * FROM agent_balances WHERE agent_id = {agentId} FOR UPDATE")
-            .SingleAsync(ct);
+            .SingleOrDefaultAsync(ct);
+        if (balance is not null) await db.Entry(balance).ReloadAsync(ct);
+        return balance;
+    }
 }
 
 public class EfAdminRepository(ReliaDbContext db) : IAdminRepository

@@ -86,9 +86,10 @@ public record HistoryPageDto(IReadOnlyList<HistoryEntryDto> Items, string? NextC
 
 // ---- Efectivo en caja ----
 
+// Nullable + [Required]: con tipos de valor, un campo ausente llegaría como 0 o como el primer valor del enum.
 public record CreateCashAdjustmentRequest(
-    [Required] CashAdjustmentMode Mode,
-    [Range(0, long.MaxValue)] long Amount,
+    [Required] CashAdjustmentMode? Mode,
+    [Required, Range(0, long.MaxValue)] long? Amount,
     [MaxLength(200)] string? Reason);
 
 public record CashAdjustmentDto(

@@ -289,6 +289,8 @@ public class IdempotencyRecord
 
     public short ResponseStatus { get; set; }
     public JsonDocument ResponseBody { get; set; } = JsonDocument.Parse("{}");
+    /// <summary>URL del recurso creado (header Location de la respuesta), si la hubo.</summary>
     public string? ResourceId { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 }

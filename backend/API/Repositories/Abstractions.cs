@@ -7,7 +7,10 @@ public interface IUnitOfWork
 {
     Task SaveChangesAsync(CancellationToken ct = default);
 
-    /// <summary>Ejecuta <paramref name="work"/> en una transacción SQL; hace rollback si lanza.</summary>
+    /// <summary>
+    /// Ejecuta <paramref name="work"/> en una transacción SQL; hace rollback si lanza. Si ya hay una
+    /// transacción abierta, guarda dentro de ella y la deja para que la confirme quien la abrió.
+    /// </summary>
     Task<T> InTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken ct = default);
 }
 
@@ -16,8 +19,11 @@ public interface IAgentRepository
     Task<Agent?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<Agent?> GetByEmailAsync(string email, CancellationToken ct = default);
 
-    /// <summary>Lee la fila de agent_balances con SELECT ... FOR UPDATE. Solo dentro de una transacción.</summary>
-    Task<AgentBalance> GetBalanceForUpdateAsync(Guid agentId, CancellationToken ct = default);
+    /// <summary>
+    /// Lee la fila de agent_balances con SELECT ... FOR UPDATE, con los valores de la base aunque EF ya la
+    /// tuviera en memoria. Solo dentro de una transacción. Null si el corresponsal no existe.
+    /// </summary>
+    Task<AgentBalance?> GetBalanceForUpdateAsync(Guid agentId, CancellationToken ct = default);
 }
 
 public interface IAdminRepository

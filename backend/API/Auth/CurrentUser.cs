@@ -38,6 +38,15 @@ public static class CurrentUserAccess
     {
         if (user.Role == Role.Agent && user.AgentId != agentId) throw ApiErrors.Forbidden();
     }
+
+    /// <summary>
+    /// Regla para operar (depósitos, retiros, cargas, ajustes): solo el corresponsal dueño. El admin lee
+    /// todo pero no opera por el corresponsal.
+    /// </summary>
+    public static void EnsureCanOperateAgent(this ICurrentUser user, Guid agentId)
+    {
+        if (user.Role != Role.Agent || user.AgentId != agentId) throw ApiErrors.Forbidden();
+    }
 }
 
 public class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUser

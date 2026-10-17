@@ -39,7 +39,9 @@ builder.Services.AddControllers()
                 .Where(e => e.Value?.Errors.Count > 0)
                 .SelectMany(e => e.Value!.Errors.Select(err => new
                 {
-                    field = JsonNamingPolicy.CamelCase.ConvertName(e.Key), message = err.ErrorMessage,
+                    // Propiedades del cuerpo en camelCase; headers como Idempotency-Key, tal cual.
+                    field = e.Key.Contains('-') ? e.Key : JsonNamingPolicy.CamelCase.ConvertName(e.Key),
+                    message = err.ErrorMessage,
                 }))
                 .ToList();
             return new ObjectResult(problem)
@@ -84,6 +86,7 @@ builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
 builder.Services.AddSingleton<JwtTokenIssuer>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
+builder.Services.AddScoped<ILedger, Ledger>();
 builder.Services.AddScoped<ICashAdjustmentService, CashAdjustmentService>();
 builder.Services.AddScoped<IOperationService, OperationService>();
 builder.Services.AddScoped<IKeyService, KeyService>();

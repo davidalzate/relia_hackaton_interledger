@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Relia.Api.Auth;
 using Relia.Api.Contracts;
+using Relia.Api.Idempotency;
 using Relia.Api.Services;
 
 namespace Relia.Api.Controllers;
@@ -32,6 +33,7 @@ public class AgentsController(
     [HttpPost("cash-adjustments")]
     [Tags("cash")]
     [Authorize(Roles = Roles.Agent)]
+    [Idempotent]
     public async Task<ActionResult<CashAdjustmentDto>> CreateCashAdjustment(
         Guid agentId,
         [FromHeader(Name = "Idempotency-Key"), Required, StringLength(128, MinimumLength = 8)] string idempotencyKey,

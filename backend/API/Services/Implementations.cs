@@ -11,16 +11,6 @@ namespace Relia.Api.Services;
 // Implementaciones en desarrollo: reciben ya sus repositorios y responden 501 "En desarrollo".
 // Cada una se implementa en el ticket indicado de docs/issues/backend-relia-api/.
 
-/// <summary>Ticket 03.</summary>
-public class CashAdjustmentService(
-    IAgentRepository agents, IOperationRepository operations, ILedgerRepository ledger, IUnitOfWork unitOfWork,
-    ICurrentUser currentUser) : ICashAdjustmentService
-{
-    public Task<CashAdjustmentDto> CreateAsync(Guid agentId, string idempotencyKey,
-        CreateCashAdjustmentRequest request, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("createCashAdjustment");
-}
-
 /// <summary>Tickets 04 (desglose), 07 (depósito), 09 (retiro) y 10 (carga de cupo).</summary>
 public class OperationService(
     IAgentRepository agents, IFeeRepository fees, IWalletKeyRepository keys, IOperationRepository operations,

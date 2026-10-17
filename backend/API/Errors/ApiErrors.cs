@@ -27,6 +27,11 @@ public static class ApiErrors
     public static ApiException NotFound() =>
         new(StatusCodes.Status404NotFound, "not_found", "No existe");
 
+    /// <summary>422 insufficient_cash con lo que falta (ajustes por debajo de lo reservado, retiros).</summary>
+    public static ApiException InsufficientCash(long shortfall) =>
+        new(StatusCodes.Status422UnprocessableEntity, "insufficient_cash", "Efectivo insuficiente",
+            new Dictionary<string, object?> { ["shortfall"] = shortfall });
+
     /// <summary>422 validation_error con detalle de un campo, como el de la validación de modelo.</summary>
     public static ApiException Validation(string field, string message) =>
         new(StatusCodes.Status422UnprocessableEntity, "validation_error", "Datos inválidos",
