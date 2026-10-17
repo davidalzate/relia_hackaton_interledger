@@ -41,9 +41,6 @@ import { AuthService } from './auth.service';
 
 /** Por debajo de este valor (COP) la Caja muestra avisos de cupo/efectivo bajo */
 export const LOW_BALANCE_THRESHOLD = 50_000;
-/** Tiempo que tiene el usuario para aprobar un retiro en su billetera (B3.2) */
-export const WITHDRAWAL_TTL_MS = 5 * 60_000;
-
 export type CupoMethod = 'breb' | 'wallet';
 /** Tiempo para pagar una carga de cupo (B6.3) */
 export const CUPO_LOAD_TTL_MS: Record<CupoMethod, number> = {
@@ -64,30 +61,6 @@ export interface DepositReceipt {
   before: AgentBalances;
   after: AgentBalances;
 }
-
-/** Datos del formulario B3.1 con el desglose ya calculado */
-export interface WithdrawalRequest {
-  phone: string;
-  amount: number;
-  roundForUser: boolean;
-  /** Efectivo que entrega el corresponsal */
-  cashOut: number;
-  /** Lo que paga el usuario desde su billetera */
-  walletIn: number;
-  commission: number;
-}
-
-export type WithdrawalErrorKind = 'rejected' | 'expired' | 'cancelled' | 'failed' | 'cash';
-
-/** Solicitud de pago en curso: la comparten la vista B3 y el teléfono del usuario (C2) */
-interface WithdrawalBase {
-  request: WithdrawalRequest;
-  operation: Operation;
-}
-export type Withdrawal =
-  | (WithdrawalBase & { status: 'waiting'; expiresAt: number })
-  | (WithdrawalBase & { status: 'approved'; before: AgentBalances; after: AgentBalances })
-  | (WithdrawalBase & { status: 'error'; error: WithdrawalErrorKind });
 
 export interface CupoLoadRequest {
   method: CupoMethod;
@@ -128,25 +101,10 @@ const CUPO_ERROR_STATUS: Record<CupoLoadErrorKind, Operation['status']> = {
   cancelled: 'cancelled',
 };
 
-const WITHDRAWAL_ERROR_REASON: Record<WithdrawalErrorKind, string> = {
-  rejected: 'El usuario rechazó el pago',
-  expired: 'La solicitud venció',
-  cancelled: 'Solicitud cancelada',
-  failed: 'La billetera no completó el pago',
-  cash: 'Efectivo insuficiente',
-};
 const CUPO_ERROR_REASON: Record<CupoLoadErrorKind, string> = {
   rejected: 'Pago rechazado',
   expired: 'La solicitud venció',
   cancelled: 'Solicitud cancelada',
-};
-
-const WITHDRAWAL_ERROR_STATUS: Record<WithdrawalErrorKind, Operation['status']> = {
-  rejected: 'failed',
-  expired: 'expired',
-  cancelled: 'cancelled',
-  failed: 'failed',
-  cash: 'failed',
 };
 
 const API_TYPE: Record<ApiOperation['type'], OperationType> = {
@@ -209,8 +167,6 @@ export class AgentService {
   /** Más recientes primero */
   private readonly _operations = signal<Operation[]>([]);
   private sequence = 0;
-  private readonly _withdrawal = signal<Withdrawal | null>(null);
-  private expiry?: Subscription;
   private readonly _cupoLoad = signal<CupoLoad | null>(null);
   private cupoExpiry?: Subscription;
 
@@ -236,7 +192,6 @@ export class AgentService {
       : this._operations();
     return { items: [...local, ...items], nextCursor };
   });
-  readonly withdrawal = this._withdrawal.asReadonly();
   readonly cupoLoad = this._cupoLoad.asReadonly();
 
   constructor() {
@@ -377,71 +332,6 @@ export class AgentService {
     return all.find((op) => op.id === id);
   }
 
-  /** B3.2: crea la solicitud de pago; vence sola a los 5 min si el usuario no responde */
-  requestWithdrawal(request: WithdrawalRequest): void {
-    this.expiry?.unsubscribe();
-    this._withdrawal.set({
-      status: 'waiting',
-      request,
-      operation: this.record(request.cashOut, 'pending', 'withdrawal', undefined, {
-        phone: request.phone,
-        cash: request.cashOut,
-        wallet: request.walletIn,
-        roundForUser: request.roundForUser,
-      }),
-      expiresAt: Date.now() + WITHDRAWAL_TTL_MS,
-    });
-    this.expiry = timer(WITHDRAWAL_TTL_MS).subscribe(() => this.failWithdrawal('expired'));
-  }
-
-  /** El usuario aprueba en su billetera (C2): mueve saldos si hay efectivo para entregar */
-  approveWithdrawal(): void {
-    const current = this._withdrawal();
-    if (current?.status !== 'waiting') return;
-    const { cashOut, commission } = current.request;
-    const before = this._balances();
-    if (before.cash < cashOut) return this.failWithdrawal('cash');
-    const after: AgentBalances = {
-      cupo: before.cupo + cashOut,
-      cash: before.cash - cashOut,
-      commission: before.commission + commission,
-    };
-    this.expiry?.unsubscribe();
-    this._balances.set(after);
-    this._withdrawal.set({
-      status: 'approved',
-      request: current.request,
-      operation: this.setStatus(current.operation, 'completed', { before, after }),
-      before,
-      after,
-    });
-  }
-
-  /** Rechazo del usuario, vencimiento, cancelación del corresponsal o falla de la billetera */
-  failWithdrawal(error: WithdrawalErrorKind): void {
-    const current = this._withdrawal();
-    if (current?.status !== 'waiting') return;
-    this.expiry?.unsubscribe();
-    this._withdrawal.set({
-      status: 'error',
-      request: current.request,
-      operation: this.setStatus(
-        current.operation,
-        WITHDRAWAL_ERROR_STATUS[error],
-        undefined,
-        WITHDRAWAL_ERROR_REASON[error],
-      ),
-      error,
-    });
-  }
-
-  /** Cierra el flujo de retiro (Listo, reintento o cierre de sesión); cancela si seguía esperando */
-  clearWithdrawal(): void {
-    this.failWithdrawal('cancelled');
-    this._withdrawal.set(null);
-  }
-
-  /** B7: ajusta solo el efectivo; cupo y comisión no cambian */
   /** B7: `POST /agents/{agentId}/cash-adjustments` (201 síncrono, sin polling) */
   updateCash(
     mode: CashMode,

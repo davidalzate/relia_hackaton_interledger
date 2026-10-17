@@ -15,21 +15,37 @@ import { ConfirmationService } from 'primeng/api';
 import { Checkbox } from 'primeng/checkbox';
 import { InputNumber } from 'primeng/inputnumber';
 import { InputText } from 'primeng/inputtext';
-import { ProgressSpinner } from 'primeng/progressspinner';
-import { interval, map } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, interval, map, of, switchMap } from 'rxjs';
 
 import { ReceiptService } from '../../core/services/receipt.service';
-import { AgentService, WITHDRAWAL_TTL_MS } from '../../core/services/agent.service';
-import { AGENT_COMMISSION, RELIA_FEE } from '../../shared/types/agent';
+import { newIdempotencyKey } from '../../core/http/api';
+import { AgentService } from '../../core/services/agent.service';
+import { WITHDRAWAL_TTL_MS, WithdrawalService } from '../../core/services/withdrawal.service';
+import { OperationPreview } from '../../shared/schemas/operation.schema';
 import { InviteDialogComponent } from '../../shared/components/invite-dialog/invite-dialog.component';
+import { QrCodeComponent } from '../../shared/components/qr-code/qr-code.component';
 import { formatPhone, phoneDigits } from '../../shared/utils/phone';
 import { formatCountdown } from '../../shared/utils/time';
-import { withdrawBreakdown } from './withdraw-breakdown';
 
 type KeyState = 'idle' | 'checking' | 'found' | 'missing' | 'error';
 
-// B3: el usuario paga desde su billetera y recibe efectivo. La solicitud en curso vive en
-// AgentService para sobrevivir a la visita al teléfono del usuario (C2)
+/** Lo que muestra B3.1, tomado del desglose del API */
+function toBreakdown(p: OperationPreview) {
+  return {
+    cashOut: p.netAmount,
+    walletIn: p.chargedAmount,
+    fee: p.fee.total,
+    commission: p.fee.agent,
+    cupoAfter: p.quotaAfter,
+    cashAfter: p.cashOnHandAfter,
+    cashShortfall: p.violations.find((v) => v.code === 'insufficient_cash')?.shortfall ?? 0,
+  };
+}
+
+const PREVIEW_DEBOUNCE_MS = 300;
+
+// B3: el usuario escanea un QR con la `approvalUrl`, paga desde su billetera y recibe efectivo.
+// El retiro en curso vive en WithdrawalService para sobrevivir a la navegación
 @Component({
   selector: 'app-withdraw',
   imports: [
@@ -39,8 +55,8 @@ type KeyState = 'idle' | 'checking' | 'found' | 'missing' | 'error';
     Checkbox,
     InputNumber,
     InputText,
-    ProgressSpinner,
     InviteDialogComponent,
+    QrCodeComponent,
   ],
   templateUrl: './withdraw.component.html',
   styleUrl: './withdraw.component.scss',
@@ -48,6 +64,7 @@ type KeyState = 'idle' | 'checking' | 'found' | 'missing' | 'error';
 })
 export class WithdrawComponent {
   private readonly agent = inject(AgentService);
+  private readonly withdrawals = inject(WithdrawalService);
   protected readonly receipts = inject(ReceiptService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
@@ -55,9 +72,8 @@ export class WithdrawComponent {
   private readonly locale = inject(LOCALE_ID);
   private readonly fb = inject(NonNullableFormBuilder);
 
-  protected readonly fee = RELIA_FEE;
-  protected readonly commission = AGENT_COMMISSION;
-  protected readonly withdrawal = this.agent.withdrawal;
+  protected readonly withdrawal = this.withdrawals.withdrawal;
+  protected readonly creating = this.withdrawals.creating;
 
   protected readonly form = this.fb.group({
     phone: [''],
@@ -69,6 +85,8 @@ export class WithdrawComponent {
   });
 
   protected readonly keyState = signal<KeyState>('idle');
+  protected readonly walletMasked = signal<string | null>(null);
+  protected readonly handoverError = signal(false);
   /** B5: modal de invitación cuando la llave no existe */
   protected readonly inviteOpen = signal(false);
   protected readonly inviteSent = signal(false);
@@ -76,12 +94,35 @@ export class WithdrawComponent {
   protected readonly amount = computed(() => this.value().amount ?? 0);
   protected readonly phoneDigits = computed(() => phoneDigits(this.value().phone ?? ''));
   protected readonly phoneComplete = computed(() => this.phoneDigits().length === 10);
-  protected readonly amountTooLow = computed(() => this.amount() > 0 && this.amount() <= RELIA_FEE);
-  protected readonly breakdown = computed(() =>
-    withdrawBreakdown(this.amount(), this.value().roundForUser ?? false, this.agent.balances()),
+  /** `POST .../operations/preview` al escribir el monto o cambiar "valor redondo" */
+  private readonly preview = toSignal(
+    this.form.valueChanges.pipe(
+      map((v) => ({ amount: v.amount ?? 0, round: v.roundForUser ?? false })),
+      distinctUntilChanged((a, b) => a.amount === b.amount && a.round === b.round),
+      debounceTime(PREVIEW_DEBOUNCE_MS),
+      switchMap(({ amount, round }) =>
+        amount > 0
+          ? this.agent
+              .previewOperation('withdrawal', amount, round)
+              .pipe(catchError(() => of(null)))
+          : of(null),
+      ),
+    ),
+    { initialValue: null },
   );
-  protected readonly cashOk = computed(() => this.breakdown()?.cashShortfall === 0);
-  protected readonly canSend = computed(() => this.keyState() === 'found' && this.cashOk());
+  protected readonly amountTooLow = computed(
+    () => !!this.preview()?.violations.some((v) => v.code === 'amount_too_low'),
+  );
+  protected readonly breakdown = computed(() => {
+    const p = this.preview();
+    return p && !this.amountTooLow() ? toBreakdown(p) : null;
+  });
+  protected readonly cashOk = computed(
+    () => !!this.preview() && !this.preview()?.violations.length,
+  );
+  protected readonly canSend = computed(
+    () => this.keyState() === 'found' && this.cashOk() && !this.creating(),
+  );
   protected readonly canValidate = computed(
     () => this.phoneComplete() && this.cashOk() && this.keyState() !== 'checking',
   );
@@ -98,12 +139,17 @@ export class WithdrawComponent {
     );
   });
 
+  // Misma clave al reintentar la misma solicitud tras 4xx/503; otra si cambian los datos o falló
+  private idempotencyKey: string | null = null;
+
   constructor() {
     // Cambiar el celular borra la validación previa
     this.form.controls.phone.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => {
       this.keyState.set('idle');
+      this.walletMasked.set(null);
       this.inviteSent.set(false);
     });
+    this.form.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => (this.idempotencyKey = null));
   }
 
   protected formatPhone(): void {
@@ -120,6 +166,7 @@ export class WithdrawComponent {
       .subscribe({
         next: (key) => {
           this.keyState.set(key ? 'found' : 'missing');
+          this.walletMasked.set(key?.walletAddressMasked ?? null);
           this.inviteOpen.set(!key);
         },
         error: () => this.keyState.set('error'),
@@ -131,18 +178,22 @@ export class WithdrawComponent {
     const b = this.breakdown();
     if (!b || !this.canSend()) return;
     const { phone, amount, roundForUser } = this.form.getRawValue();
-    this.agent.requestWithdrawal({
-      phone: phoneDigits(phone),
-      amount: amount ?? 0,
-      roundForUser,
-      cashOut: b.cashOut,
-      walletIn: b.walletIn,
-      commission: AGENT_COMMISSION,
-    });
+    this.idempotencyKey ??= newIdempotencyKey();
+    this.withdrawals.start(
+      {
+        phone: phoneDigits(phone),
+        amount: amount ?? 0,
+        roundForUser,
+        cashOut: b.cashOut,
+        walletIn: b.walletIn,
+        commission: b.commission,
+      },
+      this.idempotencyKey,
+    );
   }
 
   protected cancelRequest(): void {
-    this.agent.failWithdrawal('cancelled');
+    this.withdrawals.cancel();
   }
 
   /** B3.3 Listo: confirma en B4 la entrega del efectivo y vuelve a Caja */
@@ -153,8 +204,17 @@ export class WithdrawComponent {
     this.confirmation.confirm({
       message: `¿Confirmas que entregaste en efectivo un total de ${total} al usuario?`,
       accept: () => {
-        this.agent.clearWithdrawal();
-        void this.router.navigateByUrl('/caja');
+        this.handoverError.set(false);
+        this.withdrawals
+          .handover()
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe({
+            next: () => {
+              this.withdrawals.clear();
+              void this.router.navigateByUrl('/caja');
+            },
+            error: () => this.handoverError.set(true),
+          });
       },
     });
   }
@@ -162,10 +222,12 @@ export class WithdrawComponent {
   /** B3.4: vuelve al formulario con los datos de la solicitud fallida */
   protected retry(): void {
     const w = this.withdrawal();
-    if (!w) return;
+    if (w?.status !== 'error') return;
     const { phone, amount, roundForUser } = w.request;
-    this.agent.clearWithdrawal();
+    this.withdrawals.clear();
     this.form.setValue({ phone: formatPhone(phone), amount, roundForUser });
+    // Después de setValue, que descarta la clave: se reusa solo si no se creó nada
+    this.idempotencyKey = w.retryKey;
     this.keyState.set('found');
   }
 }
