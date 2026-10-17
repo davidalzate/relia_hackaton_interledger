@@ -4,7 +4,8 @@ import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { Router, RouterLink } from '@angular/router';
 import { InputText } from 'primeng/inputtext';
 
-import { AuthService, InvalidCredentialsError } from '../../core/services/auth.service';
+import { ApiError } from '../../core/http/api';
+import { AuthService } from '../../core/services/auth.service';
 import { Role } from '../../shared/schemas/auth.schema';
 
 const HOME_BY_ROLE: Record<Role, string> = { agent: '/caja', admin: '/admin' };
@@ -41,7 +42,7 @@ export class LoginComponent {
         error: (err: unknown) => {
           this.loading.set(false);
           this.error.set(
-            err instanceof InvalidCredentialsError
+            err instanceof ApiError && err.code === 'invalid_credentials'
               ? 'Correo o contraseña incorrectos.'
               : 'No pudimos iniciar sesión. Intenta de nuevo.',
           );

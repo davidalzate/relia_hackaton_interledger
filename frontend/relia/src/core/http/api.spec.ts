@@ -43,18 +43,16 @@ describe('HTTP base', () => {
 
   it('convierte problem+json en ApiError con code', async () => {
     const res = firstValueFrom(http.post('/api/agents/a/deposits', {}));
-    ctrl
-      .expectOne('/api/agents/a/deposits')
-      .flush(
-        {
-          type: 'about:blank',
-          title: 'Cupo',
-          status: 422,
-          code: 'insufficient_quota',
-          shortfall: 5000,
-        },
-        { status: 422, statusText: 'Unprocessable' },
-      );
+    ctrl.expectOne('/api/agents/a/deposits').flush(
+      {
+        type: 'about:blank',
+        title: 'Cupo',
+        status: 422,
+        code: 'insufficient_quota',
+        shortfall: 5000,
+      },
+      { status: 422, statusText: 'Unprocessable' },
+    );
     const error = await res.catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).code).toBe('insufficient_quota');
