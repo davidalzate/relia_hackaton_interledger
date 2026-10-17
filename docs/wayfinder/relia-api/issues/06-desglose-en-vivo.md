@@ -1,7 +1,7 @@
 # 06: Desglose en vivo de depósito y retiro
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 04
 Labels: ready-for-agent
 Parent: [01 Implementar backend Relia API](01-implementar-backend-relia-api.md)

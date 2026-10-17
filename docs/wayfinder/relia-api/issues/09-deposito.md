@@ -1,7 +1,7 @@
 # 09: Depósito de punta a punta
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 03, 05, 06, 07
 Labels: ready-for-agent
 Parent: [01 Implementar backend Relia API](01-implementar-backend-relia-api.md)

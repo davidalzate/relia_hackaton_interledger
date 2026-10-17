@@ -1,7 +1,7 @@
 # 10: Recibos de depósito y retiro
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 09
 Labels: ready-for-agent
 Parent: [01 Implementar backend Relia API](01-implementar-backend-relia-api.md)

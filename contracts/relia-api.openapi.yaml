@@ -196,6 +196,8 @@ paths:
                 $ref: '#/components/schemas/SettlementPage'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 
   /settlements/{settlementId}:
     parameters:
@@ -333,6 +335,8 @@ paths:
                 $ref: '#/components/schemas/DemoMessagePage'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 
   /demo/messages/read:
     post:
@@ -462,6 +466,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 
   /keys/{phone}:
     parameters:

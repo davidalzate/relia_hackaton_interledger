@@ -1,7 +1,7 @@
 # 02: Base del backend, login y perfil de sesión
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: None (can start immediately)
 Labels: ready-for-agent
 Parent: [01 Implementar backend Relia API](01-implementar-backend-relia-api.md)

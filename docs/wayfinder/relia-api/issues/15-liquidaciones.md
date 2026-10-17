@@ -1,7 +1,7 @@
 # 15: Liquidaciones (pago de comisión)
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 13, 14
 Labels: ready-for-agent
 Parent: [01 Implementar backend Relia API](01-implementar-backend-relia-api.md)

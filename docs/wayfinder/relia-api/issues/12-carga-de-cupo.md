@@ -1,7 +1,7 @@
 # 12: Carga de cupo por Bre-B y por Wallet
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 11
 Labels: ready-for-agent
 Parent: [01 Implementar backend Relia API](01-implementar-backend-relia-api.md)

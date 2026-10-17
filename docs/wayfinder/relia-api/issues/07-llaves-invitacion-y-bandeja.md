@@ -1,7 +1,7 @@
 # 07: Consulta de llave, invitación por WhatsApp y bandeja simulada
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 02
 Labels: ready-for-agent
 Parent: [01 Implementar backend Relia API](01-implementar-backend-relia-api.md)

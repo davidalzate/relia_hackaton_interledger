@@ -1,7 +1,7 @@
 # 08: Vinculación pública de llave con OTP
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 03, 07
 Labels: ready-for-agent
 Parent: [01 Implementar backend Relia API](01-implementar-backend-relia-api.md)
