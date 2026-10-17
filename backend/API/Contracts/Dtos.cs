@@ -79,6 +79,21 @@ public record AgentDto(
 
 public record BalancePairDto(long Before, long After);
 
+// ---- Panel admin ----
+
+public record CountAmountDto(int Count, long Amount);
+
+public record AgentSummaryDto(
+    Guid Id, string Name, string ManagerName, string City, string WalletAddress, bool WalletSimulated,
+    int Operations, CountAmountDto Deposits, CountAmountDto Withdrawals, long TotalMoved, long Quota,
+    long CashOnHand, long AccruedCommission, long SettledCommissionTotal, long CommissionPaidToday);
+
+public record NetworkTotalsDto(
+    CountAmountDto TotalMoved, CountAmountDto Deposits, CountAmountDto Withdrawals,
+    long CommissionPayable, long CommissionPaidToday);
+
+public record AgentListDto(IReadOnlyList<AgentSummaryDto> Items, NetworkTotalsDto Totals);
+
 public record BalanceChangeDto(BalancePairDto Quota, BalancePairDto AccruedCommission, BalancePairDto CashOnHand);
 
 // ---- Historial ----

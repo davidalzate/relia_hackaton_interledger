@@ -30,6 +30,34 @@ public interface IAgentRepository
     /// pointer ($dominio/ruta), sin mayúsculas ni "/" final de ningún lado.
     /// </summary>
     Task<bool> UsesPhoneOrWalletAsync(string phone, string walletAddress, CancellationToken ct = default);
+
+    /// <summary>Filas de v_admin_agent_summary con wallet_simulated, por nombre.</summary>
+    Task<IReadOnlyList<AgentSummaryRow>> ListSummariesAsync(CancellationToken ct = default);
+}
+
+/// <summary>
+/// Fila de v_admin_agent_summary. Los montos movidos son de depósitos y retiros completados, con el monto
+/// solicitado (M); CommissionPaidToday usa "hoy" en America/Bogota.
+/// </summary>
+public record AgentSummaryRow
+{
+    public Guid AgentId { get; init; }
+    public string Name { get; init; } = "";
+    public string ManagerName { get; init; } = "";
+    public string City { get; init; } = "";
+    public string WalletAddress { get; init; } = "";
+    public bool WalletSimulated { get; init; }
+    public long Quota { get; init; }
+    public long CashOnHand { get; init; }
+    public long AccruedCommission { get; init; }
+    public long SettledCommissionTotal { get; init; }
+    public int OperationsCount { get; init; }
+    public int DepositsCount { get; init; }
+    public long DepositsValue { get; init; }
+    public int WithdrawalsCount { get; init; }
+    public long WithdrawalsValue { get; init; }
+    public long TotalMoved { get; init; }
+    public long CommissionPaidToday { get; init; }
 }
 
 public interface IAdminRepository

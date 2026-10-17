@@ -39,6 +39,12 @@ public static class CurrentUserAccess
         if (user.Role == Role.Agent && user.AgentId != agentId) throw ApiErrors.Forbidden();
     }
 
+    /// <summary>Panel admin: solo el admin.</summary>
+    public static void EnsureAdmin(this ICurrentUser user)
+    {
+        if (user.Role != Role.Admin) throw ApiErrors.Forbidden();
+    }
+
     /// <summary>
     /// Regla para operar (depósitos, retiros, cargas, ajustes): solo el corresponsal dueño. El admin lee
     /// todo pero no opera por el corresponsal.

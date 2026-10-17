@@ -14,9 +14,12 @@ public interface IAuthService
     Task<MeDto> GetMeAsync(CancellationToken ct = default);
 }
 
-/// <summary>GET /agents/{agentId} y GET /agents/{agentId}/history.</summary>
+/// <summary>GET /agents, GET /agents/{agentId} y GET /agents/{agentId}/history.</summary>
 public interface IAgentService
 {
+    /// <summary>Panel admin: todos los corresponsales con métricas y los totales de la red. 403 al agente.</summary>
+    Task<AgentListDto> ListAgentsAsync(CancellationToken ct = default);
+
     /// <summary>Saldos con reservas calculadas de las operaciones pendientes. 403 si es de otro corresponsal.</summary>
     Task<AgentDto> GetAgentAsync(Guid agentId, CancellationToken ct = default);
 

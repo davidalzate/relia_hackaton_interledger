@@ -7,7 +7,7 @@ using Relia.Api.Repositories;
 
 namespace Relia.Api.Services;
 
-/// <summary>GET /agents/{agentId} y GET /agents/{agentId}/history.</summary>
+/// <summary>GET /agents, GET /agents/{agentId} y GET /agents/{agentId}/history.</summary>
 public class AgentService(
     IAgentRepository agents, IOperationRepository operations, IHistoryRepository history, ICurrentUser currentUser)
     : IAgentService
@@ -24,6 +24,33 @@ public class AgentService(
 
     private static readonly Dictionary<string, HistoryEntryKind> KindsByLabel =
         KindLabels.ToDictionary(p => p.Value, p => p.Key);
+
+    public async Task<AgentListDto> ListAgentsAsync(CancellationToken ct = default)
+    {
+        currentUser.EnsureAdmin();
+        var rows = await agents.ListSummariesAsync(ct);
+
+        var items = rows.Select(r => new AgentSummaryDto(
+            r.AgentId, r.Name, r.ManagerName, r.City, r.WalletAddress, r.WalletSimulated,
+            Operations: r.OperationsCount,
+            Deposits: new CountAmountDto(r.DepositsCount, r.DepositsValue),
+            Withdrawals: new CountAmountDto(r.WithdrawalsCount, r.WithdrawalsValue),
+            TotalMoved: r.TotalMoved,
+            Quota: r.Quota,
+            CashOnHand: r.CashOnHand,
+            AccruedCommission: r.AccruedCommission,
+            SettledCommissionTotal: r.SettledCommissionTotal,
+            CommissionPaidToday: r.CommissionPaidToday)).ToList();
+
+        var deposits = new CountAmountDto(items.Sum(a => a.Deposits.Count), items.Sum(a => a.Deposits.Amount));
+        var withdrawals = new CountAmountDto(
+            items.Sum(a => a.Withdrawals.Count), items.Sum(a => a.Withdrawals.Amount));
+        var totals = new NetworkTotalsDto(
+            new CountAmountDto(deposits.Count + withdrawals.Count, deposits.Amount + withdrawals.Amount),
+            deposits, withdrawals,
+            items.Sum(a => a.AccruedCommission), items.Sum(a => a.CommissionPaidToday));
+        return new AgentListDto(items, totals);
+    }
 
     public async Task<AgentDto> GetAgentAsync(Guid agentId, CancellationToken ct = default)
     {

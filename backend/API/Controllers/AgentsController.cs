@@ -8,13 +8,19 @@ using Relia.Api.Services;
 
 namespace Relia.Api.Controllers;
 
-/// <summary>Rutas bajo /agents/{agentId} que usa el corresponsal.</summary>
+/// <summary>Panel admin (GET /agents) y rutas bajo /agents/{agentId} que usa el corresponsal.</summary>
 [ApiController]
 [Route("agents/{agentId:guid}")]
 [Authorize]
 public class AgentsController(
     IAgentService agents, ICashAdjustmentService cashAdjustments, IOperationService operations) : ControllerBase
 {
+    // "~/" no combina con la ruta del controlador: esta no lleva {agentId}.
+    [HttpGet("~/agents")]
+    [Tags("admin")]
+    [Authorize(Roles = Roles.Admin)]
+    public Task<AgentListDto> ListAgents(CancellationToken ct) => agents.ListAgentsAsync(ct);
+
     [HttpGet]
     [Tags("agents")]
     public Task<AgentDto> GetAgent(Guid agentId, CancellationToken ct) => agents.GetAgentAsync(agentId, ct);

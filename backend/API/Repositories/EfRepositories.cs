@@ -52,6 +52,23 @@ public class EfAgentRepository(ReliaDbContext db) : IAgentRepository
         var wallet = walletAddress.TrimEnd('/').ToLowerInvariant();
         return db.Agents.AnyAsync(a => a.Phone == phone || a.WalletAddress.ToLower().TrimEnd('/') == wallet, ct);
     }
+
+    // La vista suma en numeric: se castea a bigint para leerla como long.
+    public async Task<IReadOnlyList<AgentSummaryRow>> ListSummariesAsync(CancellationToken ct = default) =>
+        await db.Database.SqlQueryRaw<AgentSummaryRow>("""
+            SELECT v.agent_id AS "AgentId", v.name AS "Name", v.contact_person AS "ManagerName",
+                   v.city AS "City", v.payment_pointer AS "WalletAddress",
+                   a.wallet_simulated AS "WalletSimulated",
+                   v.float_balance AS "Quota", v.expected_cash AS "CashOnHand",
+                   v.commission_payable AS "AccruedCommission", v.commission_paid_total AS "SettledCommissionTotal",
+                   v.operations_count::int AS "OperationsCount",
+                   v.deposits_count::int AS "DepositsCount", v.deposits_value::bigint AS "DepositsValue",
+                   v.withdrawals_count::int AS "WithdrawalsCount", v.withdrawals_value::bigint AS "WithdrawalsValue",
+                   v.total_moved::bigint AS "TotalMoved", v.commission_paid_today::bigint AS "CommissionPaidToday"
+            FROM v_admin_agent_summary v
+            JOIN agents a ON a.id = v.agent_id
+            ORDER BY v.name
+            """).ToListAsync(ct);
 }
 
 public class EfAdminRepository(ReliaDbContext db) : IAdminRepository
