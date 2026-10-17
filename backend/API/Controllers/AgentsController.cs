@@ -75,6 +75,7 @@ public class AgentsController(
     [HttpPost("quota-top-ups")]
     [Tags("operations")]
     [Authorize(Roles = Roles.Agent)]
+    [Idempotent]
     public async Task<ActionResult<OperationDto>> CreateQuotaTopUp(
         Guid agentId,
         [FromHeader(Name = "Idempotency-Key"), Required, StringLength(128, MinimumLength = 8)] string idempotencyKey,

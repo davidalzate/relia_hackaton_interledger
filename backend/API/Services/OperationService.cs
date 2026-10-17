@@ -13,7 +13,7 @@ using Relia.Api.Repositories;
 namespace Relia.Api.Services;
 
 /// <summary>
-/// Desglose, depósitos, retiros y acciones sobre una operación. La carga de cupo (ticket 10) sigue en desarrollo.
+/// Desglose, depósitos, retiros, cargas de cupo y acciones sobre una operación.
 /// La idempotencia de las creaciones la resuelve el filtro [Idempotent] del controlador, que abre la
 /// transacción: un 4xx o un 503 deshacen todo, incluido lo que se escribió antes de llamar al riel.
 /// </summary>
@@ -26,8 +26,11 @@ public class OperationService(
     /// <summary>Tope de la descripción que ve el pagador en su billetera (rail-proxy.openapi.yaml).</summary>
     private const int MaxRailDescription = 140;
 
-    /// <summary>Plazo para que el usuario apruebe el cobro de un retiro.</summary>
-    private static readonly TimeSpan WithdrawalApprovalWindow = TimeSpan.FromMinutes(5);
+    /// <summary>Plazo para aprobar un cobro por Wallet (retiro y carga).</summary>
+    private static readonly TimeSpan WalletApprovalWindow = TimeSpan.FromMinutes(5);
+
+    /// <summary>Vigencia del QR Bre-B simulado de una carga de cupo.</summary>
+    private static readonly TimeSpan BreBQrWindow = TimeSpan.FromMinutes(10);
 
     /// <summary>Formato de pesos en los textos que ve el usuario ("$ 100.000").</summary>
     private static readonly CultureInfo PesoFormat = CultureInfo.GetCultureInfo("es-CO");
@@ -157,7 +160,7 @@ public class OperationService(
                 inbox.Send(MessageChannel.Sms, MessageKind.PaymentRequest, key.Phone,
                     $"Relia: {agent.Name} te pide {amounts.ChargedAmount.ToString("C0", PesoFormat)} para entregarte " +
                     $"{amounts.NetAmount.ToString("C0", PesoFormat)} en efectivo ({operation.Reference}). " +
-                    $"Aprueba en tu billetera antes de {WithdrawalApprovalWindow.TotalMinutes:0} minutos: {approvalUrl}",
+                    $"Aprueba en tu billetera antes de {WalletApprovalWindow.TotalMinutes:0} minutos: {approvalUrl}",
                     approvalUrl, operation.Id);
                 await unitOfWork.SaveChangesAsync(tx);
             }
@@ -165,9 +168,102 @@ public class OperationService(
         }, ct);
     }
 
-    public Task<OperationDto> CreateQuotaTopUpAsync(Guid agentId, string idempotencyKey,
-        CreateQuotaTopUpRequest request, CancellationToken ct = default) =>
-        throw new FeatureInDevelopmentException("createQuotaTopUp");
+    /// <summary>
+    /// Carga de cupo sin tarifa (neto = cobrado = monto). Bre-B: QR simulado por 10 min, sin riel; el pago lo marca
+    /// recibido el Modo demo. Wallet: Relia le cobra a la billetera registrada del corresponsal (incoming, 5 min).
+    /// No reserva nada: el cupo solo sube al completarse.
+    /// </summary>
+    public async Task<OperationDto> CreateQuotaTopUpAsync(Guid agentId, string idempotencyKey,
+        CreateQuotaTopUpRequest request, CancellationToken ct = default)
+    {
+        currentUser.EnsureCanOperateAgent(agentId);
+        // [Required] en el DTO garantiza los valores.
+        var method = request.Method!.Value;
+        var amount = request.RequestedAmount!.Value;
+        var agent = await agents.GetByIdAsync(agentId, ct) ?? throw ApiErrors.NotFound();
+
+        return await unitOfWork.InTransactionAsync(async tx =>
+        {
+            var now = time.GetUtcNow();
+            var breB = method == TopUpMethod.BreB;
+            var operation = new Operation
+            {
+                Id = Guid.NewGuid(),
+                AgentId = agentId,
+                Kind = OperationKind.QuotaTopUp,
+                TopUpMethod = breB ? TopUpMethodKind.BreB : TopUpMethodKind.Wallet,
+                RequestedAmount = amount,
+                NetAmount = amount,
+                ChargedAmount = amount,
+                State = OperationState.Pending,
+                IdempotencyKey = idempotencyKey,
+                CreatedAt = now,
+            };
+            operations.Add(operation);
+            operations.AddEvent(new OperationEvent
+            {
+                OperationId = operation.Id, NewState = OperationState.Pending, Origin = EventOrigin.Agent, CreatedAt = now,
+            });
+            var payment = new Payment
+            {
+                Id = RailPaymentId(agentId, "quota-top-up", idempotencyKey),
+                OperationId = operation.Id,
+                Rail = breB ? PaymentRail.BreBSimulated : PaymentRail.OpenPayments,
+                Direction = PaymentDirection.Incoming,
+                State = OperationState.Pending,
+                Amount = amount,
+                SourceWalletAddress = agent.WalletAddress,
+                DestinationWalletAddress = options.Value.WalletAddress,
+                ExpiresAt = breB ? now + BreBQrWindow : ApprovalDeadline(now),
+                CreatedAt = now,
+            };
+            payments.Add(payment);
+            await unitOfWork.SaveChangesAsync(tx);
+
+            if (breB)
+            {
+                // El QR lleva la referencia, que la base asigna al insertar.
+                payment.RailReference = $"BREB-{operation.Reference}";
+                payment.RailDetail = Mapping.SimulatedRailDetail(
+                    $"breb://relia.co/pay?ref={operation.Reference}&amount={amount}&expires={payment.ExpiresAt:O}");
+                await unitOfWork.SaveChangesAsync(tx);
+                return await ToDtoAsync(operation, payment, tx);
+            }
+
+            var reading = await CreateRailPaymentAsync(payment, new RailPaymentRequest(
+                RailDirection.Incoming, agent.WalletAddress, RailAmount.FromCop(amount), payment.ExpiresAt,
+                RailDescription($"Carga de cupo de {amount.ToString("C0", PesoFormat)} para {agent.Name}")),
+                tx);
+            await sync.ApplyAsync(operation, payment, reading, "create", ct: tx);
+            return await ToDtoAsync(operation, payment, tx);
+        }, ct);
+    }
+
+    /// <summary>Completa la carga Bre-B pendiente como si hubiera llegado el pago: el cupo sube el monto.</summary>
+    public async Task<OperationDto> SimulateBreBPaymentAsync(Guid operationId, CancellationToken ct = default)
+    {
+        var completed = await unitOfWork.InTransactionAsync(async tx =>
+        {
+            var operation = await operations.GetForUpdateAsync(operationId, tx) ?? throw ApiErrors.NotFound();
+            if (operation.Kind != OperationKind.QuotaTopUp || operation.TopUpMethod != TopUpMethodKind.BreB
+                || operation.State != OperationState.Pending)
+                throw ApiErrors.OperationNotCancellable();
+            var payment = await payments.GetLatestByOperationForUpdateAsync(operationId, tx)
+                          ?? throw new InvalidOperationException($"La carga {operation.Reference} no tiene pago");
+            var now = time.GetUtcNow();
+            // QR vencido: ya no es una carga pendiente aunque el barrido (ticket 11) aún no la haya cerrado.
+            if (payment.ExpiresAt <= now) throw ApiErrors.OperationNotCancellable();
+            payments.AddEvent(new PaymentEvent
+            {
+                PaymentId = payment.Id, Action = "simulate", PreviousState = payment.State,
+                NewState = OperationState.Completed, Origin = EventOrigin.Simulator,
+                Detail = "Pago Bre-B simulado desde el Modo demo", CreatedAt = now,
+            });
+            await sync.CompleteAsync(operation, payment, now, EventOrigin.Simulator, tx);
+            return operation;
+        }, ct);
+        return await ToDtoAsync(completed, await payments.GetLatestByOperationAsync(operationId, ct), ct);
+    }
 
     /// <summary>403 si es de otro corresponsal. Si está pendiente, refresca antes el pago desde el proxy.</summary>
     public async Task<OperationDto> GetAsync(Guid operationId, CancellationToken ct = default)
@@ -291,7 +387,7 @@ public class OperationService(
     {
         var minute = TimeSpan.TicksPerMinute;
         var ceiling = (now.UtcTicks + minute - 1) / minute * minute;
-        return new DateTimeOffset(ceiling, TimeSpan.Zero) + WithdrawalApprovalWindow;
+        return new DateTimeOffset(ceiling, TimeSpan.Zero) + WalletApprovalWindow;
     }
 
     /// <summary>Depósito o retiro en pending con los montos del desglose y su evento de creación.</summary>

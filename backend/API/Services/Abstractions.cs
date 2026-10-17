@@ -58,6 +58,12 @@ public interface IOperationService
     /// <summary>Retiros y cargas pendientes antes de aprobar; si no, 409 operation_not_cancellable.</summary>
     Task<OperationDto> CancelAsync(Guid operationId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Modo demo: llegó el pago Bre-B simulado de una carga pendiente y vigente. Si no, 409
+    /// operation_not_cancellable (el contrato no nombra un código para este caso).
+    /// </summary>
+    Task<OperationDto> SimulateBreBPaymentAsync(Guid operationId, CancellationToken ct = default);
+
     /// <summary>Solo retiros completed; idempotente; no cambia saldos.</summary>
     Task<OperationDto> ConfirmCashHandoverAsync(Guid operationId, CancellationToken ct = default);
 }

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Relia.Api.Contracts;
 using Relia.Api.Domain;
 using Relia.Api.Repositories;
@@ -61,7 +62,7 @@ public static class Mapping
                 _ => null,
             },
             pending ? payment?.ApprovalUrl : null,
-            QrPayload: null,
+            QrPayload: pending ? payment?.SimulatedQrPayload() : null,
             CashHandedOverAt: o.CashHandedOverAt,
             Balances: balances);
     }
@@ -83,6 +84,19 @@ public static class Mapping
         return new BalanceChangeDto(
             new BalancePairDto(quota, quota), new BalancePairDto(commission, commission), new BalancePairDto(cash, cash));
     }
+
+    private const string QrPayloadKey = "qrPayload";
+
+    /// <summary>rail_details de un pago Bre-B simulado: marca de simulado y el QR que se muestra.</summary>
+    public static JsonDocument SimulatedRailDetail(string qrPayload) => JsonSerializer.SerializeToDocument(
+        new Dictionary<string, object?> { ["simulated"] = true, [QrPayloadKey] = qrPayload });
+
+    public static string? SimulatedQrPayload(this Payment payment) =>
+        payment.Rail == PaymentRail.BreBSimulated
+        && payment.RailDetail.RootElement.TryGetProperty(QrPayloadKey, out var qr)
+        && qr.ValueKind == JsonValueKind.String
+            ? qr.GetString()
+            : null;
 
     public static OperationStatus ToStatus(OperationState state) => state switch
     {

@@ -30,6 +30,13 @@ public interface IOperationSync
         string? detail, EventOrigin origin, CancellationToken ct = default);
 
     /// <summary>
+    /// Completa una operación pendiente sin lectura del riel (pagos simulados, como la carga Bre-B), en el
+    /// mismo orden que exigen los triggers. Solo dentro de una transacción, con la operación y el pago bloqueados.
+    /// </summary>
+    Task CompleteAsync(Operation operation, Payment payment, DateTimeOffset completedAt, EventOrigin origin,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Consulta el pago en el proxy y lo aplica, como máximo una vez por segundo por pago. Si el proxy no responde,
     /// la operación sigue igual y se reintenta en la siguiente lectura.
     /// </summary>
@@ -166,7 +173,7 @@ public class OperationSync(
         }
 
         if (state == OperationState.Completed)
-            await CompleteAsync(operation, payment, reading.CompletedAt ?? time.GetUtcNow(), ct);
+            await CompleteAsync(operation, payment, reading.CompletedAt ?? time.GetUtcNow(), origin, ct);
         else
             await CloseWithoutMovementAsync(operation, payment, state, failureCode!, reading.FailureDetail, origin, ct);
     }
@@ -175,8 +182,8 @@ public class OperationSync(
     /// En el orden que exigen los triggers: (1) pago completed; (2) operación completed, que congela el recibo;
     /// (3) movimiento y saldos; (4) evento y mensaje.
     /// </summary>
-    private async Task CompleteAsync(Operation operation, Payment payment, DateTimeOffset completedAt,
-        CancellationToken ct)
+    public async Task CompleteAsync(Operation operation, Payment payment, DateTimeOffset completedAt,
+        EventOrigin origin, CancellationToken ct = default)
     {
         var previous = operation.State;
         payment.State = OperationState.Completed;
@@ -195,7 +202,7 @@ public class OperationSync(
             OperationId = operation.Id,
             PreviousState = previous,
             NewState = OperationState.Completed,
-            Origin = EventOrigin.Rail,
+            Origin = origin,
             CreatedAt = time.GetUtcNow(),
         });
         if (operation.Kind == OperationKind.Deposit) await SendDepositNoticeAsync(operation, ct);

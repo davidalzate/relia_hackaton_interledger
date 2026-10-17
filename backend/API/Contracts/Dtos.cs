@@ -156,8 +156,8 @@ public record CreateWithdrawalRequest(
     [Required] bool? RoundAmount);
 
 public record CreateQuotaTopUpRequest(
-    [Required] TopUpMethod Method,
-    [Range(1, Patterns.MaxCop)] long RequestedAmount);
+    [Required] TopUpMethod? Method,
+    [Required, Range(1, Patterns.MaxCop)] long? RequestedAmount);
 
 public record OperationCustomerDto(string PhoneMasked, string WalletAddressMasked);
 

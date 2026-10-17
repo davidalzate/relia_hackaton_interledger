@@ -19,9 +19,15 @@ namespace Relia.Api.Controllers;
 [AllowAnonymous]
 [DemoOnly]
 [Tags("demo")]
-public class DemoController(ISimulatedInbox inbox, IOperationRepository operations, TimeProvider time)
+public class DemoController(
+    ISimulatedInbox inbox, IOperationRepository operations, IOperationService operationService, TimeProvider time)
     : ControllerBase
 {
+    /// <summary>Simulador Bre-B: "Simular pago recibido" de una carga pendiente.</summary>
+    [HttpPost("quota-top-ups/{operationId:guid}/breb-payment")]
+    public Task<OperationDto> SimulateBreBPayment(Guid operationId, CancellationToken ct) =>
+        operationService.SimulateBreBPaymentAsync(operationId, ct);
+
     /// <summary>"Mi billetera": cobros pendientes de aprobación de ese celular (usuario o corresponsal).</summary>
     [HttpGet("payment-requests")]
     public async Task<DemoPaymentRequestListDto> ListPaymentRequests(
