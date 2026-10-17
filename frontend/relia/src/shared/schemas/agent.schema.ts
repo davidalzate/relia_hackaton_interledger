@@ -55,3 +55,12 @@ export const HistoryPageSchema = z.object({
   items: z.array(HistoryEntrySchema),
   nextCursor: z.optional(z.nullable(z.string())),
 });
+
+export const CashAdjustmentSchema = z.object({
+  id: z.string(),
+  mode: z.enum(['add', 'set']),
+  variation: z.number(),
+  reason: z.string(),
+  cashOnHand: BalancePairSchema,
+  createdAt: z.string(),
+});

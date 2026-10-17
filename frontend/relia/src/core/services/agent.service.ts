@@ -14,9 +14,11 @@ import {
 } from 'rxjs';
 
 import { environment } from '../../environments/environment';
+import { IDEMPOTENCY_HEADER, newIdempotencyKey } from '../http/api';
 import {
   Agent,
   AgentSchema,
+  CashAdjustmentSchema,
   HistoryEntry,
   HistoryKind,
   HistoryPageSchema,
@@ -395,15 +397,41 @@ export class AgentService {
   }
 
   /** B7: ajusta solo el efectivo; cupo y comisión no cambian */
-  updateCash(mode: CashMode, amount: number): CashUpdate {
-    const before = this._balances();
-    const after = { ...before, cash: mode === 'add' ? before.cash + amount : amount };
-    this._balances.set(after);
-    const operation = this.record(amount, 'completed', mode === 'add' ? 'cash' : 'cash-set', {
-      before,
-      after,
-    });
-    return { operation, before: before.cash, after: after.cash };
+  /** B7: `POST /agents/{agentId}/cash-adjustments` (201 síncrono, sin polling) */
+  updateCash(
+    mode: CashMode,
+    amount: number,
+    idempotencyKey = newIdempotencyKey(),
+  ): Observable<CashUpdate> {
+    return this.http
+      .post(
+        `${environment.apiUrl}/agents/${this.auth.agentId()}/cash-adjustments`,
+        { mode, amount },
+        { headers: { [IDEMPOTENCY_HEADER]: idempotencyKey } },
+      )
+      .pipe(
+        timeout(environment.httpTimeoutMs),
+        map((res) => CashAdjustmentSchema.parse(res)),
+        map(({ id, reason, cashOnHand, createdAt }) => {
+          const current = this._balances();
+          const before = { ...current, cash: cashOnHand.before };
+          const after = { ...current, cash: cashOnHand.after };
+          this._balances.set(after);
+          const operation: Operation = {
+            id,
+            type: mode === 'add' ? 'cash' : 'cash-set',
+            amount,
+            status: 'completed',
+            createdAt,
+            before,
+            after,
+            details: { reason },
+          };
+          // Ya está en el servidor: va con las del API, no con las de memoria
+          this._recent.update((ops) => [operation, ...ops]);
+          return { operation, before: cashOnHand.before, after: cashOnHand.after };
+        }),
+      );
   }
 
   /** B6.3: genera el QR Bre-B o la solicitud a la Wallet; vence según el método */
