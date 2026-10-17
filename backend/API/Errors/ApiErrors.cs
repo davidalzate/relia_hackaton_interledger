@@ -82,19 +82,18 @@ public static class ApiErrors
         new(StatusCodes.Status422UnprocessableEntity, "insufficient_cash", "Efectivo insuficiente",
             new Dictionary<string, object?> { ["shortfall"] = shortfall });
 
+    /// <summary>Una sola liquidación pendiente por corresponsal (ux_settlements_one_pending).</summary>
+    public static ApiException SettlementInProgress() =>
+        new(StatusCodes.Status409Conflict, "settlement_in_progress", "Ya hay una liquidación en curso");
+
+    public static ApiException NoCommission() =>
+        new(StatusCodes.Status422UnprocessableEntity, "no_commission", "No hay comisión por liquidar");
+
     /// <summary>422 validation_error con detalle de un campo, como el de la validación de modelo.</summary>
     public static ApiException Validation(string field, string message) =>
         new(StatusCodes.Status422UnprocessableEntity, "validation_error", "Datos inválidos",
             new Dictionary<string, object?> { ["errors"] = new[] { new { field, message } } });
 }
-
-/// <summary>
-/// Lanzada por los servicios aún sin implementar. Responde 501 con <c>code: not_implemented</c>, que no está en
-/// el contrato: desaparece cuando todos los servicios estén implementados.
-/// </summary>
-public class FeatureInDevelopmentException(string feature)
-    : ApiException(StatusCodes.Status501NotImplemented, "not_implemented", "En desarrollo",
-        new Dictionary<string, object?> { ["feature"] = feature });
 
 /// <summary>Convierte ApiException en application/problem+json (RFC 9457).</summary>
 public class ApiExceptionHandler(IProblemDetailsService problemDetails) : IExceptionHandler

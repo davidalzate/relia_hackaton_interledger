@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Globalization;
-using System.Text.Json;
 using Relia.Api.Domain;
 using Relia.Api.Rail;
 using Relia.Api.Repositories;
@@ -102,7 +101,6 @@ public class OperationSync(
     IWalletKeyRepository keys, IRailClient rail, ILedger ledger, ISimulatedInbox inbox, IUnitOfWork unitOfWork,
     RailRefreshThrottle throttle, TimeProvider time, ILogger<OperationSync> logger) : IOperationSync
 {
-    private static readonly JsonSerializerOptions RailJson = new(JsonSerializerDefaults.Web);
     private static readonly CultureInfo Colombia = CultureInfo.GetCultureInfo("es-CO");
 
     public async Task RefreshAsync(Operation operation, CancellationToken ct = default)
@@ -176,8 +174,8 @@ public class OperationSync(
                     await ApplyAsync(locked, lockedPayment, reading, "expire", EventOrigin.Rail, tx);
                     return false;
                 }
-                if (!LogReading(lockedPayment, reading, "expire", OperationState.Expired))
-                    CopyRailData(lockedPayment, reading);
+                if (!payments.LogReading(lockedPayment, reading, "expire", OperationState.Expired, time.GetUtcNow()))
+                    lockedPayment.CopyRailData(reading);
             }
             await CloseWithoutMovementAsync(locked, lockedPayment, OperationState.Expired, "request_expired",
                 "Venció el plazo de aprobación", EventOrigin.System, tx);
@@ -227,14 +225,14 @@ public class OperationSync(
         // cancelled: pasado el plazo y sin que la pidiera el corresponsal, es un vencimiento.
         if (state == OperationState.Cancelled && action != "cancel" && payment.ExpiresAt <= time.GetUtcNow())
             (state, failureCode) = (OperationState.Expired, "request_expired");
-        var stale = LogReading(payment, reading, action, state);
+        var stale = payments.LogReading(payment, reading, action, state, time.GetUtcNow());
         if (stale)
         {
             await unitOfWork.SaveChangesAsync(ct);
             return;
         }
 
-        CopyRailData(payment, reading);
+        payment.CopyRailData(reading);
         if (state != OperationState.Pending && operation.State != OperationState.Pending)
         {
             // La operación ya terminó por otro camino (p. ej. vencida en el backend) y el riel cerró después:
@@ -331,47 +329,5 @@ public class OperationSync(
             $"Relia: recibiste {operation.NetAmount.ToString("C0", Colombia)} en tu billetera por un depósito en " +
             $"{agent.Name} ({operation.Reference}).",
             operationId: operation.Id);
-    }
-
-    /// <summary>
-    /// Toda respuesta del riel queda en la bitácora del pago, también las lecturas viejas que se descartan.
-    /// Devuelve true si la lectura es vieja (version ≤ rail_version).
-    /// </summary>
-    private bool LogReading(Payment payment, RailPayment reading, string action, OperationState state)
-    {
-        var stale = payment.RailVersion is { } processed && reading.Version <= processed;
-        payments.AddEvent(new PaymentEvent
-        {
-            PaymentId = payment.Id,
-            Action = action,
-            PreviousState = payment.State,
-            NewState = stale ? payment.State : state,
-            Origin = EventOrigin.Rail,
-            RailResponse = JsonSerializer.SerializeToDocument(reading, RailJson),
-            Detail = $"{reading.Status} v{reading.Version}{(stale ? " (descartada)" : "")}",
-            CreatedAt = time.GetUtcNow(),
-        });
-        return stale;
-    }
-
-    private static void CopyRailData(Payment payment, RailPayment reading)
-    {
-        payment.RailPaymentId = reading.Id;
-        payment.RailVersion = reading.Version;
-        payment.IncomingPaymentUrl = reading.Rail?.IncomingPaymentUrl ?? payment.IncomingPaymentUrl;
-        payment.QuoteUrl = reading.Rail?.QuoteUrl ?? payment.QuoteUrl;
-        payment.OutgoingPaymentUrl = reading.Rail?.OutgoingPaymentUrl ?? payment.OutgoingPaymentUrl;
-        // El proxy solo trae approval mientras espera la aprobación: después ya no se ofrece aprobar (la URL vieja
-        // queda en payment_events).
-        payment.ApprovalUrl = reading.Status == "pending_approval" ? reading.Approval?.Url ?? payment.ApprovalUrl : null;
-        payment.ExpiresAt = reading.ExpiresAt ?? payment.ExpiresAt;
-        if (reading.DebitAmount is { } debit)
-            (payment.DebitValue, payment.DebitAssetCode, payment.DebitAssetScale) =
-                (debit.Value, debit.AssetCode, (short)debit.AssetScale);
-        if (reading.ReceivedAmount is { } received)
-            (payment.ReceivedValue, payment.ReceivedAssetCode, payment.ReceivedAssetScale) =
-                (received.Value, received.AssetCode, (short)received.AssetScale);
-        payment.ErrorCode = reading.FailureCode;
-        payment.ErrorMessage = reading.FailureDetail;
     }
 }

@@ -144,6 +144,10 @@ public class EfOperationRepository(ReliaDbContext db) : IOperationRepository
         return operation;
     }
 
+    public Task<DateTimeOffset?> GetFirstCompletedAtAsync(Guid agentId, CancellationToken ct = default) =>
+        db.Operations.Where(o => o.AgentId == agentId && o.State == OperationState.Completed)
+            .MinAsync(o => o.CompletedAt, ct);
+
     public async Task<IReadOnlyList<PendingApproval>> ListPendingApprovalsAsync(string phone, DateTimeOffset now,
         CancellationToken ct = default)
     {
@@ -200,6 +204,18 @@ public class EfPaymentRepository(ReliaDbContext db) : IPaymentRepository
     public Task<Payment?> GetLatestBySettlementAsync(Guid settlementId, CancellationToken ct = default) =>
         db.Payments.Where(p => p.SettlementId == settlementId)
             .OrderByDescending(p => p.CreatedAt).FirstOrDefaultAsync(ct);
+
+    public async Task<Payment?> GetLatestBySettlementForUpdateAsync(Guid settlementId, CancellationToken ct = default)
+    {
+        var payment = await db.Payments
+            .FromSqlInterpolated($"""
+                SELECT * FROM payments WHERE settlement_id = {settlementId}
+                ORDER BY created_at DESC LIMIT 1 FOR UPDATE
+                """)
+            .SingleOrDefaultAsync(ct);
+        if (payment is not null) await db.Entry(payment).ReloadAsync(ct);
+        return payment;
+    }
 
     public void Add(Payment payment) => db.Payments.Add(payment);
 
@@ -300,6 +316,28 @@ public class EfSettlementRepository(ReliaDbContext db) : ISettlementRepository
         if (f.Before is not null) q = q.Where(s => s.CreatedAt < f.Before);
         return await q.OrderByDescending(s => s.CreatedAt).Take(f.Limit).ToListAsync(ct);
     }
+
+    public async Task<Settlement?> GetForUpdateAsync(Guid id, CancellationToken ct = default)
+    {
+        var settlement = await db.Settlements
+            .FromSqlInterpolated($"SELECT * FROM settlements WHERE id = {id} FOR UPDATE")
+            .SingleOrDefaultAsync(ct);
+        if (settlement is not null) await db.Entry(settlement).ReloadAsync(ct);
+        return settlement;
+    }
+
+    public async Task<IReadOnlyList<Guid>> ListPendingIdsAsync(CancellationToken ct = default) =>
+        await db.Settlements.Where(s => s.State == SettlementState.Pending)
+            .OrderBy(s => s.CreatedAt).Select(s => s.Id).ToListAsync(ct);
+
+    public Task<bool> HasPendingAsync(Guid agentId, CancellationToken ct = default) =>
+        db.Settlements.AnyAsync(s => s.AgentId == agentId && s.State == SettlementState.Pending, ct);
+
+    public Task<Settlement?> GetLastPaidAsync(Guid agentId, CancellationToken ct = default) =>
+        db.Settlements.Where(s => s.AgentId == agentId && s.State == SettlementState.Paid)
+            .OrderByDescending(s => s.PaidAt).FirstOrDefaultAsync(ct);
+
+    public void Add(Settlement settlement) => db.Settlements.Add(settlement);
 }
 
 public class EfSimulatedMessageRepository(ReliaDbContext db) : ISimulatedMessageRepository

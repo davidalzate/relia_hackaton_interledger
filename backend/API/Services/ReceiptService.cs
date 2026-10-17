@@ -19,9 +19,6 @@ public class ReceiptService(
 {
     private static readonly CultureInfo Colombia = CultureInfo.GetCultureInfo("es-CO");
 
-    /// <summary>issue_receipt guarda la fecha en hora de Bogotá, sin zona.</summary>
-    private static readonly TimeZoneInfo Bogota = TimeZoneInfo.FindSystemTimeZoneById("America/Bogota");
-
     public async Task<ReceiptDto> GetAsync(Guid operationId, ReceiptViewChannel channel, CancellationToken ct = default)
     {
         var receipt = await GetReceiptAsync(operationId, ct);
@@ -96,8 +93,9 @@ public class ReceiptService(
 
     private static ReceiptDataDto ToData(FrozenReceipt d)
     {
+        // issue_receipt guarda la fecha en hora de Bogotá, sin zona.
         var local = DateTime.ParseExact(d.Date, "yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture);
-        var date = new DateTimeOffset(local, Bogota.GetUtcOffset(local));
+        var date = new DateTimeOffset(local, Bogota.Zone.GetUtcOffset(local));
         return new ReceiptDataDto(
             d.Number,
             d.Type switch

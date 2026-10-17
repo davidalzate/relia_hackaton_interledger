@@ -5,8 +5,8 @@ using Relia.Api.Repositories;
 namespace Relia.Api.Services;
 
 /// <summary>
-/// Un seguimiento que corre en cada ciclo del barrido de fondo. Las operaciones son uno; las liquidaciones
-/// (ticket 13) se registran como otro con <c>AddScoped&lt;ISweepTask, ...&gt;()</c>.
+/// Un seguimiento que corre en cada ciclo del barrido de fondo: operaciones y liquidaciones. Se registran con
+/// <c>AddScoped&lt;ISweepTask, ...&gt;()</c>.
 /// </summary>
 public interface ISweepTask
 {

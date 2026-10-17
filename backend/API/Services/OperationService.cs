@@ -1,6 +1,4 @@
 using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 using Microsoft.Extensions.Options;
 using Relia.Api.Auth;
 using Relia.Api.Configuration;
@@ -23,9 +21,6 @@ public class OperationService(
     IOperationSync sync, ISimulatedInbox inbox, IUnitOfWork unitOfWork, ICurrentUser currentUser,
     IOptions<ReliaOptions> options, TimeProvider time, ILogger<OperationService> logger) : IOperationService
 {
-    /// <summary>Tope de la descripción que ve el pagador en su billetera (rail-proxy.openapi.yaml).</summary>
-    private const int MaxRailDescription = 140;
-
     /// <summary>Plazo para aprobar un cobro por Wallet (retiro y carga).</summary>
     private static readonly TimeSpan WalletApprovalWindow = TimeSpan.FromMinutes(5);
 
@@ -81,7 +76,7 @@ public class OperationService(
                 idempotencyKey, now);
             var payment = new Payment
             {
-                Id = RailPaymentId(agentId, "deposit", idempotencyKey),
+                Id = RailPayments.PaymentId(agentId, "deposit", idempotencyKey),
                 OperationId = operation.Id,
                 Rail = PaymentRail.OpenPayments,
                 Direction = PaymentDirection.Outgoing,
@@ -95,10 +90,10 @@ public class OperationService(
             // Se guarda antes de llamar al riel: si la base rechaza algo, no se llega a pedir el pago.
             await unitOfWork.SaveChangesAsync(tx);
 
-            var reading = await CreateRailPaymentAsync(payment, new RailPaymentRequest(
+            var reading = await rail.CreateOrThrowAsync(payment, new RailPaymentRequest(
                 RailDirection.Outgoing, key.WalletAddress, RailAmount.FromCop(amounts.NetAmount),
-                Description: RailDescription($"Depósito en {agent.Name}")),
-                tx);
+                Description: RailPayments.Description($"Depósito en {agent.Name}")),
+                logger, tx);
             await sync.ApplyAsync(operation, payment, reading, "create", ct: tx);
             return await ToDtoAsync(operation, payment, tx);
         }, ct);
@@ -136,7 +131,7 @@ public class OperationService(
                 idempotencyKey, now);
             var payment = new Payment
             {
-                Id = RailPaymentId(agentId, "withdrawal", idempotencyKey),
+                Id = RailPayments.PaymentId(agentId, "withdrawal", idempotencyKey),
                 OperationId = operation.Id,
                 Rail = PaymentRail.OpenPayments,
                 Direction = PaymentDirection.Incoming,
@@ -150,10 +145,10 @@ public class OperationService(
             payments.Add(payment);
             await unitOfWork.SaveChangesAsync(tx);
 
-            var reading = await CreateRailPaymentAsync(payment, new RailPaymentRequest(
+            var reading = await rail.CreateOrThrowAsync(payment, new RailPaymentRequest(
                 RailDirection.Incoming, key.WalletAddress, RailAmount.FromCop(amounts.ChargedAmount), expiresAt,
-                RailDescription($"Retiro de {amounts.NetAmount.ToString("C0", PesoFormat)} en {agent.Name}")),
-                tx);
+                RailPayments.Description($"Retiro de {amounts.NetAmount.ToString("C0", PesoFormat)} en {agent.Name}")),
+                logger, tx);
             await sync.ApplyAsync(operation, payment, reading, "create", ct: tx);
             if (operation.State == OperationState.Pending && payment.ApprovalUrl is { } approvalUrl)
             {
@@ -206,7 +201,7 @@ public class OperationService(
             });
             var payment = new Payment
             {
-                Id = RailPaymentId(agentId, "quota-top-up", idempotencyKey),
+                Id = RailPayments.PaymentId(agentId, "quota-top-up", idempotencyKey),
                 OperationId = operation.Id,
                 Rail = breB ? PaymentRail.BreBSimulated : PaymentRail.OpenPayments,
                 Direction = PaymentDirection.Incoming,
@@ -230,10 +225,10 @@ public class OperationService(
                 return await ToDtoAsync(operation, payment, tx);
             }
 
-            var reading = await CreateRailPaymentAsync(payment, new RailPaymentRequest(
+            var reading = await rail.CreateOrThrowAsync(payment, new RailPaymentRequest(
                 RailDirection.Incoming, agent.WalletAddress, RailAmount.FromCop(amount), payment.ExpiresAt,
-                RailDescription($"Carga de cupo de {amount.ToString("C0", PesoFormat)} para {agent.Name}")),
-                tx);
+                RailPayments.Description($"Carga de cupo de {amount.ToString("C0", PesoFormat)} para {agent.Name}")),
+                logger, tx);
             await sync.ApplyAsync(operation, payment, reading, "create", ct: tx);
             return await ToDtoAsync(operation, payment, tx);
         }, ct);
@@ -419,58 +414,6 @@ public class OperationService(
             OperationId = operation.Id, NewState = OperationState.Pending, Origin = EventOrigin.Agent, CreatedAt = now,
         });
         return operation;
-    }
-
-    /// <summary>
-    /// Descripción que ve el pagador, recortada al tope del proxy. Los llamadores no ponen el OP-xxxxxx: el número
-    /// cambia en cada reintento y el proxy vería otro cuerpo con la misma clave.
-    /// </summary>
-    private static string RailDescription(string text) =>
-        text.Length > MaxRailDescription ? text[..MaxRailDescription] : text;
-
-    /// <summary>
-    /// POST /payments al proxy. Riel caído o sin permiso → 503 rail_unavailable; billetera del usuario que el riel
-    /// no acepta → 422 wallet_not_found. En los dos casos el filtro deshace la operación.
-    /// </summary>
-    private async Task<RailPayment> CreateRailPaymentAsync(Payment payment, RailPaymentRequest request,
-        CancellationToken ct)
-    {
-        try
-        {
-            return await rail.CreatePaymentAsync(payment.Id, request, ct);
-        }
-        catch (RailUnavailableException e)
-        {
-            logger.LogWarning(e, "El riel no aceptó el pago {PaymentId}", payment.Id);
-            throw ApiErrors.RailUnavailable();
-        }
-        catch (RailException e) when (e.Code is "wallet_not_found" or "unsupported_asset" or "same_wallet")
-        {
-            logger.LogWarning(e, "El riel rechazó la billetera {Wallet} ({Code})", request.Counterparty, e.Code);
-            throw ApiErrors.WalletNotFound();
-        }
-        catch (RailException e) when (e.Code == "idempotency_conflict")
-        {
-            // Se reintentó la misma Idempotency-Key con otro cuerpo después de un 503.
-            throw new ApiException(StatusCodes.Status409Conflict, "idempotency_conflict",
-                "La clave de idempotencia ya se usó con otra petición");
-        }
-        catch (RailException e)
-        {
-            logger.LogError(e, "Respuesta inesperada del riel al crear el pago {PaymentId} ({Code})", payment.Id, e.Code);
-            throw ApiErrors.RailUnavailable();
-        }
-    }
-
-    /// <summary>
-    /// payments.id, que también es la Idempotency-Key del riel, derivado de (corresponsal, tipo, clave del frontend).
-    /// Si el riel creó el pago pero la respuesta no llegó (timeout → 503 y rollback), el reintento con la misma
-    /// clave le pide al riel el mismo pago en vez de crear otro: no se paga dos veces.
-    /// </summary>
-    private static Guid RailPaymentId(Guid agentId, string kind, string idempotencyKey)
-    {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{agentId:N}:{kind}:{idempotencyKey}"));
-        return new Guid(hash.AsSpan(0, 16));
     }
 
     private async Task<OperationDto> ToDtoAsync(Operation operation, Payment? payment, CancellationToken ct)

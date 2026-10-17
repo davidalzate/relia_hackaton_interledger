@@ -103,9 +103,18 @@ public interface IReceiptService
     Task<ReceiptDeliveryDto> SendAsync(Guid operationId, SendReceiptRequest request, CancellationToken ct = default);
 }
 
-/// <summary>GET /settlements y GET /settlements/{settlementId}. El agente solo ve las suyas.</summary>
+/// <summary>
+/// POST /agents/{agentId}/settlements (solo admin), GET /settlements y GET /settlements/{settlementId}. El agente
+/// solo ve las suyas.
+/// </summary>
 public interface ISettlementService
 {
+    /// <summary>
+    /// 202 con la liquidación pending (o ya paid, con billetera simulada). 409 settlement_in_progress,
+    /// 422 no_commission, 503 rail_unavailable sin crear nada.
+    /// </summary>
+    Task<SettlementDto> CreateAsync(Guid agentId, string idempotencyKey, CancellationToken ct = default);
+
     Task<SettlementPageDto> ListAsync(SettlementQuery query, CancellationToken ct = default);
 
     Task<SettlementDto> GetAsync(Guid settlementId, CancellationToken ct = default);

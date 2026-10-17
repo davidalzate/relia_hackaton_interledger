@@ -111,6 +111,9 @@ public interface IOperationRepository
     /// <summary>SELECT ... FOR UPDATE de la operación, con los valores de la base. Solo dentro de una transacción.</summary>
     Task<Operation?> GetForUpdateAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>Cuándo se completó la primera operación del corresponsal; null si no tiene ninguna.</summary>
+    Task<DateTimeOffset?> GetFirstCompletedAtAsync(Guid agentId, CancellationToken ct = default);
+
     /// <summary>
     /// Retiros y cargas por Wallet pendientes cuyo pagador es <paramref name="phone"/> (el usuario del retiro o el
     /// corresponsal de la carga), con la approvalUrl de su último pago y su plazo después de <paramref name="now"/>.
@@ -134,6 +137,9 @@ public interface IPaymentRepository
     /// <summary>Como <see cref="GetLatestByOperationAsync"/>, con FOR UPDATE y los valores de la base.</summary>
     Task<Payment?> GetLatestByOperationForUpdateAsync(Guid operationId, CancellationToken ct = default);
     Task<Payment?> GetLatestBySettlementAsync(Guid settlementId, CancellationToken ct = default);
+
+    /// <summary>Como <see cref="GetLatestBySettlementAsync"/>, con FOR UPDATE y los valores de la base.</summary>
+    Task<Payment?> GetLatestBySettlementForUpdateAsync(Guid settlementId, CancellationToken ct = default);
     void Add(Payment payment);
     void AddEvent(PaymentEvent paymentEvent);
 }
@@ -206,8 +212,23 @@ public record SettlementFilter(
 
 public interface ISettlementRepository
 {
+    /// <summary>Con el corresponsal y el admin que la creó.</summary>
     Task<Settlement?> GetByIdAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>SELECT ... FOR UPDATE de la liquidación, con los valores de la base. Solo dentro de una transacción.</summary>
+    Task<Settlement?> GetForUpdateAsync(Guid id, CancellationToken ct = default);
+
     Task<IReadOnlyList<Settlement>> ListAsync(SettlementFilter filter, CancellationToken ct = default);
+
+    /// <summary>Ids de las liquidaciones pendientes, la más vieja primero (para el barrido).</summary>
+    Task<IReadOnlyList<Guid>> ListPendingIdsAsync(CancellationToken ct = default);
+
+    Task<bool> HasPendingAsync(Guid agentId, CancellationToken ct = default);
+
+    /// <summary>Última liquidación pagada del corresponsal: el período de la siguiente empieza al día siguiente.</summary>
+    Task<Settlement?> GetLastPaidAsync(Guid agentId, CancellationToken ct = default);
+
+    void Add(Settlement settlement);
 }
 
 public interface ISimulatedMessageRepository
