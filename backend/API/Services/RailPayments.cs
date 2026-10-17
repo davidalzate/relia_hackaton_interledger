@@ -38,7 +38,8 @@ public static class RailPayments
 
     /// <summary>
     /// POST /payments al proxy. Riel caído o sin permiso → 503 rail_unavailable; billetera que el riel no acepta →
-    /// 422 wallet_not_found. En los dos casos el filtro de idempotencia deshace lo creado.
+    /// 422 wallet_not_found; billetera en una moneda que el riel no convierte → 422 wallet_currency_unsupported. En
+    /// todos los casos el filtro de idempotencia deshace lo creado.
     /// </summary>
     public static async Task<RailPayment> CreateOrThrowAsync(this IRailClient rail, Payment payment,
         RailPaymentRequest request, ILogger logger, CancellationToken ct)
@@ -52,7 +53,12 @@ public static class RailPayments
             logger.LogWarning(e, "El riel no aceptó el pago {PaymentId}", payment.Id);
             throw ApiErrors.RailUnavailable();
         }
-        catch (RailException e) when (e.Code is "wallet_not_found" or "unsupported_asset" or "same_wallet")
+        catch (RailException e) when (e.Code == "unsupported_asset")
+        {
+            logger.LogWarning(e, "El riel no convierte a la moneda de la billetera {Wallet}", request.Counterparty);
+            throw ApiErrors.WalletCurrencyUnsupported();
+        }
+        catch (RailException e) when (e.Code is "wallet_not_found" or "same_wallet")
         {
             logger.LogWarning(e, "El riel rechazó la billetera {Wallet} ({Code})", request.Counterparty, e.Code);
             throw ApiErrors.WalletNotFound();
@@ -109,6 +115,9 @@ public static class RailPayments
         if (reading.ReceivedAmount is { } received)
             (payment.ReceivedValue, payment.ReceivedAssetCode, payment.ReceivedAssetScale) =
                 (received.Value, received.AssetCode, (short)received.AssetScale);
+        if (reading.QuotedReceiveAmount is { } quoted)
+            (payment.QuotedReceiveValue, payment.QuotedReceiveAssetCode, payment.QuotedReceiveAssetScale) =
+                (quoted.Value, quoted.AssetCode, (short)quoted.AssetScale);
         payment.ErrorCode = reading.FailureCode;
         payment.ErrorMessage = reading.FailureDetail;
     }

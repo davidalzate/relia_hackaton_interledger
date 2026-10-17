@@ -451,6 +451,9 @@ CREATE TABLE public.payments (
 	received_value text NULL,
 	received_asset_code text NULL,
 	received_asset_scale int2 NULL,
+	quoted_receive_value text NULL,
+	quoted_receive_asset_code text NULL,
+	quoted_receive_asset_scale int2 NULL,
 	expires_at timestamptz NULL,
 	error_code text NULL,
 	error_message text NULL,
@@ -461,6 +464,7 @@ CREATE TABLE public.payments (
 	CONSTRAINT ck_payments_completed CHECK (((status = 'completed'::operation_status) = (completed_at IS NOT NULL))),
 	CONSTRAINT ck_payments_debit_complete CHECK ((((debit_value IS NULL) = (debit_asset_code IS NULL)) AND ((debit_value IS NULL) = (debit_asset_scale IS NULL)))),
 	CONSTRAINT ck_payments_distinct_wallets CHECK ((source_payment_pointer <> destination_payment_pointer)),
+	CONSTRAINT ck_payments_quoted_receive_complete CHECK ((((quoted_receive_value IS NULL) = (quoted_receive_asset_code IS NULL)) AND ((quoted_receive_value IS NULL) = (quoted_receive_asset_scale IS NULL)))),
 	CONSTRAINT ck_payments_parent CHECK (((operation_id IS NULL) <> (settlement_id IS NULL))),
 	CONSTRAINT ck_payments_received_complete CHECK ((((received_value IS NULL) = (received_asset_code IS NULL)) AND ((received_value IS NULL) = (received_asset_scale IS NULL)))),
 	CONSTRAINT ck_payments_rail_version CHECK (((rail_version IS NULL) OR (rail_version >= 1))),
@@ -483,6 +487,7 @@ CREATE UNIQUE INDEX ux_payments_rail_payment_id ON public.payments USING btree (
 COMMENT ON TABLE public.payments IS 'Intentos de pago por riel (Open Payments o Bre-B simulado) de operaciones y liquidaciones.';
 COMMENT ON COLUMN public.payments.rail_payment_id IS 'Id del pago en el proxy de riel (railPaymentId). Null si no pasó por el proxy.';
 COMMENT ON COLUMN public.payments.rail_version IS 'Último version del pago en el proxy ya procesado; lecturas con versión menor o igual se descartan.';
+COMMENT ON COLUMN public.payments.quoted_receive_value IS 'Lo que el quote del riel prometió entregar al receptor, en unidades mínimas de su moneda (quoted_receive_asset_code y _scale). Null si aún no hay quote.';
 
 -- public.receipt_issuances definition
 
@@ -638,6 +643,7 @@ DECLARE
     c agents%ROWTYPE;
     w wallet_keys%ROWTYPE;
     p payments%ROWTYPE;
+    wallet_amount jsonb;
     content jsonb;
     r receipts%ROWTYPE;
 BEGIN
@@ -661,6 +667,16 @@ BEGIN
         RAISE EXCEPTION 'La operación % no tiene un pago completado', o.display_number;
     END IF;
 
+    -- Lo que entró (depósito) o salió (retiro) de la billetera del usuario, solo si no es COP. Va en unidades
+    -- mínimas con su escala, como lo dio el riel.
+    IF o.type = 'deposit' AND p.received_asset_code IS DISTINCT FROM 'COP' AND p.received_value IS NOT NULL THEN
+        wallet_amount := jsonb_build_object(
+            'value', p.received_value, 'asset_code', p.received_asset_code, 'asset_scale', p.received_asset_scale);
+    ELSIF o.type = 'withdrawal' AND p.debit_asset_code IS DISTINCT FROM 'COP' AND p.debit_value IS NOT NULL THEN
+        wallet_amount := jsonb_build_object(
+            'value', p.debit_value, 'asset_code', p.debit_asset_code, 'asset_scale', p.debit_asset_scale);
+    END IF;
+
     content := jsonb_build_object(
         'number', o.display_number,
         'type', o.type,
@@ -679,7 +695,8 @@ BEGIN
             'charged_amount', o.charged_amount),
         'payment', jsonb_build_object(
             'rail', p.rail,
-            'reference', COALESCE(p.op_outgoing_payment_url, p.op_incoming_payment_url, p.rail_reference))
+            'reference', COALESCE(p.op_outgoing_payment_url, p.op_incoming_payment_url, p.rail_reference),
+            'wallet_amount', wallet_amount)
     );
 
     INSERT INTO receipts (operation_id, data, content_hash)

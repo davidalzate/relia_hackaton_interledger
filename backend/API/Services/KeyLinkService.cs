@@ -28,9 +28,11 @@ public class KeyLinkService(
     public async Task<KeyLinkChallengeDto> StartAsync(CreateKeyLinkRequest request, CancellationToken ct = default)
     {
         await EnsureCanLinkAsync(request.Phone, request.WalletAddress, ct);
+        // No se rechaza por moneda: el riel puede convertir. Se devuelve para que el usuario la vea.
+        RailWallet wallet;
         try
         {
-            await rail.ResolveWalletAddressAsync(request.WalletAddress, ct);
+            wallet = await rail.ResolveWalletAddressAsync(request.WalletAddress, ct);
         }
         catch (RailWalletNotFoundException)
         {
@@ -67,7 +69,8 @@ public class KeyLinkService(
             $"Relia: tu código para vincular tu billetera es {code}. Vence en 5 minutos. No lo compartas.");
         await unitOfWork.SaveChangesAsync(ct);
 
-        return new KeyLinkChallengeDto(challenge.Id, challenge.Phone, challenge.ExpiresAt, challenge.MaxAttempts);
+        return new KeyLinkChallengeDto(challenge.Id, challenge.Phone, challenge.ExpiresAt, challenge.MaxAttempts,
+            wallet.AssetCode);
     }
 
     public async Task<KeyLinkDto> VerifyAsync(Guid challengeId, VerifyKeyLinkRequest request,

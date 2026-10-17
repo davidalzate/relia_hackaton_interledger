@@ -1,6 +1,9 @@
+using System.Globalization;
+using System.Numerics;
 using System.Text.Json;
 using Relia.Api.Contracts;
 using Relia.Api.Domain;
+using Relia.Api.Rail;
 using Relia.Api.Repositories;
 
 namespace Relia.Api.Services;
@@ -64,7 +67,30 @@ public static class Mapping
             pending ? payment?.ApprovalUrl : null,
             QrPayload: pending ? payment?.SimulatedQrPayload() : null,
             CashHandedOverAt: o.CashHandedOverAt,
-            Balances: balances);
+            Balances: balances,
+            WalletAmount: payment?.WalletAmount());
+    }
+
+    /// <summary>
+    /// Monto en la moneda de la billetera de la contraparte, o null si es COP o el riel aún no lo informa. Relia paga
+    /// (outgoing): lo recibido o, mientras procesa, lo cotizado. Relia cobra (incoming): lo debitado al pagador.
+    /// </summary>
+    public static WalletAmountDto? WalletAmount(this Payment payment) => payment.Direction == PaymentDirection.Outgoing
+        ? ToWalletAmount(payment.ReceivedValue, payment.ReceivedAssetCode, payment.ReceivedAssetScale)
+          ?? ToWalletAmount(payment.QuotedReceiveValue, payment.QuotedReceiveAssetCode, payment.QuotedReceiveAssetScale)
+        : ToWalletAmount(payment.DebitValue, payment.DebitAssetCode, payment.DebitAssetScale);
+
+    /// <summary>Unidades mínimas del riel ("1234", escala 2) → "12.34". Null si falta o la moneda es COP.</summary>
+    public static WalletAmountDto? ToWalletAmount(string? value, string? assetCode, int? assetScale)
+    {
+        if (value is null || assetCode is null || assetScale is not { } scale || assetCode == RailAmount.Cop
+            || scale < 0 || !BigInteger.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var units))
+            return null;
+        if (scale == 0) return new WalletAmountDto(units.ToString(CultureInfo.InvariantCulture), assetCode);
+        var whole = BigInteger.DivRem(units, BigInteger.Pow(10, scale), out var fraction);
+        return new WalletAmountDto(
+            $"{whole.ToString(CultureInfo.InvariantCulture)}.{fraction.ToString(CultureInfo.InvariantCulture).PadLeft(scale, '0')}",
+            assetCode);
     }
 
     /// <summary>

@@ -79,6 +79,12 @@ public record AgentDto(
 
 public record BalancePairDto(long Before, long After);
 
+/// <summary>
+/// Monto en la moneda de la billetera de la contraparte cuando no es COP: <c>value</c> es decimal en unidades
+/// mayores como texto ("12.34"), <c>currency</c> el código de la moneda ("USD").
+/// </summary>
+public record WalletAmountDto(string Value, string Currency);
+
 // ---- Panel admin ----
 
 public record CountAmountDto(int Count, long Amount);
@@ -148,7 +154,9 @@ public record CreateKeyLinkRequest(
     [Required, RegularExpression(Patterns.Phone)] string Phone,
     [Required, RegularExpression(Patterns.WalletAddress)] string WalletAddress);
 
-public record KeyLinkChallengeDto(Guid ChallengeId, string Phone, DateTimeOffset ExpiresAt, int MaxAttempts);
+/// <summary>walletAssetCode: moneda de la billetera según el riel ("COP", "USD"…). No se rechaza por moneda.</summary>
+public record KeyLinkChallengeDto(
+    Guid ChallengeId, string Phone, DateTimeOffset ExpiresAt, int MaxAttempts, string WalletAssetCode);
 
 public record VerifyKeyLinkRequest([Required, RegularExpression("^[0-9]{6}$")] string Code);
 
@@ -182,7 +190,7 @@ public record OperationDto(
     DateTimeOffset CreatedAt, DateTimeOffset? CompletedAt, DateTimeOffset? ExpiresAt,
     long RequestedAmount, bool RoundAmount, FeeDto Fee, long NetAmount, long ChargedAmount,
     OperationCustomerDto? Customer, TopUpMethod? TopUpMethod, string? ApprovalUrl, string? QrPayload,
-    DateTimeOffset? CashHandedOverAt, BalanceChangeDto Balances);
+    DateTimeOffset? CashHandedOverAt, BalanceChangeDto Balances, WalletAmountDto? WalletAmount);
 
 // ---- Recibos ----
 
@@ -190,7 +198,7 @@ public record ReceiptMerchantDto(string Name, string Address, string Phone);
 
 public record ReceiptAmountsDto(long RequestedAmount, bool RoundAmount, long Fee, long NetAmount, long ChargedAmount);
 
-public record ReceiptPaymentDto(PaymentRailName Rail, string Reference);
+public record ReceiptPaymentDto(PaymentRailName Rail, string Reference, WalletAmountDto? WalletAmount);
 
 public record ReceiptDataDto(
     string Reference, CashMovingOperationType Type, DateTimeOffset Date, string Currency,
@@ -210,7 +218,8 @@ public record SettlementAdminDto(Guid Id, string Name);
 public record SettlementDto(
     Guid Id, string Reference, Guid AgentId, string AgentName, string WalletAddress, long Amount,
     DateOnly PeriodFrom, DateOnly PeriodTo, SettlementStatus Status, string? VoidReason,
-    DateTimeOffset CreatedAt, DateTimeOffset? PaidAt, SettlementAdminDto CreatedByAdmin);
+    DateTimeOffset CreatedAt, DateTimeOffset? PaidAt, SettlementAdminDto CreatedByAdmin,
+    WalletAmountDto? WalletAmount);
 
 public record SettlementPageDto(IReadOnlyList<SettlementDto> Items, string? NextCursor);
 

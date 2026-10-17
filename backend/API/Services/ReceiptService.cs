@@ -118,7 +118,8 @@ public class ReceiptService(
                     _ => throw new InvalidOperationException($"Recibo {d.Number} con riel {d.Payment.Rail}"),
                 },
                 d.Payment.Reference
-                ?? throw new InvalidOperationException($"Recibo {d.Number} sin referencia del riel")));
+                ?? throw new InvalidOperationException($"Recibo {d.Number} sin referencia del riel"),
+                d.Payment.WalletAmount is { } w ? Mapping.ToWalletAmount(w.Value, w.AssetCode, w.AssetScale) : null));
     }
 
     private static string Content(Receipt receipt, FrozenReceipt d, bool isCopy)
@@ -160,5 +161,12 @@ public class ReceiptService(
 
     private record FrozenPayment(
         [property: JsonPropertyName("rail")] string Rail,
-        [property: JsonPropertyName("reference")] string? Reference);
+        [property: JsonPropertyName("reference")] string? Reference,
+        [property: JsonPropertyName("wallet_amount")] FrozenWalletAmount? WalletAmount);
+
+    /// <summary>Solo si la billetera del usuario no es COP; recibos anteriores no lo traen.</summary>
+    private record FrozenWalletAmount(
+        [property: JsonPropertyName("value")] string Value,
+        [property: JsonPropertyName("asset_code")] string AssetCode,
+        [property: JsonPropertyName("asset_scale")] int AssetScale);
 }
