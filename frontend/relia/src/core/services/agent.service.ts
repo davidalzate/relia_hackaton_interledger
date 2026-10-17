@@ -1,23 +1,46 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import {
   Observable,
   Subscription,
   catchError,
-  delay,
   map,
   of,
+  tap,
   throwError,
   timeout,
   timer,
 } from 'rxjs';
 
 import { environment } from '../../environments/environment';
-import { AgentBalances, Operation, OperationDetails } from '../../shared/types/agent';
+import { ApiError, IDEMPOTENCY_HEADER, newIdempotencyKey } from '../http/api';
+import {
+  Agent,
+  AgentSchema,
+  CashAdjustmentSchema,
+  HistoryEntry,
+  HistoryKind,
+  HistoryPageSchema,
+} from '../../shared/schemas/agent.schema';
+import {
+  ApiOperation,
+  FAILURE_TEXT,
+  KeyLookup,
+  KeyLookupSchema,
+  OperationPreview,
+  OperationPreviewSchema,
+  OperationSchema,
+} from '../../shared/schemas/operation.schema';
+import {
+  AgentBalances,
+  Operation,
+  OperationDetails,
+  OperationType,
+} from '../../shared/types/agent';
+import { AuthService } from './auth.service';
 
 /** Por debajo de este valor (COP) la Caja muestra avisos de cupo/efectivo bajo */
 export const LOW_BALANCE_THRESHOLD = 50_000;
-/** Lo que tarda el simulador en acreditar la billetera (B2.4) */
-export const DEPOSIT_SEND_MS = 2_000;
 /** Tiempo que tiene el usuario para aprobar un retiro en su billetera (B3.2) */
 export const WITHDRAWAL_TTL_MS = 5 * 60_000;
 
@@ -30,29 +53,16 @@ export const CUPO_LOAD_TTL_MS: Record<CupoMethod, number> = {
 
 export interface DepositRequest {
   phone: string;
-  roundForUser: boolean;
-  cashIn: number;
-  walletOut: number;
-  commission: number;
+  requestedAmount: number;
+  roundAmount: boolean;
 }
 
 export interface DepositReceipt {
   operation: Operation;
   walletOut: number;
+  fee: number;
   before: AgentBalances;
   after: AgentBalances;
-}
-
-export type DepositErrorKind = 'network' | 'cupo';
-
-/** El depósito falló sin mover dinero; `operation` queda registrada como fallida */
-export class DepositError extends Error {
-  constructor(
-    readonly kind: DepositErrorKind,
-    readonly operation: Operation,
-  ) {
-    super(kind);
-  }
 }
 
 /** Datos del formulario B3.1 con el desglose ya calculado */
@@ -130,10 +140,6 @@ const CUPO_ERROR_REASON: Record<CupoLoadErrorKind, string> = {
   expired: 'La solicitud venció',
   cancelled: 'Solicitud cancelada',
 };
-const DEPOSIT_ERROR_REASON: Record<DepositErrorKind, string> = {
-  network: 'El simulador no respondió',
-  cupo: 'Cupo insuficiente',
-};
 
 const WITHDRAWAL_ERROR_STATUS: Record<WithdrawalErrorKind, Operation['status']> = {
   rejected: 'failed',
@@ -143,10 +149,62 @@ const WITHDRAWAL_ERROR_STATUS: Record<WithdrawalErrorKind, Operation['status']> 
   cash: 'failed',
 };
 
-// shortcut: estado demo en memoria que arranca vacío; cambiar por la API (validada con Zod y
-// timeout) cuando exista backend: GET /api/agent/summary, GET /api/keys/:phone, POST /api/deposits
+const API_TYPE: Record<ApiOperation['type'], OperationType> = {
+  deposit: 'deposit',
+  withdrawal: 'withdrawal',
+  quotaTopUp: 'cupo',
+};
+
+const KIND_TYPE: Record<HistoryKind, OperationType> = {
+  deposit: 'deposit',
+  withdrawal: 'withdrawal',
+  quotaTopUp: 'cupo',
+  cashAdjustment: 'cash',
+  settlement: 'commission',
+};
+
+/** Tipos locales que cubre cada `kind` del API (filtro de B8) */
+export const KIND_TYPES: Record<HistoryKind, OperationType[]> = {
+  deposit: ['deposit'],
+  withdrawal: ['withdrawal'],
+  quotaTopUp: ['cupo'],
+  cashAdjustment: ['cash', 'cash-set'],
+  settlement: ['commission'],
+};
+
+export interface HistoryPage {
+  items: Operation[];
+  nextCursor: string | null;
+}
+
+// Fila del historial del API → modelo que ya usan B1, B8 y el comprobante
+function toOperation(entry: HistoryEntry): Operation {
+  const { quota, accruedCommission, cashOnHand } = entry.balances;
+  const pending = entry.status === 'pending';
+  return {
+    id: entry.operationId ?? entry.settlementId ?? entry.id,
+    reference: entry.reference ?? undefined,
+    type: KIND_TYPE[entry.kind],
+    amount: entry.amount,
+    createdAt: entry.occurredAt,
+    status: entry.status,
+    before: pending
+      ? undefined
+      : { cupo: quota.before, commission: accruedCommission.before, cash: cashOnHand.before },
+    after: pending
+      ? undefined
+      : { cupo: quota.after, commission: accruedCommission.after, cash: cashOnHand.after },
+    details: entry.reason ? { reason: entry.reason } : undefined,
+  };
+}
+
+// shortcut: saldos iniciales del API; operaciones, historial y llaves siguen en memoria y
+// mueven los saldos localmente hasta integrar su endpoint (docs/wayfinder/integracion-api)
 @Injectable({ providedIn: 'root' })
 export class AgentService {
+  private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthService);
+  private readonly _agent = signal<Agent | null>(null);
   private readonly _balances = signal<AgentBalances>({ cupo: 0, commission: 0, cash: 0 });
   /** Más recientes primero */
   private readonly _operations = signal<Operation[]>([]);
@@ -156,33 +214,167 @@ export class AgentService {
   private readonly _cupoLoad = signal<CupoLoad | null>(null);
   private cupoExpiry?: Subscription;
 
+  /** Perfil y saldos crudos del API (`cashReserved`, `quotaReserved`, `walletAddress`…) */
+  readonly agent = this._agent.asReadonly();
   readonly balances = this._balances.asReadonly();
   readonly operations = this._operations.asReadonly();
-  readonly recentOperations = computed(() => this._operations().slice(0, 3));
+  /** Del API; `_operations` guarda solo las creadas en memoria (aún no están en el servidor) */
+  private readonly _recent = signal<Operation[]>([]);
+  private readonly _history = signal<HistoryPage & { kind: HistoryKind | null }>({
+    kind: null,
+    items: [],
+    nextCursor: null,
+  });
+  readonly recentOperations = computed(() =>
+    [...this._operations(), ...this._recent()].slice(0, 3),
+  );
+  /** B8: las de memoria del filtro actual y luego las páginas cargadas del API */
+  readonly history = computed(() => {
+    const { kind, items, nextCursor } = this._history();
+    const local = kind
+      ? this._operations().filter((op) => KIND_TYPES[kind].includes(op.type))
+      : this._operations();
+    return { items: [...local, ...items], nextCursor };
+  });
   readonly withdrawal = this._withdrawal.asReadonly();
   readonly cupoLoad = this._cupoLoad.asReadonly();
 
-  /** Verifica que el celular tenga billetera. `simulateMissing` fuerza "no existe" (demo) */
-  validateKey(_phone: string, simulateMissing: boolean): Observable<boolean> {
-    return of(!simulateMissing).pipe(delay(600), timeout(environment.httpTimeoutMs));
+  constructor() {
+    // Al iniciar o restaurar la sesión del corresponsal
+    effect(() => {
+      const id = this.auth.agentId();
+      if (!id) return;
+      untracked(() => {
+        this.refresh(id).subscribe({ error: () => undefined });
+        this.fetchHistory({ limit: 3 }).subscribe({
+          next: ({ items }) => this._recent.set(items),
+          error: () => undefined,
+        });
+      });
+    });
+  }
+
+  /** `GET /agents/{agentId}`; llamarlo tras cada operación terminal */
+  refresh(agentId = this.auth.agentId()): Observable<Agent> {
+    return this.http.get(`${environment.apiUrl}/agents/${agentId}`).pipe(
+      timeout(environment.httpTimeoutMs),
+      map((res) => AgentSchema.parse(res)),
+      tap((agent) => {
+        const { quota, accruedCommission, cashOnHand } = agent.balances;
+        this._agent.set(agent);
+        this._balances.set({ cupo: quota, commission: accruedCommission, cash: cashOnHand });
+      }),
+    );
+  }
+
+  /** B8: primera página de `kind` (null = todas), o la siguiente con `more` */
+  loadHistory(kind: HistoryKind | null, more = false): Observable<HistoryPage> {
+    const current = this._history();
+    const cursor = more ? current.nextCursor : null;
+    return this.fetchHistory({ kind, cursor }).pipe(
+      tap((page) =>
+        this._history.set({
+          kind,
+          items: more ? [...current.items, ...page.items] : page.items,
+          nextCursor: page.nextCursor,
+        }),
+      ),
+    );
+  }
+
+  private fetchHistory(query: {
+    kind?: HistoryKind | null;
+    cursor?: string | null;
+    limit?: number;
+  }): Observable<HistoryPage> {
+    const params = Object.fromEntries(Object.entries(query).filter(([, v]) => v != null)) as Record<
+      string,
+      string | number
+    >;
+    return this.http
+      .get(`${environment.apiUrl}/agents/${this.auth.agentId()}/history`, { params })
+      .pipe(
+        timeout(environment.httpTimeoutMs),
+        map((res) => HistoryPageSchema.parse(res)),
+        map(({ items, nextCursor }) => ({
+          items: items.map(toOperation),
+          nextCursor: nextCursor ?? null,
+        })),
+      );
+  }
+
+  /** `GET /keys/{phone}`: null si el celular no tiene billetera (`404 key_not_found`) */
+  validateKey(phone: string): Observable<KeyLookup | null> {
+    return this.http.get(`${environment.apiUrl}/keys/${phone}`).pipe(
+      timeout(environment.httpTimeoutMs),
+      map((res) => KeyLookupSchema.parse(res)),
+      catchError((err: unknown) =>
+        err instanceof ApiError && err.code === 'key_not_found' ? of(null) : throwError(() => err),
+      ),
+    );
+  }
+
+  /** Desglose en vivo (B2.1, B3.1). Responde 200 aunque haya `violations` */
+  previewOperation(
+    type: 'deposit' | 'withdrawal',
+    requestedAmount: number,
+    roundAmount: boolean,
+  ): Observable<OperationPreview> {
+    return this.http
+      .post(`${environment.apiUrl}/agents/${this.auth.agentId()}/operations/preview`, {
+        type,
+        requestedAmount,
+        roundAmount,
+      })
+      .pipe(
+        timeout(environment.httpTimeoutMs),
+        map((res) => OperationPreviewSchema.parse(res)),
+      );
+  }
+
+  /** `POST /agents/{agentId}/deposits` → 202 `pending`; seguir con `OperationsService.watch` */
+  createDeposit(request: DepositRequest, idempotencyKey: string): Observable<ApiOperation> {
+    return this.http
+      .post(
+        `${environment.apiUrl}/agents/${this.auth.agentId()}/deposits`,
+        { ...request, cashReceivedConfirmed: true },
+        { headers: { [IDEMPOTENCY_HEADER]: idempotencyKey } },
+      )
+      .pipe(
+        timeout(environment.httpTimeoutMs),
+        map((res) => OperationSchema.parse(res)),
+      );
+  }
+
+  /** Guarda una operación del API en las recientes (B1, comprobante) y la devuelve mapeada */
+  recordApiOperation(op: ApiOperation, details?: OperationDetails): Operation {
+    const { quota, accruedCommission, cashOnHand } = op.balances;
+    const done = op.status !== 'pending';
+    const operation: Operation = {
+      id: op.id,
+      reference: op.reference,
+      type: API_TYPE[op.type],
+      amount: op.chargedAmount,
+      status: op.status,
+      createdAt: op.createdAt,
+      before: done
+        ? { cupo: quota.before, commission: accruedCommission.before, cash: cashOnHand.before }
+        : undefined,
+      after: done
+        ? { cupo: quota.after, commission: accruedCommission.after, cash: cashOnHand.after }
+        : undefined,
+      details: {
+        ...details,
+        ...(op.failureCode && { reason: FAILURE_TEXT[op.failureCode] }),
+      },
+    };
+    this._recent.update((ops) => [operation, ...ops.filter((o) => o.id !== op.id)]);
+    return operation;
   }
 
   operation(id: string): Operation | undefined {
-    return this._operations().find((op) => op.id === id);
-  }
-
-  deposit(request: DepositRequest): Observable<DepositReceipt> {
-    return timer(DEPOSIT_SEND_MS).pipe(
-      map(() => this.applyDeposit(request)),
-      timeout(environment.httpTimeoutMs),
-      catchError((err: unknown) =>
-        throwError(() =>
-          err instanceof DepositError
-            ? err
-            : new DepositError('network', this.recordDeposit(request, 'failed', 'network')),
-        ),
-      ),
-    );
+    const all = [...this._operations(), ...this._recent(), ...this._history().items];
+    return all.find((op) => op.id === id);
   }
 
   /** B3.2: crea la solicitud de pago; vence sola a los 5 min si el usuario no responde */
@@ -250,15 +442,41 @@ export class AgentService {
   }
 
   /** B7: ajusta solo el efectivo; cupo y comisión no cambian */
-  updateCash(mode: CashMode, amount: number): CashUpdate {
-    const before = this._balances();
-    const after = { ...before, cash: mode === 'add' ? before.cash + amount : amount };
-    this._balances.set(after);
-    const operation = this.record(amount, 'completed', mode === 'add' ? 'cash' : 'cash-set', {
-      before,
-      after,
-    });
-    return { operation, before: before.cash, after: after.cash };
+  /** B7: `POST /agents/{agentId}/cash-adjustments` (201 síncrono, sin polling) */
+  updateCash(
+    mode: CashMode,
+    amount: number,
+    idempotencyKey = newIdempotencyKey(),
+  ): Observable<CashUpdate> {
+    return this.http
+      .post(
+        `${environment.apiUrl}/agents/${this.auth.agentId()}/cash-adjustments`,
+        { mode, amount },
+        { headers: { [IDEMPOTENCY_HEADER]: idempotencyKey } },
+      )
+      .pipe(
+        timeout(environment.httpTimeoutMs),
+        map((res) => CashAdjustmentSchema.parse(res)),
+        map(({ id, reason, cashOnHand, createdAt }) => {
+          const current = this._balances();
+          const before = { ...current, cash: cashOnHand.before };
+          const after = { ...current, cash: cashOnHand.after };
+          this._balances.set(after);
+          const operation: Operation = {
+            id,
+            type: mode === 'add' ? 'cash' : 'cash-set',
+            amount,
+            status: 'completed',
+            createdAt,
+            before,
+            after,
+            details: { reason },
+          };
+          // Ya está en el servidor: va con las del API, no con las de memoria
+          this._recent.update((ops) => [operation, ...ops]);
+          return { operation, before: cashOnHand.before, after: cashOnHand.after };
+        }),
+      );
   }
 
   /** B6.3: genera el QR Bre-B o la solicitud a la Wallet; vence según el método */
@@ -314,42 +532,6 @@ export class AgentService {
   clearCupoLoad(): void {
     this.failCupoLoad('cancelled');
     this._cupoLoad.set(null);
-  }
-
-  private applyDeposit(request: DepositRequest): DepositReceipt {
-    const { cashIn, walletOut, commission } = request;
-    const before = this._balances();
-    // El cupo pudo cambiar desde que se armó el formulario
-    if (before.cupo < cashIn) {
-      throw new DepositError('cupo', this.recordDeposit(request, 'failed', 'cupo'));
-    }
-    const after: AgentBalances = {
-      cupo: before.cupo - cashIn,
-      cash: before.cash + cashIn,
-      commission: before.commission + commission,
-    };
-    this._balances.set(after);
-    return {
-      operation: this.recordDeposit(request, 'completed', undefined, { before, after }),
-      walletOut,
-      before,
-      after,
-    };
-  }
-
-  private recordDeposit(
-    request: DepositRequest,
-    status: Operation['status'],
-    error?: DepositErrorKind,
-    balances?: BalanceChange,
-  ): Operation {
-    return this.record(request.cashIn, status, 'deposit', balances, {
-      phone: request.phone,
-      cash: request.cashIn,
-      wallet: request.walletOut,
-      roundForUser: request.roundForUser,
-      ...(error && { reason: DEPOSIT_ERROR_REASON[error] }),
-    });
   }
 
   private record(

@@ -27,6 +27,8 @@ export interface OperationDetails {
 
 export interface Operation {
   id: string;
+  /** `OP-000123` / `LQ-000007` del API; las operaciones aún en memoria no la tienen */
+  reference?: string;
   type: OperationType;
   amount: number;
   /** ISO 8601 */
