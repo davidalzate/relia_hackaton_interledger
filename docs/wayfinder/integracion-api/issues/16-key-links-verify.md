@@ -1,7 +1,7 @@
 # Integrar POST /key-links/{challengeId}/verify
 
 Type: task
-Status: claimed
+Status: resolved
 PR: [#32](https://github.com/davidalzate/relia_hackaton_interledger/pull/32)
 Blocked by: [15](15-key-links.md)
 Labels: wayfinder:task, frontend, feature:llaves

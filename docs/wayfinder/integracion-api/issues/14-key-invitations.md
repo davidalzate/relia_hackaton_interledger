@@ -1,7 +1,7 @@
 # Integrar POST /keys/{phone}/invitations
 
 Type: task
-Status: claimed
+Status: resolved
 PR: [#32](https://github.com/davidalzate/relia_hackaton_interledger/pull/32)
 Blocked by: [10](10-keys-get.md)
 Labels: wayfinder:task, frontend, feature:llaves

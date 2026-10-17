@@ -1,7 +1,7 @@
 # Integrar POST /demo/quota-top-ups/{operationId}/breb-payment
 
 Type: task
-Status: claimed
+Status: resolved
 PR: [#31](https://github.com/davidalzate/relia_hackaton_interledger/pull/31)
 Blocked by: [06](06-quota-top-ups.md)
 Labels: wayfinder:task, frontend, feature:cargar-cupo

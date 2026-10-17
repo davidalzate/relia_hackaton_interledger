@@ -1,7 +1,7 @@
 # Integrar POST /operations/{operationId}/cash-handover
 
 Type: task
-Status: claimed
+Status: resolved
 PR: [#29](https://github.com/davidalzate/relia_hackaton_interledger/pull/29)
 Blocked by: [12](12-withdrawals.md)
 Labels: wayfinder:task, frontend, feature:retirar
