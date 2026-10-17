@@ -2,7 +2,7 @@
 
 Registro de los prompts usados con **Claude Code** (app de escritorio, modelo Claude Opus) para construir el frontend de Relia en `frontend/relia`. Complementa [AI_USAGE.md](../../AI_USAGE.md).
 
-- **Fecha:** 16 y 17 de octubre de 2026, en dos sesiones: pantallas con datos simulados (prompts 1–22) e integración con la Relia API (prompts 23–53).
+- **Fecha:** 16 y 17 de octubre de 2026, en dos sesiones: pantallas con datos simulados (prompts 1–22) e integración con la Relia API (prompts 23–67).
 - **Stack resultante:** Angular 21 standalone, zone.js, signals, PrimeNG 21 (Aura), Zod (`zod/mini`) y SCSS con tokens en `:root`.
 - **Flujo de trabajo:** cada pantalla se pidió pegando su especificación (A1, B0–B9, D0–D1). Claude implementó la pantalla, corrió typecheck, build y tests y la probó en el navegador. Luego, con un segundo prompt, hizo el commit y abrió el PR hacia `main`.
 - **Integración con la API:** a partir de [contracts/FLUJOS.md](../../contracts/FLUJOS.md) Claude creó un ticket por endpoint en [docs/wayfinder/integracion-api](../wayfinder/integracion-api/map.md) y luego se pidió cada ticket por número; desde el prompt 33, una feature completa (varios tickets) por rama y PR. Cada uno reemplaza un mock por la llamada real, con schema Zod, tests con `HttpTestingController` y su PR. Los PRs van apilados: cada uno parte del anterior, y al final se llevaron a `main` con PRs de cierre (#34, #38).
@@ -65,6 +65,20 @@ Registro de los prompts usados con **Claude Code** (app de escritorio, modelo Cl
 | 51 | Parar los puertos que estén corriendo | Procesos detenidos (sin cambios) |
 | 52 | Link del front en el README raíz y README del front | `README.md` y `frontend/relia/README.md` (sin commit) |
 | 53 | Actualizar este registro | Este archivo |
+| 54 | Rama, commit y PR de la conexión | [PR #42](https://github.com/davidalzate/relia_hackaton_interledger/pull/42) |
+| 55 | Script para levantar proxy, back y front con un comando | `dev.sh` |
+| 56 | Instalar el SDK de .NET 10 y volver a correr `dev.sh` | Los tres servicios arriba |
+| 57 | Commitear `dev.sh` al PR #42 | Push después del merge de #42 |
+| 58 | Mandar lo pendiente en un PR nuevo | [PR #43](https://github.com/davidalzate/relia_hackaton_interledger/pull/43) |
+| 59 | Estado de las features | Respuesta (sin cambios) |
+| 60 | C1 no llamaba al API para inscribir al usuario | [PR #44](https://github.com/davidalzate/relia_hackaton_interledger/pull/44) |
+| 61 | Borrar la llave de prueba en la base local | Demo reiniciada |
+| 62 | ¿El código OTP sigue simulado? | Respuesta (sin cambios) |
+| 63 | Selector de país en los celulares (E.164) | [PR #45](https://github.com/davidalzate/relia_hackaton_interledger/pull/45), cerrado |
+| 64 | Un PR por carpeta | [PR #46](https://github.com/davidalzate/relia_hackaton_interledger/pull/46), [PR #47](https://github.com/davidalzate/relia_hackaton_interledger/pull/47), [PR #48](https://github.com/davidalzate/relia_hackaton_interledger/pull/48) |
+| 65 | Cerrar los puertos en uso | Servicios de Relia detenidos |
+| 66 | Cerrar `adb` | Puerto 5037 libre |
+| 67 | Actualizar este registro | Este archivo |
 
 Después de cada pantalla venía un prompt corto para hacer el commit y abrir el PR. Esos no se listan uno por uno; su forma era siempre la misma:
 
@@ -740,3 +754,75 @@ El README raíz enlaza el README del front y tiene una tabla de puertos locales 
 ### 53. Actualizar este registro
 
 > actualiza tambien el archivo docs/oscar_claude/frontend-prompts.md
+
+### 54. PR de la conexión
+
+> Sí, crea la rama fix/conexion-backend-local desde main, commitea y abre el PR a main.
+
+Un commit con el proxy, el tracker, los dos README y este registro. Resultado: [PR #42](https://github.com/davidalzate/relia_hackaton_interledger/pull/42).
+
+### 55–57. Levantar todo con un comando
+
+> cloude crea un scrip para correr todos los proyectos desde un comandoen local, iniciando con el proxi, luego back y por ultimo front
+
+`dev.sh` en la raíz levanta el Rail Proxy (4000), PostgreSQL y el backend (5080) y luego el front (4200). Espera a que cada uno responda, corta si alguno se cae y Ctrl+C detiene los tres. Antes de arrancar revisa que estén el SDK de .NET 10 y Docker. En la primera prueba el backend no compiló porque en la Mac solo había SDK 8 y 9:
+
+> Instala el SDK de .NET 10 con brew install --cask dotnet-sdk y vuelve a correr dev.sh.
+
+Con el SDK 10.0.402 los tres servicios levantaron y el login por `/api` del front respondió 200. Se pidió subirlo al PR #42 ("Sí, commitea dev.sh y el README y haz push al PR #42").
+
+### 58. PR nuevo para lo pendiente
+
+> ese pr ya esta mergeado, si hay cambios envialos en un nuevo pr
+
+#42 ya estaba mergeado cuando llegó el push, así que el commit de `dev.sh` quedó fuera de `main`. Claude lo pasó a una rama nueva desde `main`. Resultado: [PR #43](https://github.com/davidalzate/relia_hackaton_interledger/pull/43).
+
+### 59. Estado de las features
+
+> indicame el estado de los features
+
+Las 8 features de integración estaban en `main` (24 de 24 tickets) y Modo demo seguía fuera de alcance.
+
+### 60–61. C1 no inscribía al usuario
+
+> en 5, no esta llamando al endpoint de backend entonces no envia la informacion para inscribir al usuario
+
+El front generaba el OTP en el navegador y luego llamaba `POST /key-links`, que en el backend solo crea el desafío. La llave se crea en `POST /key-links/{challengeId}/verify`, y eso nunca se llamaba. Ahora "Enviar código" llama a `POST /key-links`, "Verificar" llama a `.../verify`, y el SMS con el código se copia de `GET /demo/messages` al teléfono simulado (C2). Se probó en el navegador y la llave quedó en `wallet_keys`. Resultado: [PR #44](https://github.com/davidalzate/relia_hackaton_interledger/pull/44).
+
+> Sí, borra la llave de prueba de 3000000002 en la base local para dejar la demo como estaba.
+
+`wallet_keys` es de solo inserción (un trigger bloquea el `DELETE`), así que se restauró con `POST /demo/reset`.
+
+### 62. OTP simulado
+
+> quedo mockeada la parte del codigo, es importante porque no se va a enviar mensaje a telefono
+
+Sí: el backend genera el código y lo deja en su bandeja simulada, y no sale ningún SMS real. Para que llegue a C2 el backend necesita `DEMO_MODE=true`.
+
+### 63–64. Selector de país y un PR por carpeta
+
+> vamos a agregar un selector de paises a los input de telefono para agregar y enviar el codigo del pais
+
+Antes de empezar Claude preguntó el alcance. Elegimos **E.164 de punta a punta** y los **países principales de Latam** (CO, MX, PE, CL, AR, EC, BR y US).
+
+- **Contrato:** `Phone` pasó a `^\+[1-9][0-9]{7,14}$`.
+- **Backend:** regex en DTOs y en la ruta `/keys/{phone}`, los 5 `CHECK` del DDL, semilla en `+57`, máscara y `wa.me` con el indicativo real.
+- **Front:** nuevo `PhoneFieldComponent` (país y número; el valor es E.164) en Depositar, Retirar y C1. Al cambiar de país no recorta el número, para no convertirlo en el celular de otra persona. El `+` se codifica a mano porque `HttpParams` lo deja sin codificar.
+
+Se probó con la base recreada. Resultado: [PR #45](https://github.com/davidalzate/relia_hackaton_interledger/pull/45).
+
+> puedes abrir pr por carpeta
+
+Se cerró #45 y salieron [PR #46](https://github.com/davidalzate/relia_hackaton_interledger/pull/46) (contracts), [PR #47](https://github.com/davidalzate/relia_hackaton_interledger/pull/47) (backend) y [PR #48](https://github.com/davidalzate/relia_hackaton_interledger/pull/48) (frontend). Backend y frontend deben llegar juntos.
+
+### 65–66. Cerrar puertos
+
+> cierra todos los puertos que se esten usando
+
+> adb
+
+Se detuvieron el proxy, el backend, el front y `relia-db`, y luego el servidor de `adb`. Los puertos de macOS y de otras apps se dejaron abiertos.
+
+### 67. Actualizar este registro
+
+> actualiza los proms realizados en oscar
