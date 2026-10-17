@@ -3,17 +3,24 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Relia.Api.Auth;
 using Relia.Api.Contracts;
+using Relia.Api.Idempotency;
 using Relia.Api.Services;
 
 namespace Relia.Api.Controllers;
 
-/// <summary>Rutas bajo /agents/{agentId} que usa el corresponsal.</summary>
+/// <summary>Panel admin (GET /agents) y rutas bajo /agents/{agentId} que usa el corresponsal.</summary>
 [ApiController]
 [Route("agents/{agentId:guid}")]
 [Authorize]
 public class AgentsController(
     IAgentService agents, ICashAdjustmentService cashAdjustments, IOperationService operations) : ControllerBase
 {
+    // "~/" no combina con la ruta del controlador: esta no lleva {agentId}.
+    [HttpGet("~/agents")]
+    [Tags("admin")]
+    [Authorize(Roles = Roles.Admin)]
+    public Task<AgentListDto> ListAgents(CancellationToken ct) => agents.ListAgentsAsync(ct);
+
     [HttpGet]
     [Tags("agents")]
     public Task<AgentDto> GetAgent(Guid agentId, CancellationToken ct) => agents.GetAgentAsync(agentId, ct);
@@ -32,6 +39,7 @@ public class AgentsController(
     [HttpPost("cash-adjustments")]
     [Tags("cash")]
     [Authorize(Roles = Roles.Agent)]
+    [Idempotent]
     public async Task<ActionResult<CashAdjustmentDto>> CreateCashAdjustment(
         Guid agentId,
         [FromHeader(Name = "Idempotency-Key"), Required, StringLength(128, MinimumLength = 8)] string idempotencyKey,
@@ -51,6 +59,7 @@ public class AgentsController(
     [HttpPost("deposits")]
     [Tags("operations")]
     [Authorize(Roles = Roles.Agent)]
+    [Idempotent]
     public async Task<ActionResult<OperationDto>> CreateDeposit(
         Guid agentId,
         [FromHeader(Name = "Idempotency-Key"), Required, StringLength(128, MinimumLength = 8)] string idempotencyKey,
@@ -61,6 +70,7 @@ public class AgentsController(
     [HttpPost("withdrawals")]
     [Tags("operations")]
     [Authorize(Roles = Roles.Agent)]
+    [Idempotent]
     public async Task<ActionResult<OperationDto>> CreateWithdrawal(
         Guid agentId,
         [FromHeader(Name = "Idempotency-Key"), Required, StringLength(128, MinimumLength = 8)] string idempotencyKey,
@@ -71,6 +81,7 @@ public class AgentsController(
     [HttpPost("quota-top-ups")]
     [Tags("operations")]
     [Authorize(Roles = Roles.Agent)]
+    [Idempotent]
     public async Task<ActionResult<OperationDto>> CreateQuotaTopUp(
         Guid agentId,
         [FromHeader(Name = "Idempotency-Key"), Required, StringLength(128, MinimumLength = 8)] string idempotencyKey,

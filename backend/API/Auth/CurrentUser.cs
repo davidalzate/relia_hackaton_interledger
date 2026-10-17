@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Relia.Api.Contracts;
+using Relia.Api.Errors;
 
 namespace Relia.Api.Auth;
 
@@ -25,6 +26,33 @@ public interface ICurrentUser
 
     /// <summary>Solo con rol agent.</summary>
     Guid? AgentId { get; }
+}
+
+public static class CurrentUserAccess
+{
+    /// <summary>
+    /// Regla de lectura de un corresponsal: el admin lee cualquiera; el agente solo el suyo (403 si no,
+    /// antes de mirar si existe, para no revelar qué ids existen).
+    /// </summary>
+    public static void EnsureCanReadAgent(this ICurrentUser user, Guid agentId)
+    {
+        if (user.Role == Role.Agent && user.AgentId != agentId) throw ApiErrors.Forbidden();
+    }
+
+    /// <summary>Panel admin: solo el admin.</summary>
+    public static void EnsureAdmin(this ICurrentUser user)
+    {
+        if (user.Role != Role.Admin) throw ApiErrors.Forbidden();
+    }
+
+    /// <summary>
+    /// Regla para operar (depósitos, retiros, cargas, ajustes): solo el corresponsal dueño. El admin lee
+    /// todo pero no opera por el corresponsal.
+    /// </summary>
+    public static void EnsureCanOperateAgent(this ICurrentUser user, Guid agentId)
+    {
+        if (user.Role != Role.Agent || user.AgentId != agentId) throw ApiErrors.Forbidden();
+    }
 }
 
 public class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUser

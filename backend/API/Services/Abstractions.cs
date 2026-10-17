@@ -14,9 +14,12 @@ public interface IAuthService
     Task<MeDto> GetMeAsync(CancellationToken ct = default);
 }
 
-/// <summary>GET /agents/{agentId} y GET /agents/{agentId}/history.</summary>
+/// <summary>GET /agents, GET /agents/{agentId} y GET /agents/{agentId}/history.</summary>
 public interface IAgentService
 {
+    /// <summary>Panel admin: todos los corresponsales con métricas y los totales de la red. 403 al agente.</summary>
+    Task<AgentListDto> ListAgentsAsync(CancellationToken ct = default);
+
     /// <summary>Saldos con reservas calculadas de las operaciones pendientes. 403 si es de otro corresponsal.</summary>
     Task<AgentDto> GetAgentAsync(Guid agentId, CancellationToken ct = default);
 
@@ -58,6 +61,19 @@ public interface IOperationService
     /// <summary>Retiros y cargas pendientes antes de aprobar; si no, 409 operation_not_cancellable.</summary>
     Task<OperationDto> CancelAsync(Guid operationId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Modo demo: llegó el pago Bre-B simulado de una carga pendiente y vigente. Si no, 409
+    /// operation_not_cancellable (el contrato no nombra un código para este caso).
+    /// </summary>
+    Task<OperationDto> SimulateBreBPaymentAsync(Guid operationId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Modo demo, "La solicitud vence ya": cancela en el riel un retiro o carga pendiente y lo deja
+    /// expired/request_expired. 409 operation_not_cancellable si no está pendiente o el pagador ya aprobó;
+    /// 503 rail_unavailable si el riel no responde.
+    /// </summary>
+    Task<OperationDto> ExpireNowAsync(Guid operationId, CancellationToken ct = default);
+
     /// <summary>Solo retiros completed; idempotente; no cambia saldos.</summary>
     Task<OperationDto> ConfirmCashHandoverAsync(Guid operationId, CancellationToken ct = default);
 }
@@ -72,6 +88,19 @@ public interface IKeyService
     Task<KeyInvitationDto> InviteAsync(string phone, string idempotencyKey, CancellationToken ct = default);
 }
 
+/// <summary>POST /key-links y POST /key-links/{challengeId}/verify, sin login.</summary>
+public interface IKeyLinkService
+{
+    /// <summary>
+    /// Valida en el orden del contrato (409 key_already_linked, phone_reserved, wallet_already_linked;
+    /// 422 wallet_not_found; 503 rail_unavailable) y deja el OTP por SMS simulado.
+    /// </summary>
+    Task<KeyLinkChallengeDto> StartAsync(CreateKeyLinkRequest request, CancellationToken ct = default);
+
+    /// <summary>Crea la llave con el código correcto; 422 invalid_otp, otp_expired u otp_attempts_exceeded.</summary>
+    Task<KeyLinkDto> VerifyAsync(Guid challengeId, VerifyKeyLinkRequest request, CancellationToken ct = default);
+}
+
 /// <summary>Recibos congelados de depósitos y retiros.</summary>
 public interface IReceiptService
 {
@@ -81,9 +110,18 @@ public interface IReceiptService
     Task<ReceiptDeliveryDto> SendAsync(Guid operationId, SendReceiptRequest request, CancellationToken ct = default);
 }
 
-/// <summary>GET /settlements y GET /settlements/{settlementId}. El agente solo ve las suyas.</summary>
+/// <summary>
+/// POST /agents/{agentId}/settlements (solo admin), GET /settlements y GET /settlements/{settlementId}. El agente
+/// solo ve las suyas.
+/// </summary>
 public interface ISettlementService
 {
+    /// <summary>
+    /// 202 con la liquidación pending (o ya paid, con billetera simulada). 409 settlement_in_progress,
+    /// 422 no_commission, 503 rail_unavailable sin crear nada.
+    /// </summary>
+    Task<SettlementDto> CreateAsync(Guid agentId, string idempotencyKey, CancellationToken ct = default);
+
     Task<SettlementPageDto> ListAsync(SettlementQuery query, CancellationToken ct = default);
 
     Task<SettlementDto> GetAsync(Guid settlementId, CancellationToken ct = default);
