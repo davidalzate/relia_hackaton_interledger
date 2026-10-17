@@ -1,7 +1,7 @@
 # Integrar GET /operations/{operationId}/receipt
 
 Type: task
-Status: claimed
+Status: resolved
 PR: [#33](https://github.com/davidalzate/relia_hackaton_interledger/pull/33)
 Blocked by: [07](07-operations-get.md)
 Labels: wayfinder:task, frontend, feature:comprobante

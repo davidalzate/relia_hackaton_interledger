@@ -1,7 +1,7 @@
 # Integrar POST /operations/{operationId}/receipt/send
 
 Type: task
-Status: claimed
+Status: resolved
 PR: [#33](https://github.com/davidalzate/relia_hackaton_interledger/pull/33)
 Blocked by: [17](17-receipt.md)
 Labels: wayfinder:task, frontend, feature:comprobante

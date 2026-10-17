@@ -26,3 +26,4 @@ Conectar el frontend (`frontend/relia`) al endpoint real de la Relia API y retir
 ## Notas
 
 - D3 es página (`/admin/pagar/:id`), no modal.
+- #37 se fusionó en `feat/receipt-api`, no en `main`: falta un PR de esa rama a `main`.

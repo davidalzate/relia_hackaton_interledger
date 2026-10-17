@@ -24,3 +24,4 @@ Conectar el frontend (`frontend/relia`) al endpoint real de la Relia API y retir
 ## Notas
 
 - `from` = hoy en America/Bogota.
+- #37 se fusionó en `feat/receipt-api`, no en `main`: falta un PR de esa rama a `main`.

@@ -1,7 +1,7 @@
 # Integrar POST /agents/{agentId}/quota-top-ups
 
 Type: task
-Status: claimed
+Status: resolved
 PR: [#31](https://github.com/davidalzate/relia_hackaton_interledger/pull/31)
 Blocked by: [07](07-operations-get.md)
 Labels: wayfinder:task, frontend, feature:cargar-cupo
