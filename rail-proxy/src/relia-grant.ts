@@ -22,7 +22,7 @@ export interface ReliaGrantView {
   approvedAt: string | null;
 }
 
-type GrantState = 'pending' | 'approved' | 'replaced' | 'superseded' | 'rejected' | 'abandoned';
+type GrantState = 'pending' | 'approved' | 'replaced' | 'superseded' | 'rejected' | 'abandoned' | 'revoked';
 
 interface GrantRow {
   id: string;
@@ -40,7 +40,15 @@ interface GrantRow {
   manage_url: string | null;
   token_expires_at: number | null;
   approved_at: string | null;
+  /** El riel rechazó un pago por el tope: no se intentan más hasta este instante (inicio del siguiente periodo). */
+  exhausted_until: number | null;
 }
+
+/** Cómo se usa el token del permiso. `create` exige el permiso `active`; `read` sirve con cualquier aprobado. */
+export type PermitUse = 'create' | 'read';
+
+// Rotar un poco antes de que el riel deje de aceptar el token.
+const ROTATE_MARGIN_MS = 30_000;
 
 // Rafiki deja aprobar durante 10 min (INTERACTION_EXPIRY_SECONDS) y el sondeo no informa el vencimiento.
 const INTERACTION_WINDOW_MS = 11 * 60 * 1000;
@@ -76,23 +84,116 @@ export class ReliaGrantService {
   ) {}
 
   private readonly revocations = new Set<Promise<void>>();
+  /** Una rotación en vuelo por permiso: rotar revoca el token anterior. */
+  private readonly rotations = new Map<string, Promise<string>>();
 
   status(): ReliaGrantStatus {
-    return statusOf(this.findOne('pending'), this.findOne('approved'));
+    return statusOf(this.findOne('pending'), this.findOne('approved'), this.now());
   }
 
   /**
-   * Token para crear y leer outgoing payments desde la billetera de Relia, o null si el permiso no está
-   * activo (sin aprobar, o con una petición nueva pendiente, como dice el contrato).
+   * Falla con `503 relia_grant_unavailable` si Relia no puede intentar un pago ahora: sin permiso aprobado
+   * o con una petición nueva esperando aprobación. Con el tope agotado sí se intenta: el riel decide si el
+   * pago cabe en lo que queda.
    */
-  accessToken(): string | null {
-    if (this.status() !== 'active') return null;
-    return this.approvedAccessToken();
+  assertCanPay(): void {
+    const status = this.status();
+    if (status === 'active' || status === 'exhausted') return;
+    throw new ProblemError(503, 'relia_grant_unavailable', 'Relia no puede pagar', UNAVAILABLE_DETAIL[status]);
   }
 
-  /** Token del permiso aprobado aunque haya una petición nueva pendiente; sirve para leer pagos ya creados. */
-  approvedAccessToken(): string | null {
-    return this.findOne('approved')?.access_token ?? null;
+  /**
+   * Ejecuta `use` con un token vigente del permiso aprobado. Rota antes de que venza y, si el servidor de
+   * recursos responde 401, rota y reintenta una vez. Con `create` aplica `assertCanPay` primero.
+   */
+  async withPermitToken<T>(purpose: PermitUse, use: (accessToken: string, grantId: string) => Promise<T>): Promise<T> {
+    if (purpose === 'create') this.assertCanPay();
+    const row = this.findOne('approved');
+    if (!row?.access_token || !row.manage_url) {
+      throw new ProblemError(503, 'relia_grant_unavailable', 'Relia no puede pagar', UNAVAILABLE_DETAIL.missing);
+    }
+
+    const due = row.token_expires_at !== null && this.now() >= row.token_expires_at - ROTATE_MARGIN_MS;
+    const token = due ? await this.rotate(row.id, row.access_token) : row.access_token;
+    try {
+      return await use(token, row.id);
+    } catch (error) {
+      if (!(error instanceof OpenPaymentsClientError && error.status === 401)) throw error;
+      return use(await this.rotate(row.id, token), row.id);
+    }
+  }
+
+  /**
+   * El riel rechazó un pago del permiso `grantId` por el tope: queda `exhausted` hasta el inicio del
+   * siguiente periodo, o hasta que otro pago pase (cabía en lo que quedaba).
+   */
+  markExhausted(grantId: string): void {
+    const row = this.db.prepare(`SELECT * FROM relia_grants WHERE id = ?`).get(grantId) as GrantRow | undefined;
+    if (!row || row.state !== 'approved') return;
+    const until = nextPeriodStart(row.interval, this.now());
+    this.db
+      .prepare(`UPDATE relia_grants SET exhausted_until = ?, updated_at = ? WHERE id = ? AND state = 'approved'`)
+      .run(until, iso(this.now()), row.id);
+    this.log.warn(
+      { grantId: row.id, until: Number.isFinite(until) ? iso(until) : 'sin más periodos' },
+      'el permiso de Relia agotó su tope',
+    );
+  }
+
+  /** Un pago pasó con el permiso `grantId`: si estaba `exhausted`, vuelve a `active`. */
+  markPaid(grantId: string): void {
+    this.db
+      .prepare(`UPDATE relia_grants SET exhausted_until = NULL, updated_at = ? WHERE id = ? AND exhausted_until IS NOT NULL`)
+      .run(iso(this.now()), grantId);
+  }
+
+  /** Rota el token `usedToken` del permiso `grantId`, o devuelve el vigente si otro ya lo rotó. */
+  private rotate(grantId: string, usedToken: string): Promise<string> {
+    let rotation = this.rotations.get(grantId);
+    if (!rotation) {
+      rotation = this.doRotate(grantId, usedToken).finally(() => this.rotations.delete(grantId));
+      this.rotations.set(grantId, rotation);
+    }
+    return rotation;
+  }
+
+  private async doRotate(grantId: string, usedToken: string): Promise<string> {
+    const current = this.db.prepare(`SELECT * FROM relia_grants WHERE id = ?`).get(grantId) as GrantRow | undefined;
+    if (!current || current.state !== 'approved' || !current.access_token || !current.manage_url) {
+      throw new ProblemError(503, 'relia_grant_unavailable', 'Relia no puede pagar', UNAVAILABLE_DETAIL.missing);
+    }
+    // Otra rotación ya reemplazó el token que se usó.
+    if (current.access_token !== usedToken) return current.access_token;
+
+    let rotated;
+    try {
+      rotated = await this.client.token.rotate({ url: current.manage_url, accessToken: current.access_token });
+    } catch (error) {
+      // Rafiki responde 404 invalid_rotation cuando el token o el grant fueron revocados. Un 401 puede ser de
+      // firma o reloj: se trata como transitorio para no perder un permiso aprobado.
+      if (error instanceof OpenPaymentsClientError && error.status === 404) {
+        this.db
+          .prepare(`UPDATE relia_grants SET state = 'revoked', updated_at = ? WHERE id = ? AND state = 'approved'`)
+          .run(iso(this.now()), current.id);
+        this.log.error({ grantId: current.id, error: describeRailError(error) }, 'el riel revocó el permiso de Relia');
+        throw new ProblemError(503, 'relia_grant_unavailable', 'Relia no puede pagar', 'El riel revocó el permiso de Relia; pide uno nuevo.');
+      }
+      throw railUnavailable(error);
+    }
+
+    const { value, manage, expires_in: expiresIn } = rotated.access_token;
+    const saved = this.db
+      .prepare(
+        `UPDATE relia_grants SET access_token = ?, manage_url = ?, token_expires_at = ?, updated_at = ?
+         WHERE id = ? AND state = 'approved'`,
+      )
+      .run(value, manage, expiresIn !== undefined ? this.now() + expiresIn * 1000 : null, iso(this.now()), current.id);
+    if (saved.changes === 0) {
+      // Lo reemplazó otro permiso mientras se rotaba: este token ya no debe usarse.
+      throw new ProblemError(503, 'relia_grant_unavailable', 'Relia no puede pagar', 'El permiso de Relia cambió; reintenta.');
+    }
+    this.log.info({ grantId: current.id, expiresIn }, 'token del permiso de Relia rotado');
+    return value;
   }
 
   view(): ReliaGrantView {
@@ -100,7 +201,7 @@ export class ReliaGrantService {
     const approved = this.findOne('approved');
     const row = pending ?? approved;
     return {
-      status: statusOf(pending, approved),
+      status: statusOf(pending, approved, this.now()),
       approvalUrl: pending?.approval_url ?? null,
       debitLimit: row ? { value: row.debit_value, assetCode: row.asset_code, assetScale: row.asset_scale } : null,
       interval: row?.interval ?? null,
@@ -344,10 +445,83 @@ export class ReliaGrantService {
   }
 }
 
-function statusOf(pending: GrantRow | undefined, approved: GrantRow | undefined): ReliaGrantStatus {
+function statusOf(pending: GrantRow | undefined, approved: GrantRow | undefined, now: number): ReliaGrantStatus {
   if (pending) return 'awaiting_approval';
-  if (approved) return 'active';
+  if (approved) return approved.exhausted_until !== null && now < approved.exhausted_until ? 'exhausted' : 'active';
   return 'missing';
+}
+
+const UNAVAILABLE_DETAIL: Record<ReliaGrantStatus, string> = {
+  active: 'El permiso de Relia está activo.',
+  awaiting_approval: 'Hay un permiso nuevo de Relia esperando la aprobación del operador.',
+  exhausted: 'El permiso de Relia agotó su tope en este periodo.',
+  missing: 'Relia no tiene un permiso activo para pagar.',
+};
+
+/**
+ * Inicio del periodo siguiente al que contiene `now` en un intervalo `R[n]/<inicio>/<duración>`.
+ * Infinity si no quedan repeticiones.
+ */
+export function nextPeriodStart(interval: string, now: number): number {
+  const [repeat = 'R', startText = '', durationText = ''] = interval.split('/');
+  const repetitions = repeat.length > 1 ? Number(repeat.slice(1)) : Number.POSITIVE_INFINITY;
+  const start = Date.parse(startText);
+  const parts = parseDuration(durationText);
+  if (!parts || Number.isNaN(start)) return Number.POSITIVE_INFINITY;
+
+  // Duración fija (sin años ni meses): aritmética directa.
+  if (parts.years === 0 && parts.months === 0) {
+    const length = (((parts.weeks * 7 + parts.days) * 24 + parts.hours) * 60 + parts.minutes) * 60_000 + parts.seconds * 1000;
+    if (length <= 0) return Number.POSITIVE_INFINITY;
+    const period = Math.max(0, Math.floor((now - start) / length));
+    return period <= repetitions ? start + (period + 1) * length : Number.POSITIVE_INFINITY;
+  }
+
+  // Con meses o años: periodo a periodo, encadenando desde el fin del anterior como Rafiki (luxon
+  // Interval.after), con fin de mes acotado.
+  let end = start;
+  for (let period = 1; period <= repetitions + 1 && period <= 10_000; period++) {
+    end = addCalendar(end, parts, 1);
+    if (now < end) return end;
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
+interface DurationParts {
+  years: number;
+  months: number;
+  weeks: number;
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+}
+
+function parseDuration(text: string): DurationParts | undefined {
+  const match = DURATION.exec(text);
+  if (!match) return undefined;
+  const n = (index: number) => Number.parseInt(match[index] ?? '0', 10) || 0;
+  return { years: n(1), months: n(2), weeks: n(3), days: n(4), hours: n(6), minutes: n(7), seconds: n(8) };
+}
+
+/** `start` + `times` veces una duración con años o meses, en UTC; el día se acota al último del mes. */
+function addCalendar(start: number, d: DurationParts, times: number): number {
+  const date = new Date(start);
+  const totalMonths = date.getUTCMonth() + (d.years * 12 + d.months) * times;
+  const year = date.getUTCFullYear() + Math.floor(totalMonths / 12);
+  const month = ((totalMonths % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const shifted = Date.UTC(
+    year,
+    month,
+    Math.min(date.getUTCDate(), lastDay),
+    date.getUTCHours(),
+    date.getUTCMinutes(),
+    date.getUTCSeconds(),
+    date.getUTCMilliseconds(),
+  );
+  const extra = ((((d.weeks * 7 + d.days) * 24 + d.hours) * 60 + d.minutes) * 60 + d.seconds) * 1000 * times;
+  return shifted + extra;
 }
 
 function iso(ms: number): string {

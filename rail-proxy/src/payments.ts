@@ -91,7 +91,7 @@ export interface PaymentDeps {
   client: AuthenticatedClient;
   wallets: Pick<WalletResolver, 'resolve'>;
   reliaWallet: ResolvedWallet;
-  reliaGrants: Pick<ReliaGrantService, 'accessToken' | 'approvedAccessToken'>;
+  reliaGrants: Pick<ReliaGrantService, 'assertCanPay' | 'withPermitToken' | 'markExhausted' | 'markPaid'>;
   grants: NonInteractiveGrants;
   log: Logger;
   now?: () => number;
@@ -211,10 +211,8 @@ export class PaymentService {
     receiver: ResolvedWallet,
   ): Promise<PaymentRow> {
     const { client, grants, reliaWallet: relia } = this.deps;
-    const permitToken = this.deps.reliaGrants.accessToken();
-    if (!permitToken) {
-      throw new ProblemError(503, 'relia_grant_unavailable', 'Relia no puede pagar', 'Relia no tiene un permiso activo para pagar.');
-    }
+    // Fallar antes de abrir nada en el riel si el permiso no está activo.
+    this.deps.reliaGrants.assertCanPay();
     const metadata = paymentMetadata(idempotencyKey, request.description);
 
     let incoming: IncomingPayment;
@@ -245,19 +243,37 @@ export class PaymentService {
       await this.closeIncoming(receiver.authServer, incoming.id);
       throw railUnavailable(error);
     }
+    let grantId: string | undefined;
     try {
-      outgoing = await client.outgoingPayment.create(
-        { url: relia.resourceServer, accessToken: permitToken },
-        { walletAddress: relia.url, quoteId, metadata },
-      );
+      outgoing = await this.deps.reliaGrants.withPermitToken('create', (accessToken, usedGrant) => {
+        grantId = usedGrant;
+        return client.outgoingPayment.create(
+          { url: relia.resourceServer, accessToken },
+          { walletAddress: relia.url, quoteId, metadata },
+        );
+      });
+      this.deps.reliaGrants.markPaid(grantId!);
     } catch (error) {
       await this.closeIncoming(receiver.authServer, incoming.id);
-      if (error instanceof OpenPaymentsClientError && (error.status === 401 || error.status === 403)) {
-        const cause =
-          error.status === 401
-            ? 'el riel no aceptó el token del permiso (¿vencido o revocado?)'
-            : 'el permiso no cubre este pago: tope del intervalo agotado o intervalo aún no iniciado';
-        throw new ProblemError(503, 'relia_grant_unavailable', 'Relia no puede pagar', `${cause}. Riel: ${describeRailError(error)}`);
+      if (error instanceof ProblemError) throw error;
+      if (error instanceof OpenPaymentsClientError && error.status === 403) {
+        // Rafiki: InsufficientGrant. Con el inicio del intervalo validado al pedir el permiso, es el tope:
+        // agotado o sin espacio para este monto.
+        if (grantId) this.deps.reliaGrants.markExhausted(grantId);
+        throw new ProblemError(
+          503,
+          'relia_grant_unavailable',
+          'Relia no puede pagar',
+          `El permiso de Relia no alcanza para este pago en el periodo actual. Riel: ${describeRailError(error)}`,
+        );
+      }
+      if (error instanceof OpenPaymentsClientError && error.status === 401) {
+        throw new ProblemError(
+          503,
+          'relia_grant_unavailable',
+          'Relia no puede pagar',
+          `El riel no aceptó el token del permiso ni después de rotarlo. Riel: ${describeRailError(error)}`,
+        );
       }
       throw railUnavailable(error);
     }
@@ -353,12 +369,15 @@ export class PaymentService {
 
   private async readOutgoing(row: PaymentRow): Promise<OutgoingPayment | undefined> {
     if (!row.outgoing_payment_url) return undefined;
-    const accessToken = this.deps.reliaGrants.approvedAccessToken();
-    if (!accessToken) return undefined;
     try {
-      return await this.deps.client.outgoingPayment.get({ url: row.outgoing_payment_url, accessToken });
+      return await this.deps.reliaGrants.withPermitToken('read', (accessToken) =>
+        this.deps.client.outgoingPayment.get({ url: row.outgoing_payment_url!, accessToken }),
+      );
     } catch (error) {
-      this.deps.log.warn({ paymentId: row.id, error: describeRailError(error) }, 'no se pudo leer el outgoing payment');
+      // Sin permiso aprobado no hay con qué leer; el éxito igual se detecta por el incoming payment.
+      if (!(error instanceof ProblemError)) {
+        this.deps.log.warn({ paymentId: row.id, error: describeRailError(error) }, 'no se pudo leer el outgoing payment');
+      }
       return undefined;
     }
   }

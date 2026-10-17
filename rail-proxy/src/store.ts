@@ -70,6 +70,39 @@ const MIGRATIONS: string[] = [
 
   // 3. Huella del cuerpo de creación (idempotencia). NULL en pagos creados antes de esta migración.
   `ALTER TABLE payments ADD COLUMN request_hash TEXT;`,
+
+  // 4. Permiso de Relia: estado `revoked` (el riel lo revocó) y tope agotado hasta el siguiente periodo.
+  //    SQLite no permite cambiar un CHECK: se reconstruye la tabla.
+  `CREATE TABLE relia_grants_v4 (
+    id                      TEXT PRIMARY KEY,
+    state                   TEXT NOT NULL
+                            CHECK (state IN ('pending', 'approved', 'replaced', 'superseded', 'rejected', 'abandoned', 'revoked')),
+    debit_value             TEXT NOT NULL,
+    asset_code              TEXT NOT NULL,
+    asset_scale             INTEGER NOT NULL,
+    interval                TEXT NOT NULL,
+    approval_url            TEXT,
+    continue_uri            TEXT NOT NULL,
+    continue_token          TEXT NOT NULL,
+    next_poll_at            INTEGER,
+    interaction_expires_at  INTEGER,
+    access_token            TEXT,
+    manage_url              TEXT,
+    token_expires_at        INTEGER,
+    approved_at             TEXT,
+    exhausted_until         INTEGER,
+    created_at              TEXT NOT NULL,
+    updated_at              TEXT NOT NULL
+  );
+  INSERT INTO relia_grants_v4 (id, state, debit_value, asset_code, asset_scale, interval, approval_url, continue_uri,
+    continue_token, next_poll_at, interaction_expires_at, access_token, manage_url, token_expires_at, approved_at,
+    created_at, updated_at)
+  SELECT id, state, debit_value, asset_code, asset_scale, interval, approval_url, continue_uri, continue_token,
+    next_poll_at, interaction_expires_at, access_token, manage_url, token_expires_at, approved_at, created_at, updated_at
+  FROM relia_grants;
+  DROP TABLE relia_grants;
+  ALTER TABLE relia_grants_v4 RENAME TO relia_grants;
+  CREATE INDEX ix_relia_grants_state ON relia_grants (state);`,
 ];
 
 /** Abre (o crea) el archivo SQLite del proxy y lo lleva a la última versión del esquema. */
