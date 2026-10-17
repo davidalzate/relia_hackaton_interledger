@@ -16,6 +16,10 @@
 
 [/frontend/relia/README.md](./frontend/relia/README.md)
 
+## Uso de IA
+
+[/AI_USAGE.md](./AI_USAGE.md)
+
 ## Correr todo en local
 
 ```sh
